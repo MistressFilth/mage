@@ -128,3 +128,23 @@ class ScenarioNameUniqueCheck(MechanicalCheck):
                 detail=f"duplicate scenario name '{draft.scenario_name}' in feature file",
             )
         return CheckResult(name=self.name, outcome="pass", detail=None)
+
+
+class TagsRegisteredCheck(MechanicalCheck):
+    """Validates that all tags on the scenario are registered."""
+
+    name = "tags-registered"
+
+    def __init__(self, registered_tags: set[str]) -> None:
+        super().__init__()
+        self.registered_tags = registered_tags
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        unregistered = [t for t in draft.tags if t not in self.registered_tags]
+        if unregistered:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"unregistered tags: {', '.join(unregistered)}",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
