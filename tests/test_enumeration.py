@@ -1,0 +1,110 @@
+"""Tests for behavior enumeration: validation, cycle detection, BID assignment."""
+
+from __future__ import annotations
+
+import pytest
+
+from mage.artifacts.bid import Base85BID
+from mage.artifacts.mapping import MappingArtifact
+
+
+def _spec(name: str, *, depends_on=(), cross=()) -> "BehaviorSpec":
+    from mage.artifacts.enumeration import BehaviorSpec
+    return BehaviorSpec(
+        name=name,
+        description=f"{name} behavior",
+        depends_on=list(depends_on),
+        cross_behavior_links=list(cross),
+    )
+
+
+def test_assign_bids_monotonically_to_empty_mapping():
+    from mage.artifacts.enumeration import enumerate_behaviors
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth"), _spec("orders", depends_on=["auth"]), _spec("payments", depends_on=["orders"])]
+    entries = enumerate_behaviors(specs, mapping)
+    assert [e.base_bid for e in entries] == ["00000", "00001", "00002"]
+
+
+def test_assign_bids_continues_from_existing_mapping():
+    from mage.artifacts.enumeration import enumerate_behaviors
+    from mage.artifacts.mapping import BaseBIDEntry
+    existing = BaseBIDEntry(base_bid="00004", behavior_name="seed", behavior_description="seed")
+    mapping = MappingArtifact(project_id="p", base_bids=[existing])
+    specs = [_spec("auth"), _spec("orders")]
+    entries = enumerate_behaviors(specs, mapping)
+    assert [e.base_bid for e in entries] == ["00005", "00006"]
+
+
+def test_dependency_resolves_to_pending_behavior():
+    from mage.artifacts.enumeration import enumerate_behaviors
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("orders", depends_on=["auth"]), _spec("auth")]
+    entries = enumerate_behaviors(specs, mapping)
+    # auth comes first because orders depends on it
+    auth_entry = next(e for e in entries if e.behavior_name == "auth")
+    orders_entry = next(e for e in entries if e.behavior_name == "orders")
+    assert auth_entry.base_bid < orders_entry.base_bid
+    assert orders_entry.depends_on == [auth_entry.base_bid]
+
+
+def test_unresolvable_dependency_raises():
+    from mage.artifacts.enumeration import enumerate_behaviors, BehaviorDependencyError
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("orders", depends_on=["nonexistent"])]
+    with pytest.raises(BehaviorDependencyError):
+        enumerate_behaviors(specs, mapping)
+
+
+def test_cycle_in_dependencies_raises():
+    from mage.artifacts.enumeration import enumerate_behaviors, BehaviorDependencyCycleError
+    mapping = MappingArtifact(project_id="p")
+    specs = [
+        _spec("a", depends_on=["b"]),
+        _spec("b", depends_on=["a"]),
+    ]
+    with pytest.raises(BehaviorDependencyCycleError):
+        enumerate_behaviors(specs, mapping)
+
+
+def test_self_referential_dependency_caught_as_cycle():
+    from mage.artifacts.enumeration import enumerate_behaviors, BehaviorDependencyCycleError
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("a", depends_on=["a"])]
+    with pytest.raises(BehaviorDependencyCycleError):
+        enumerate_behaviors(specs, mapping)
+
+
+def test_duplicate_behavior_names_raise():
+    from mage.artifacts.enumeration import enumerate_behaviors, DuplicateBehaviorNameError
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth"), _spec("auth")]
+    with pytest.raises(DuplicateBehaviorNameError):
+        enumerate_behaviors(specs, mapping)
+
+
+def test_empty_behavior_list_raises():
+    from mage.artifacts.enumeration import enumerate_behaviors, NoBehaviorsError
+    mapping = MappingArtifact(project_id="p")
+    with pytest.raises(NoBehaviorsError):
+        enumerate_behaviors([], mapping)
+
+
+def test_cross_behavior_link_to_existing_behavior():
+    from mage.artifacts.enumeration import enumerate_behaviors
+    from mage.artifacts.mapping import BaseBIDEntry
+    existing = BaseBIDEntry(base_bid="00010", behavior_name="payments", behavior_description="payments")
+    mapping = MappingArtifact(project_id="p", base_bids=[existing])
+    specs = [_spec("checkout", cross=["payments"])]
+    entries = enumerate_behaviors(specs, mapping)
+    assert entries[0].cross_behavior_links == ["00010"]
+
+
+def test_cross_behavior_link_to_pending_behavior():
+    from mage.artifacts.enumeration import enumerate_behaviors
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("a"), _spec("b", cross=["a"])]
+    entries = enumerate_behaviors(specs, mapping)
+    b = next(e for e in entries if e.behavior_name == "b")
+    a = next(e for e in entries if e.behavior_name == "a")
+    assert b.cross_behavior_links == [a.base_bid]
