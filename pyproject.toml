@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "haileris-v2"
+version = "0.1.0"
+description = "HAILERIS v2: spec-driven development pipeline"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-ai>=0.0.30",
+    "pydantic-graph>=0.0.30",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+h2 = "haileris_v2.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/haileris_v2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
