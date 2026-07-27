@@ -62,3 +62,56 @@ def test_finalize_raises_on_digest_mismatch_with_existing_event(tmp_path):
     # Try to finalize with different content
     with pytest.raises(PlanAlreadyFinalizedError):
         PlanArtifact.finalize(plan_path, "# different\n", log)
+
+
+def test_load_returns_content_when_digest_matches(tmp_path):
+    from mage.artifacts.plan import PlanArtifact
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+    content = "# Plan\n\nAuth, orders.\n"
+
+    PlanArtifact.finalize(plan_path, content, log)
+    loaded = PlanArtifact.load(plan_path, log)
+
+    assert loaded == content
+
+
+def test_load_raises_when_no_event_exists(tmp_path):
+    from mage.artifacts.plan import PlanArtifact, PlanNotFinalizedError
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# Orphan\n", encoding="utf-8")
+
+    with pytest.raises(PlanNotFinalizedError):
+        PlanArtifact.load(plan_path, log)
+
+
+def test_load_raises_on_digest_mismatch_after_external_edit(tmp_path):
+    from mage.artifacts.plan import PlanArtifact, PlanDigestMismatchError
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+
+    PlanArtifact.finalize(plan_path, "# original\n", log)
+    # External edit (bypasses revise())
+    plan_path.write_text("# tampered\n", encoding="utf-8")
+
+    with pytest.raises(PlanDigestMismatchError):
+        PlanArtifact.load(plan_path, log)
+
+
+def test_load_emits_digest_mismatch_event_before_raising(tmp_path):
+    from mage.artifacts.plan import PlanArtifact, PlanDigestMismatchError
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+
+    PlanArtifact.finalize(plan_path, "# original\n", log)
+    plan_path.write_text("# tampered\n", encoding="utf-8")
+
+    with pytest.raises(PlanDigestMismatchError):
+        PlanArtifact.load(plan_path, log)
+
+    mismatch_events = [
+        e for e in log.read_all() if e.event_type == EventType.PLAN_DIGEST_MISMATCH
+    ]
+    assert len(mismatch_events) == 1
+    assert mismatch_events[0].payload["plan_path"] == str(plan_path)
