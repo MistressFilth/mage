@@ -276,3 +276,54 @@ class TestStepDefinitionsResolvableCheck:
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "undefined action" in (result.detail or "")
+
+
+from haileris_v2.verification.mechanical import LifecycleStatusTagPresentCheck
+
+
+class TestLifecycleStatusTagPresentCheck:
+    def test_present_passes(self, tmp_project_dir: Path):
+        check = LifecycleStatusTagPresentCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@status-inscribing"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_missing_fails(self, tmp_project_dir: Path):
+        check = LifecycleStatusTagPresentCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@smoke"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "lifecycle" in (result.detail or "").lower()
+
+    def test_invalid_status_value_fails(self, tmp_project_dir: Path):
+        check = LifecycleStatusTagPresentCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@status-bogus"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
