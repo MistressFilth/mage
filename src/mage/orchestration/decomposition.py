@@ -72,7 +72,11 @@ class DecompositionStage(StageNode):
 
         # 5. Enumerate behaviors + write files
         updated_mapping, behaviors_path = enumerate_behaviors(
-            agent_output.behaviors, context.mapping, project_dir, self.events_log
+            agent_output.behaviors,
+            context.mapping,
+            project_dir,
+            self.events_log,
+            feature_id=ascertain.feature_id,
         )
 
         # 6. Generate plan.md content

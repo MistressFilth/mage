@@ -143,10 +143,10 @@ def test_halt_and_resume_cycle(tmp_path):
 
     # Run mage plan revise
     test_argv = [
-        "mage", "plan", "revise",
+        "mage", "--project-dir", str(project_dir),
+        "plan", "revise",
         "--reason", "Reordered behaviors per human review",
         "--approver", "alice",
-        "--project-dir", str(project_dir),
     ]
     with patch.object(sys, "argv", test_argv):
         main()

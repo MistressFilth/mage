@@ -89,6 +89,7 @@ def enumerate_behaviors(
     mapping: MappingArtifact,
     project_dir: Path | None = None,
     events_log: EventsLog | None = None,
+    feature_id: str = "",
 ) -> tuple[MappingArtifact, Path] | list[BaseBIDEntry]:
     """Validate behavior specs, assign base BIDs, and write files atomically.
 
@@ -185,7 +186,7 @@ def enumerate_behaviors(
     # Write behaviors.yaml atomically.
     behaviors_data = {
         "schema_version": 1,
-        "feature_id": "unset",  # Stage sets this from Ascertain.
+        "feature_id": feature_id,
         "enumerated_at": datetime.now(timezone.utc).isoformat(),
         "behaviors": [
             {

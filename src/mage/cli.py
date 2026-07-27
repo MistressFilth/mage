@@ -42,17 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     # mage plan show
     show_parser = plan_subparsers.add_parser("show", help="Display Plan + digest")
-    show_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
 
     # mage plan revise
     revise_parser = plan_subparsers.add_parser("revise", help="Record a Plan revision after halt")
     revise_parser.add_argument("--reason", type=str, required=True)
     revise_parser.add_argument("--approver", type=str, required=True)
-    revise_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
 
     # mage run
     run_parser = subparsers.add_parser("run", help="Run the pipeline")
-    run_parser.add_argument("--from", dest="from_stage", type=str, default=None)
     run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
 
     return parser
@@ -64,8 +61,8 @@ def cmd_plan_show(args):
     from mage.orchestration.events import EventsLog
 
     project_dir: Path = args.project_dir
-    log = EventsLog(project_dir / "events.jsonl")
     plan_path = project_dir / "plan.md"
+    log = EventsLog(project_dir / "events.jsonl") if (project_dir / "events.jsonl").exists() else None
 
     print(f"Plan: {plan_path}")
 
@@ -74,7 +71,7 @@ def cmd_plan_show(args):
         return
 
     # Find latest FINALIZED/REVISED event
-    events = log.read_all()
+    events = log.read_all() if log is not None else []
     plan_events = [
         e for e in events
         if e.event_type.value in ("plan_finalized", "plan_revised")
@@ -131,6 +128,12 @@ def cmd_plan_revise(args):
         )
         sys.exit(2)
 
+    new_digest = PlanArtifact._compute_digest(plan_path.read_text(encoding="utf-8"))
+    latest = max(plan_events, key=lambda e: e.timestamp)
+    recorded = latest.payload.get("plan_sha256") or latest.payload.get("new_sha256")
+    if new_digest == recorded:
+        print("mage plan revise: warning: Plan digest unchanged; recording anyway", file=sys.stderr)
+
     new_digest = PlanArtifact.revise(
         plan_path,
         plan_path.read_text(encoding="utf-8"),
@@ -159,18 +162,7 @@ def cmd_run(args):
     )
     halted_ctx = persistence.load_state()
 
-    if halted_ctx is not None:
-        print(f"Resuming pipeline from halted state (stage={halted_ctx.current_stage})")
-        ctx = halted_ctx
-    else:
-        print(f"No halted state found at {state_dir}; nothing to resume.")
-        return 0
-
-    # Note: actual stage list construction deferred to Plan 6 (full pipeline wiring).
-    # For Plan 2, this command verifies the resume mechanism works.
-    print(f"Pipeline context loaded: project_dir={ctx.project_dir}")
-    print("Note: full pipeline wiring (stage list construction) is Plan 6 work.")
-    return 0
+    raise NotImplementedError("mage run pipeline execution is deferred to Plan 6; stage wiring is not implemented")
 
 
 def cmd_verify(args: argparse.Namespace) -> int:

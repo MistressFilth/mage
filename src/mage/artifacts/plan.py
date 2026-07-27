@@ -44,6 +44,10 @@ class PlanRevisionRequired(PlanError):
         super().__init__(reason)
 
 
+def _recorded_digest(event: Event) -> str | None:
+    return event.payload.get("plan_sha256") or event.payload.get("new_sha256")
+
+
 class PlanArtifact:
     """Digest-pinned Plan operations."""
 
@@ -81,7 +85,7 @@ class PlanArtifact:
             events_log, plan_path, (EventType.PLAN_FINALIZED, EventType.PLAN_REVISED)
         )
         if existing is not None:
-            recorded = existing.payload.get("plan_sha256") or existing.payload.get("new_sha256")
+            recorded = _recorded_digest(existing)
             if recorded != digest:
                 raise PlanAlreadyFinalizedError(
                     f"Plan at {plan_path} already finalized with digest {recorded}; "
@@ -124,7 +128,7 @@ class PlanArtifact:
             )
 
         recorded_digest = (
-            event.payload.get("plan_sha256") or event.payload.get("new_sha256")
+            _recorded_digest(event)
         )
 
         if not plan_path.exists():
@@ -183,7 +187,7 @@ class PlanArtifact:
             events_log, plan_path, (EventType.PLAN_FINALIZED, EventType.PLAN_REVISED)
         )
         old_digest = (
-            existing.payload.get("plan_sha256") or existing.payload.get("new_sha256")
+            _recorded_digest(existing)
             if existing is not None
             else None
         )
