@@ -15,6 +15,7 @@ from haileris_v2.verification.mechanical import (
 )
 from haileris_v2.verification.mechanical import GherkinSyntaxCheck
 from haileris_v2.verification.mechanical import ScenarioNameUniqueCheck
+from haileris_v2.verification.mechanical import TagsRegisteredCheck
 
 
 class DummyCheck(MechanicalCheck):
@@ -183,3 +184,51 @@ class TestScenarioNameUniqueCheck:
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "duplicate" in (result.detail or "").lower()
+
+
+class TestTagsRegisteredCheck:
+    def test_no_tags_passes(self, tmp_project_dir: Path):
+        check = TagsRegisteredCheck(registered_tags={"@smoke", "@auth"})
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_all_registered_passes(self, tmp_project_dir: Path):
+        check = TagsRegisteredCheck(registered_tags={"@smoke", "@auth"})
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@smoke", "@auth"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_unregistered_tag_fails(self, tmp_project_dir: Path):
+        check = TagsRegisteredCheck(registered_tags={"@smoke"})
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@unknown_tag"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "@unknown_tag" in (result.detail or "")
