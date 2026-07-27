@@ -159,6 +159,21 @@ def test_enumerate_emits_behaviors_enumerated_event(tmp_path):
     assert enum_events[0].payload["count"] == 1
 
 
+def test_enumerate_writes_feature_id_from_caller(tmp_path):
+    from mage.artifacts.enumeration import enumerate_behaviors
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog
+    import yaml as _yaml
+    log = EventsLog(tmp_path / "events.jsonl")
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth")]
+    enumerate_behaviors(
+        specs, mapping, project_dir=tmp_path, events_log=log, feature_id="feat-001"
+    )
+    data = _yaml.safe_load((tmp_path / "behaviors.yaml").read_text())
+    assert data["feature_id"] == "feat-001"
+
+
 def test_enumerate_does_not_write_on_validation_error(tmp_path):
     from mage.artifacts.enumeration import enumerate_behaviors, DuplicateBehaviorNameError
     from mage.artifacts.mapping import MappingArtifact
