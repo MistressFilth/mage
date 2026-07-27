@@ -115,3 +115,47 @@ def test_load_emits_digest_mismatch_event_before_raising(tmp_path):
     ]
     assert len(mismatch_events) == 1
     assert mismatch_events[0].payload["plan_path"] == str(plan_path)
+
+
+def test_revise_writes_new_content_and_emits_event(tmp_path):
+    from mage.artifacts.plan import PlanArtifact
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+
+    PlanArtifact.finalize(plan_path, "# v1\n", log)
+    new_digest = PlanArtifact.revise(
+        plan_path, "# v2 — fixed ordering\n", reason="Reordered behaviors", human_approver="alice", events_log=log
+    )
+
+    assert plan_path.read_text() == "# v2 — fixed ordering\n"
+
+    revised = [e for e in log.read_all() if e.event_type == EventType.PLAN_REVISED]
+    assert len(revised) == 1
+    assert revised[0].payload["reason"] == "Reordered behaviors"
+    assert revised[0].payload["human_approver"] == "alice"
+    assert revised[0].payload["new_sha256"] == new_digest
+
+
+def test_revise_requires_reason_and_approver(tmp_path):
+    from mage.artifacts.plan import PlanArtifact, PlanError
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+    PlanArtifact.finalize(plan_path, "# v1\n", log)
+
+    with pytest.raises(PlanError, match="non-empty reason"):
+        PlanArtifact.revise(plan_path, "# v2\n", reason="", human_approver="alice", events_log=log)
+
+    with pytest.raises(PlanError, match="non-empty human_approver"):
+        PlanArtifact.revise(plan_path, "# v2\n", reason="r", human_approver="", events_log=log)
+
+
+def test_load_after_revise_succeeds_with_new_digest(tmp_path):
+    from mage.artifacts.plan import PlanArtifact
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+
+    PlanArtifact.finalize(plan_path, "# v1\n", log)
+    PlanArtifact.revise(plan_path, "# v2\n", reason="r", human_approver="alice", events_log=log)
+
+    loaded = PlanArtifact.load(plan_path, log)
+    assert loaded == "# v2\n"
