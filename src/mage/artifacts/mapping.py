@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from haileris_v2.artifacts.bid import Base85BID, next_base_bid
+from mage.artifacts.bid import Base85BID, next_base_bid
 
 
 class LifecycleStatus(str, Enum):

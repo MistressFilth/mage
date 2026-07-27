@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from haileris_v2.verification.mechanical import (
+from mage.verification.mechanical import (
     CrossBehaviorTagsValidCheck,
     GherkinSyntaxCheck,
     LifecycleStatusTagPresentCheck,

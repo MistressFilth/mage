@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from haileris_v2.artifacts.mapping import MappingArtifact
-from haileris_v2.orchestration.events import EventType, EventsLog
-from haileris_v2.orchestration.nodes import PipelineContext, StageNode
+from mage.artifacts.mapping import MappingArtifact
+from mage.orchestration.events import EventType, EventsLog
+from mage.orchestration.nodes import PipelineContext, StageNode
 
 
 class TestPipelineContext:

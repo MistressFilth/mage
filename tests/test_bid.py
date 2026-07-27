@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from haileris_v2.artifacts.bid import Base85BID, next_base_bid
+from mage.artifacts.bid import Base85BID, next_base_bid
 
 
 class TestBase85BID:

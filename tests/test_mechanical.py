@@ -6,18 +6,18 @@ import re
 from pathlib import Path
 
 import pytest
-from haileris_v2.artifacts.bid import Base85BID
-from haileris_v2.artifacts.mapping import MappingArtifact
-from haileris_v2.verification.mechanical import (
+from mage.artifacts.bid import Base85BID
+from mage.artifacts.mapping import MappingArtifact
+from mage.verification.mechanical import (
     CheckResult,
     MechanicalCheck,
     MechanicalVerifier,
     ScenarioDraft,
     StepDefinitionsResolvableCheck,
 )
-from haileris_v2.verification.mechanical import GherkinSyntaxCheck
-from haileris_v2.verification.mechanical import ScenarioNameUniqueCheck
-from haileris_v2.verification.mechanical import TagsRegisteredCheck
+from mage.verification.mechanical import GherkinSyntaxCheck
+from mage.verification.mechanical import ScenarioNameUniqueCheck
+from mage.verification.mechanical import TagsRegisteredCheck
 
 
 class DummyCheck(MechanicalCheck):
@@ -278,7 +278,7 @@ class TestStepDefinitionsResolvableCheck:
         assert "undefined action" in (result.detail or "")
 
 
-from haileris_v2.verification.mechanical import LifecycleStatusTagPresentCheck
+from mage.verification.mechanical import LifecycleStatusTagPresentCheck
 
 
 class TestLifecycleStatusTagPresentCheck:
@@ -329,8 +329,8 @@ class TestLifecycleStatusTagPresentCheck:
         assert result.outcome == "fail"
 
 
-from haileris_v2.artifacts.mapping import BaseBIDEntry
-from haileris_v2.verification.mechanical import SubBidAssignedCheck
+from mage.artifacts.mapping import BaseBIDEntry
+from mage.verification.mechanical import SubBidAssignedCheck
 
 
 class TestSubBidAssignedCheck:
@@ -395,7 +395,7 @@ class TestSubBidAssignedCheck:
         assert "00099" in (result.detail or "")
 
 
-from haileris_v2.verification.mechanical import CrossBehaviorTagsValidCheck
+from mage.verification.mechanical import CrossBehaviorTagsValidCheck
 
 
 class TestCrossBehaviorTagsValidCheck:

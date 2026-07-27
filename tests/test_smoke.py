@@ -7,19 +7,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from haileris_v2.artifacts.bid import Base85BID
-from haileris_v2.artifacts.mapping import (
+from mage.artifacts.bid import Base85BID
+from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
     MappingArtifact,
     ScenarioEntry,
 )
-from haileris_v2.orchestration.events import Event, EventType, EventsLog
-from haileris_v2.orchestration.graph import PipelineGraph
-from haileris_v2.orchestration.nodes import PipelineContext, StageNode
-from haileris_v2.orchestration.persistence import FileStatePersistence
-from haileris_v2.verification.host_overrides import default_check_set, load_host_config
-from haileris_v2.verification.mechanical import (
+from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.graph import PipelineGraph
+from mage.orchestration.nodes import PipelineContext, StageNode
+from mage.orchestration.persistence import FileStatePersistence
+from mage.verification.host_overrides import default_check_set, load_host_config
+from mage.verification.mechanical import (
     MechanicalVerifier,
     ScenarioDraft,
 )
