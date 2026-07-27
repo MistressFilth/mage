@@ -34,6 +34,14 @@ class TestBase85BID:
         c = b.increment()
         assert a.value < b.value < c.value
 
+    def test_parse_classmethod(self):
+        bid = Base85BID.parse("00042")
+        assert bid.value == "00042"
+
+    def test_parse_rejects_invalid(self):
+        with pytest.raises(ValueError, match="invalid Base85 character"):
+            Base85BID.parse("0004 ")
+
 
 class TestNextBaseBid:
     def test_next_from_zero(self):
