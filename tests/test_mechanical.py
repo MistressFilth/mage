@@ -393,3 +393,68 @@ class TestSubBidAssignedCheck:
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "00099" in (result.detail or "")
+
+
+from haileris_v2.verification.mechanical import CrossBehaviorTagsValidCheck
+
+
+class TestCrossBehaviorTagsValidCheck:
+    def test_no_cross_behavior_tags_passes(self, tmp_project_dir: Path):
+        check = CrossBehaviorTagsValidCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@smoke"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_valid_cross_behavior_tag_passes(self, tmp_project_dir: Path):
+        check = CrossBehaviorTagsValidCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@behavior-00005"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(
+            schema_version=1,
+            project_id="t",
+            base_bids=[
+                BaseBIDEntry(
+                    base_bid="00005",
+                    behavior_name="b",
+                    behavior_description="d",
+                    scenarios=[],
+                    reversion_log=[],
+                    post_live_revisions=[],
+                    cross_behavior_links=[],
+                )
+            ],
+        )
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_dangling_cross_behavior_tag_fails(self, tmp_project_dir: Path):
+        check = CrossBehaviorTagsValidCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=["@behavior-00099"],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "00099" in (result.detail or "")

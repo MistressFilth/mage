@@ -223,3 +223,28 @@ class SubBidAssignedCheck(MechanicalCheck):
                 detail=f"parent base-BID {parent} not found in mapping artifact",
             )
         return CheckResult(name=self.name, outcome="pass", detail=None)
+
+
+class CrossBehaviorTagsValidCheck(MechanicalCheck):
+    """Validates that @behavior-X tags reference existing behaviors."""
+
+    name = "cross-behavior-tags-valid"
+
+    PREFIX = "@behavior-"
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        cross_tags = [t for t in draft.tags if t.startswith(self.PREFIX)]
+        if not cross_tags:
+            return CheckResult(name=self.name, outcome="pass", detail=None)
+        existing = {entry.base_bid for entry in mapping.base_bids}
+        dangling = [
+            t for t in cross_tags
+            if t[len(self.PREFIX):] not in existing
+        ]
+        if dangling:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"cross-behavior tags reference unknown behaviors: {', '.join(dangling)}",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
