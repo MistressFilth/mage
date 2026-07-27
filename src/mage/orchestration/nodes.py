@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.events import Event, EventType, EventsLog
@@ -23,6 +23,7 @@ class PipelineContext(BaseModel):
     current_stage: str | None = None
     current_sub_bid: str | None = None
     iteration: int = 0
+    plan_path: Path | None = Field(default=None, validate_default=True)
 
     @field_serializer("events_log")
     def _serialize_events_log(self, log: EventsLog) -> str:
@@ -35,6 +36,16 @@ class PipelineContext(BaseModel):
         """Reconstruct EventsLog from a serialized path string on load."""
         if isinstance(value, str):
             return EventsLog(Path(value))
+        return value
+
+    @field_validator("plan_path", mode="before")
+    @classmethod
+    def _default_plan_path(cls, value: object, info) -> object:
+        """Default plan_path to <project_dir>/plan.md if not provided."""
+        if value is None:
+            project_dir = info.data.get("project_dir")
+            if project_dir is not None:
+                return project_dir / "plan.md"
         return value
 
 
