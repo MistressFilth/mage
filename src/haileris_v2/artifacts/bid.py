@@ -40,6 +40,11 @@ class Base85BID(BaseModel):
                 raise ValueError(f"invalid Base85 character: {ch!r}")
         return v
 
+    @classmethod
+    def parse(cls, value: str) -> "Base85BID":
+        """Validate and construct a Base85BID from a string."""
+        return cls(value=value)
+
     def increment(self) -> "Base85BID":
         """Return the next BID in the sequence (monotonic).
 
