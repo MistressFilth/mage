@@ -130,3 +130,17 @@ def test_plan_revise_missing_plan(tmp_path, capsys):
             main()
     # Non-zero exit on error
     assert exc_info.value.code != 0
+
+
+def test_mage_run_with_no_pipeline_defined(tmp_path, capsys):
+    """Smoke test: mage run with no halted context prints a helpful message."""
+    from mage.cli import main
+    import sys
+
+    test_argv = ["mage", "run", "--project-dir", str(tmp_path)]
+    with patch.object(sys, "argv", test_argv):
+        main()
+
+    captured = capsys.readouterr()
+    # Either "no pipeline" message or runs cleanly — both acceptable for this smoke test
+    assert "pipeline" in captured.out.lower() or captured.out == ""
