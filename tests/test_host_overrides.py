@@ -8,6 +8,7 @@ import pytest
 from mage.verification.host_overrides import (
     HostConfig,
     default_check_set,
+    default_host_config,
     load_host_config,
 )
 from mage.verification.mechanical import (
@@ -65,3 +66,28 @@ class TestLoadHostConfig:
         (config_dir / "config.yaml").write_text("not: valid: yaml: at all: :::")
         with pytest.raises(Exception):
             load_host_config(tmp_path)
+
+
+def test_host_config_require_plan_approval_default():
+    config = HostConfig()
+    assert config.require_plan_approval is True
+
+
+def test_host_config_require_plan_approval_overridable():
+    config = HostConfig(require_plan_approval=False)
+    assert config.require_plan_approval is False
+
+
+def test_host_config_plan_template_path_optional():
+    config = HostConfig()
+    assert config.plan_template_path is None
+
+    custom = Path("/tmp/custom-template.md")
+    config2 = HostConfig(plan_template_path=custom)
+    assert config2.plan_template_path == custom
+
+
+def test_default_host_config_returns_default():
+    config = default_host_config()
+    assert isinstance(config, HostConfig)
+    assert config.require_plan_approval is True
