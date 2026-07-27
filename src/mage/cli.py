@@ -143,6 +143,36 @@ def cmd_plan_revise(args):
     print("Restart the pipeline with: mage run")
 
 
+def cmd_run(args):
+    """Run the pipeline with halt handling and resume support."""
+    from mage.orchestration.events import EventsLog
+    from mage.orchestration.nodes import PipelineContext
+    from mage.orchestration.persistence import FileStatePersistence
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+    state_dir = project_dir / ".haileris" / "state"
+
+    # Try to load halted context
+    persistence = FileStatePersistence(
+        state_dir=state_dir, state_type=PipelineContext
+    )
+    halted_ctx = persistence.load_state()
+
+    if halted_ctx is not None:
+        print(f"Resuming pipeline from halted state (stage={halted_ctx.current_stage})")
+        ctx = halted_ctx
+    else:
+        print(f"No halted state found at {state_dir}; nothing to resume.")
+        return 0
+
+    # Note: actual stage list construction deferred to Plan 6 (full pipeline wiring).
+    # For Plan 2, this command verifies the resume mechanism works.
+    print(f"Pipeline context loaded: project_dir={ctx.project_dir}")
+    print("Note: full pipeline wiring (stage list construction) is Plan 6 work.")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -185,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "plan" and args.plan_command == "revise":
         cmd_plan_revise(args)
         return 0
+    if args.command == "run":
+        return cmd_run(args)
     parser.print_help()
     raise SystemExit(1)
 
