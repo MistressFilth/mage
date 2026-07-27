@@ -1,0 +1,57 @@
+"""Host-project override mechanism for tunable behavior."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, ConfigDict
+
+from haileris_v2.verification.mechanical import (
+    CrossBehaviorTagsValidCheck,
+    GherkinSyntaxCheck,
+    LifecycleStatusTagPresentCheck,
+    MechanicalCheck,
+    ScenarioNameUniqueCheck,
+    StepDefinitionsResolvableCheck,
+    SubBidAssignedCheck,
+    TagsRegisteredCheck,
+)
+
+
+class HostConfig(BaseModel):
+    """Parsed host-project configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    max_iterations: int = 3  # spec default
+    check_set: str = "default"
+
+
+def default_check_set(
+    registered_tags: set[str],
+    step_patterns: list[re.Pattern[str]],
+) -> list[MechanicalCheck]:
+    """Return the default 7 mechanical checks with the given registry state."""
+    return [
+        GherkinSyntaxCheck(),
+        ScenarioNameUniqueCheck(),
+        TagsRegisteredCheck(registered_tags=registered_tags),
+        StepDefinitionsResolvableCheck(registered_patterns=step_patterns),
+        LifecycleStatusTagPresentCheck(),
+        SubBidAssignedCheck(),
+        CrossBehaviorTagsValidCheck(),
+    ]
+
+
+def load_host_config(project_dir: Path) -> HostConfig:
+    """Load host config from `<project_dir>/.haileris/config.yaml`.
+
+    Falls back to defaults if the file doesn't exist.
+    """
+    config_path = Path(project_dir) / ".haileris" / "config.yaml"
+    if not config_path.exists():
+        return HostConfig()
+    data = yaml.safe_load(config_path.read_text()) or {}
+    return HostConfig.model_validate(data)
