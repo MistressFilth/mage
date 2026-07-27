@@ -76,3 +76,29 @@ class TestStageNode:
         # STAGE_STARTED was emitted; the exception should propagate (no
         # STAGE_COMPLETED, but the failure is visible in the log).
         assert events[0].event_type == EventType.STAGE_STARTED
+
+
+def test_pipeline_context_plan_path_default(tmp_path):
+    from mage.orchestration.nodes import PipelineContext
+
+    mapping = MappingArtifact(schema_version=1, project_id="test", base_bids=[])
+    events_log = EventsLog(tmp_path / "events.jsonl")
+    ctx = PipelineContext(
+        project_dir=tmp_path,
+        mapping=mapping,
+        events_log=events_log,
+    )
+    assert ctx.plan_path == tmp_path / "plan.md"
+
+
+def test_pipeline_context_plan_path_overridable(tmp_path):
+    from mage.orchestration.nodes import PipelineContext
+
+    custom = tmp_path / "custom-plan.md"
+    ctx = PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(schema_version=1, project_id="test", base_bids=[]),
+        events_log=EventsLog(tmp_path / "events.jsonl"),
+        plan_path=custom,
+    )
+    assert ctx.plan_path == custom
