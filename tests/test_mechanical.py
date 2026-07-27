@@ -327,3 +327,69 @@ class TestLifecycleStatusTagPresentCheck:
         mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
+
+
+from haileris_v2.artifacts.mapping import BaseBIDEntry
+from haileris_v2.verification.mechanical import SubBidAssignedCheck
+
+
+class TestSubBidAssignedCheck:
+    def test_valid_sub_bid_with_existing_base_passes(self, tmp_project_dir: Path):
+        check = SubBidAssignedCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(
+            schema_version=1,
+            project_id="t",
+            base_bids=[
+                BaseBIDEntry(
+                    base_bid="00000",
+                    behavior_name="b",
+                    behavior_description="d",
+                    scenarios=[],
+                    reversion_log=[],
+                    post_live_revisions=[],
+                    cross_behavior_links=[],
+                )
+            ],
+        )
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_invalid_base85_char_fails(self, tmp_project_dir: Path):
+        check = SubBidAssignedCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=[],
+            sub_bid=" ",  # space not in alphabet
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+
+    def test_parent_base_bid_missing_fails(self, tmp_project_dir: Path):
+        check = SubBidAssignedCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given x",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00099"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "00099" in (result.detail or "")
