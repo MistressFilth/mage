@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from haileris_v2.artifacts.mapping import MappingArtifact
-from haileris_v2.orchestration.events import EventType, EventsLog
-from haileris_v2.orchestration.graph import PipelineGraph
-from haileris_v2.orchestration.nodes import PipelineContext, StageNode
+from mage.artifacts.mapping import MappingArtifact
+from mage.orchestration.events import EventType, EventsLog
+from mage.orchestration.graph import PipelineGraph
+from mage.orchestration.nodes import PipelineContext, StageNode
 
 
 class IncrementingStage(StageNode):

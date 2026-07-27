@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from haileris_v2.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.events import Event, EventsLog, EventType
 
 
 class TestEvent:

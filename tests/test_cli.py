@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from haileris_v2 import cli
+from mage import cli
 
 
 class TestCli:
@@ -32,7 +32,7 @@ class TestCli:
         (config_dir / "config.yaml").write_text("max_iterations: 3\ncheck_set: default\n")
 
         # Create a mapping artifact with one base BID.
-        from haileris_v2.artifacts.mapping import BaseBIDEntry, MappingArtifact
+        from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
         mapping = MappingArtifact(
             schema_version=1,
             project_id="cli-test",

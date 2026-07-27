@@ -8,8 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
-from haileris_v2.artifacts.mapping import MappingArtifact
-from haileris_v2.orchestration.events import Event, EventType, EventsLog
+from mage.artifacts.mapping import MappingArtifact
+from mage.orchestration.events import Event, EventType, EventsLog
 
 
 class PipelineContext(BaseModel):

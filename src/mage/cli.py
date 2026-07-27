@@ -6,10 +6,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from haileris_v2.artifacts.bid import Base85BID
-from haileris_v2.artifacts.mapping import MappingArtifact
-from haileris_v2.verification.host_overrides import default_check_set, load_host_config
-from haileris_v2.verification.mechanical import (
+from mage.artifacts.bid import Base85BID
+from mage.artifacts.mapping import MappingArtifact
+from mage.verification.host_overrides import default_check_set, load_host_config
+from mage.verification.mechanical import (
     MechanicalVerifier,
     ScenarioDraft,
 )
@@ -18,7 +18,7 @@ from haileris_v2.verification.mechanical import (
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
-        prog="h2",
+        prog="mage",
         description="HAILERIS v2: spec-driven development pipeline",
     )
     parser.add_argument(
@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    # h2 verify — run mechanical checks against a feature/scenario.
+    # mage verify — run mechanical checks against a feature/scenario.
     verify = subparsers.add_parser("verify", help="Run mechanical verification on a scenario")
     verify.add_argument("--feature", type=Path, required=True, help="Path to the .feature file")
     verify.add_argument("--scenario", required=True, help="Scenario name within the feature")

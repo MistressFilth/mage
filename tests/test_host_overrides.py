@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from haileris_v2.verification.host_overrides import (
+from mage.verification.host_overrides import (
     HostConfig,
     default_check_set,
     load_host_config,
 )
-from haileris_v2.verification.mechanical import (
+from mage.verification.mechanical import (
     CrossBehaviorTagsValidCheck,
     GherkinSyntaxCheck,
     LifecycleStatusTagPresentCheck,

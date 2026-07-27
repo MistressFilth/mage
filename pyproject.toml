@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "haileris-v2"
+name = "mage"
 version = "0.1.0"
-description = "HAILERIS v2: spec-driven development pipeline"
+description = "HAILERIS v2 execution engine: spec-driven development pipeline"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.6",
@@ -22,10 +22,10 @@ dev = [
 ]
 
 [project.scripts]
-h2 = "haileris_v2.cli:main"
+mage = "mage.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/haileris_v2"]
+packages = ["src/mage"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
