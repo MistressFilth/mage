@@ -103,6 +103,46 @@ def cmd_plan_show(args):
         print(f"\n... ({len(lines) - 50} more lines)")
 
 
+def cmd_plan_revise(args):
+    """Record a Plan revision after halt."""
+    from mage.artifacts.plan import PlanArtifact
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+    plan_path = project_dir / "plan.md"
+
+    if not plan_path.exists():
+        print(f"mage plan revise: error: plan.md not found at {plan_path}", file=sys.stderr)
+        sys.exit(2)
+
+    # Check that a prior finalization exists
+    events = log.read_all()
+    plan_events = [
+        e for e in events
+        if e.event_type.value in ("plan_finalized", "plan_revised")
+        and e.payload.get("plan_path") == str(plan_path)
+    ]
+    if not plan_events:
+        print(
+            f"mage plan revise: error: no PLAN_FINALIZED event for {plan_path}; "
+            f"run mage run to create the Plan first",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    new_digest = PlanArtifact.revise(
+        plan_path,
+        plan_path.read_text(encoding="utf-8"),
+        reason=args.reason,
+        human_approver=args.approver,
+        events_log=log,
+    )
+
+    print(f"Plan revision recorded. New digest: {new_digest}")
+    print("Restart the pipeline with: mage run")
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -141,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify(args)
     if args.command == "plan" and args.plan_command == "show":
         cmd_plan_show(args)
+        return 0
+    if args.command == "plan" and args.plan_command == "revise":
+        cmd_plan_revise(args)
         return 0
     parser.print_help()
     raise SystemExit(1)

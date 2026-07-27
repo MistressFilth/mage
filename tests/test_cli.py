@@ -84,3 +84,49 @@ def test_plan_show_prints_digest_and_content(tmp_path, capsys):
     assert str(plan_path) in captured.out
     assert "Digest:" in captured.out
     assert "# Plan" in captured.out
+
+
+def test_plan_revise_records_event(tmp_path, capsys):
+    from mage.artifacts.plan import PlanArtifact
+    from mage.cli import main
+    from mage.orchestration.events import EventsLog, EventType
+    import sys
+
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+    PlanArtifact.finalize(plan_path, "# original\n", log)
+    plan_path.write_text("# revised\n", encoding="utf-8")  # simulate external edit
+
+    test_argv = [
+        "mage", "plan", "revise",
+        "--reason", "Reordered behaviors",
+        "--approver", "alice",
+        "--project-dir", str(tmp_path),
+    ]
+    with patch.object(sys, "argv", test_argv):
+        main()
+
+    revised = [e for e in log.read_all() if e.event_type == EventType.PLAN_REVISED]
+    assert len(revised) == 1
+    assert revised[0].payload["reason"] == "Reordered behaviors"
+    assert revised[0].payload["human_approver"] == "alice"
+
+    captured = capsys.readouterr()
+    assert "Plan revision recorded" in captured.out or "revision" in captured.out.lower()
+
+
+def test_plan_revise_missing_plan(tmp_path, capsys):
+    from mage.cli import main
+    import sys
+
+    test_argv = [
+        "mage", "plan", "revise",
+        "--reason", "r",
+        "--approver", "a",
+        "--project-dir", str(tmp_path),
+    ]
+    with patch.object(sys, "argv", test_argv):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    # Non-zero exit on error
+    assert exc_info.value.code != 0
