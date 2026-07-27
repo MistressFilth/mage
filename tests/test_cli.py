@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from mage import cli
+from unittest.mock import patch
 
 
 class TestCli:
@@ -62,3 +63,24 @@ class TestCli:
         # The scenario has tags=[] so TagsRegisteredCheck will fail (no registered tags).
         # We expect non-zero exit because of that. The point is the command runs.
         assert rc in (0, 1)  # 0 if all pass, 1 if any fail
+
+
+def test_plan_show_prints_digest_and_content(tmp_path, capsys):
+    from mage.artifacts.plan import PlanArtifact
+    from mage.cli import main
+    from mage.orchestration.events import EventsLog
+    import sys
+
+    log = EventsLog(tmp_path / "events.jsonl")
+    plan_path = tmp_path / "plan.md"
+    PlanArtifact.finalize(plan_path, "# Plan\n\ncontent\n", log)
+
+    test_argv = ["mage", "plan", "show", "--project-dir", str(tmp_path)]
+    with patch.object(sys, "argv", test_argv):
+        main()
+
+    captured = capsys.readouterr()
+    assert "Plan:" in captured.out
+    assert str(plan_path) in captured.out
+    assert "Digest:" in captured.out
+    assert "# Plan" in captured.out
