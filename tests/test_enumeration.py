@@ -108,3 +108,66 @@ def test_cross_behavior_link_to_pending_behavior():
     b = next(e for e in entries if e.behavior_name == "b")
     a = next(e for e in entries if e.behavior_name == "a")
     assert b.cross_behavior_links == [a.base_bid]
+
+
+def test_enumerate_writes_behaviors_yaml(tmp_path):
+    from mage.artifacts.enumeration import enumerate_behaviors
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog, EventType
+    log = EventsLog(tmp_path / "events.jsonl")
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth"), _spec("orders", depends_on=["auth"])]
+
+    updated_mapping, behaviors_path = enumerate_behaviors(specs, mapping, project_dir=tmp_path, events_log=log)
+
+    assert behaviors_path.exists()
+    assert behaviors_path == tmp_path / "behaviors.yaml"
+    import yaml
+    data = yaml.safe_load(behaviors_path.read_text())
+    assert data["schema_version"] == 1
+    assert len(data["behaviors"]) == 2
+    assert {b["name"] for b in data["behaviors"]} == {"auth", "orders"}
+
+
+def test_enumerate_writes_updated_mapping(tmp_path):
+    from mage.artifacts.enumeration import enumerate_behaviors
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog
+    log = EventsLog(tmp_path / "events.jsonl")
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth")]
+
+    updated_mapping, _ = enumerate_behaviors(specs, mapping, project_dir=tmp_path, events_log=log)
+
+    assert len(updated_mapping.base_bids) == 1
+    assert updated_mapping.base_bids[0].behavior_name == "auth"
+
+
+def test_enumerate_emits_behaviors_enumerated_event(tmp_path):
+    from mage.artifacts.enumeration import enumerate_behaviors
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog, EventType
+    log = EventsLog(tmp_path / "events.jsonl")
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth")]
+
+    enumerate_behaviors(specs, mapping, project_dir=tmp_path, events_log=log)
+
+    events = log.read_all()
+    enum_events = [e for e in events if e.event_type == EventType.BEHAVIORS_ENUMERATED]
+    assert len(enum_events) == 1
+    assert enum_events[0].payload["count"] == 1
+
+
+def test_enumerate_does_not_write_on_validation_error(tmp_path):
+    from mage.artifacts.enumeration import enumerate_behaviors, DuplicateBehaviorNameError
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog
+    log = EventsLog(tmp_path / "events.jsonl")
+    mapping = MappingArtifact(project_id="p")
+    specs = [_spec("auth"), _spec("auth")]
+
+    with pytest.raises(DuplicateBehaviorNameError):
+        enumerate_behaviors(specs, mapping, project_dir=tmp_path, events_log=log)
+
+    assert not (tmp_path / "behaviors.yaml").exists()
