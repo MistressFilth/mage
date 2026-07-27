@@ -74,7 +74,5 @@ def next_base_bid(highest: Base85BID | None) -> Base85BID:
     if highest is None:
         return Base85BID(value="0" * BASE_BID_LENGTH)
     # Pad/truncate to 5 chars for base-BID semantics.
-    padded = highest.value.rjust(BASE_BID_LENGTH, BASE85_ALPHABET[0])[:BASE_BID_LENGTH]
-    if len(padded) < BASE_BID_LENGTH:
-        padded = padded.rjust(BASE_BID_LENGTH, BASE85_ALPHABET[0])
+    padded = highest.value.rjust(BASE_BID_LENGTH, BASE85_ALPHABET[0])
     return Base85BID(value=padded).increment()
