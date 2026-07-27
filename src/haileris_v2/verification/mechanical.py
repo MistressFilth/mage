@@ -6,6 +6,7 @@ scenario. No LLM calls — pure structural/grammatical/syntactic validation.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Literal
@@ -96,5 +97,34 @@ class GherkinSyntaxCheck(MechanicalCheck):
                 name=self.name,
                 outcome="fail",
                 detail=f"missing required step keywords: {', '.join(missing)}",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
+
+
+class ScenarioNameUniqueCheck(MechanicalCheck):
+    """Validates that the scenario name is unique within its feature file."""
+
+    name = "scenario-name-unique"
+
+    SCENARIO_PATTERN = re.compile(r"^\s*Scenario:\s*(.+?)\s*$", re.MULTILINE)
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        if not draft.feature_path.exists():
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"feature file does not exist: {draft.feature_path}",
+            )
+        text = draft.feature_path.read_text()
+        names = self.SCENARIO_PATTERN.findall(text)
+        # Normalize for comparison (Gherkin scenario names can have trailing descriptions).
+        normalized = [n.split("(")[0].strip() for n in names]
+        target = draft.scenario_name.split("(")[0].strip()
+        duplicates = [n for n in normalized if n == target]
+        if len(duplicates) > 1:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"duplicate scenario name '{draft.scenario_name}' in feature file",
             )
         return CheckResult(name=self.name, outcome="pass", detail=None)

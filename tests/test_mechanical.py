@@ -14,6 +14,7 @@ from haileris_v2.verification.mechanical import (
     ScenarioDraft,
 )
 from haileris_v2.verification.mechanical import GherkinSyntaxCheck
+from haileris_v2.verification.mechanical import ScenarioNameUniqueCheck
 
 
 class DummyCheck(MechanicalCheck):
@@ -141,3 +142,44 @@ class TestGherkinSyntaxCheck:
         mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
+
+
+class TestScenarioNameUniqueCheck:
+    def test_unique_name_passes(self, tmp_project_dir: Path):
+        feature_path = tmp_project_dir / "test.feature"
+        feature_path.write_text(
+            "Feature: Test\n\n  Scenario: First\n    Given x\n\n  Scenario: Second\n    Given y\n"
+        )
+        check = ScenarioNameUniqueCheck()
+        draft = ScenarioDraft(
+            feature_path=feature_path,
+            scenario_name="First",
+            gherkin_text="Given x",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_duplicate_name_fails(self, tmp_project_dir: Path):
+        feature_path = tmp_project_dir / "test.feature"
+        feature_path.write_text(
+            "Feature: Test\n\n  Scenario: Same\n    Given x\n\n  Scenario: Same\n    Given y\n"
+        )
+        check = ScenarioNameUniqueCheck()
+        draft = ScenarioDraft(
+            feature_path=feature_path,
+            scenario_name="Same",
+            gherkin_text="Given x",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given x"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "duplicate" in (result.detail or "").lower()
