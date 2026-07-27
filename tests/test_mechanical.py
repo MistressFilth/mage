@@ -13,6 +13,7 @@ from haileris_v2.verification.mechanical import (
     MechanicalVerifier,
     ScenarioDraft,
 )
+from haileris_v2.verification.mechanical import GherkinSyntaxCheck
 
 
 class DummyCheck(MechanicalCheck):
@@ -92,3 +93,51 @@ class TestMechanicalVerifier:
         assert len(results) == 3
         outcomes = [r.outcome for r in results]
         assert outcomes == ["pass", "fail", "pass"]
+
+
+class TestGherkinSyntaxCheck:
+    def test_valid_gherkin_passes(self, tmp_project_dir: Path):
+        check = GherkinSyntaxCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given a precondition\nWhen an action\nThen a result",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given a precondition", "When an action", "Then a result"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_missing_when_fails(self, tmp_project_dir: Path):
+        check = GherkinSyntaxCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given a precondition\nThen a result",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given a precondition", "Then a result"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "When" in (result.detail or "")
+
+    def test_no_steps_fails(self, tmp_project_dir: Path):
+        check = GherkinSyntaxCheck()
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=[],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
