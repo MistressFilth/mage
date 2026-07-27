@@ -36,7 +36,71 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--sub-bid", required=True, help="Sub-BID for the scenario")
     verify.add_argument("--base-bid", required=True, help="Parent base-BID")
 
+    # mage plan <subcommand>
+    plan_parser = subparsers.add_parser("plan", help="Plan operations")
+    plan_subparsers = plan_parser.add_subparsers(dest="plan_command", required=True)
+
+    # mage plan show
+    show_parser = plan_subparsers.add_parser("show", help="Display Plan + digest")
+    show_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
+
+    # mage plan revise
+    revise_parser = plan_subparsers.add_parser("revise", help="Record a Plan revision after halt")
+    revise_parser.add_argument("--reason", type=str, required=True)
+    revise_parser.add_argument("--approver", type=str, required=True)
+    revise_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
+
+    # mage run
+    run_parser = subparsers.add_parser("run", help="Run the pipeline")
+    run_parser.add_argument("--from", dest="from_stage", type=str, default=None)
+    run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
+
     return parser
+
+
+def cmd_plan_show(args):
+    """Display Plan + digest + last event."""
+    from mage.artifacts.plan import PlanArtifact
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+    plan_path = project_dir / "plan.md"
+
+    print(f"Plan: {plan_path}")
+
+    if not plan_path.exists():
+        print("(Plan file does not exist on disk)")
+        return
+
+    # Find latest FINALIZED/REVISED event
+    events = log.read_all()
+    plan_events = [
+        e for e in events
+        if e.event_type.value in ("plan_finalized", "plan_revised")
+        and e.payload.get("plan_path") == str(plan_path)
+    ]
+    if not plan_events:
+        print("(No PLAN_FINALIZED event — Plan is unfinalized)")
+        return
+
+    latest = max(plan_events, key=lambda e: e.timestamp)
+    digest = latest.payload.get("plan_sha256") or latest.payload.get("new_sha256")
+    print(f"Digest: {digest}")
+    print(f"Last event: {latest.event_type.value.upper().replace('_', ' ')} at {latest.timestamp.isoformat()}")
+    print()
+
+    try:
+        content = PlanArtifact.load(plan_path, log)
+    except Exception as e:
+        print(f"(Failed to load Plan: {e})")
+        return
+
+    lines = content.splitlines()
+    preview = "\n".join(lines[:50])
+    print(preview)
+    if len(lines) > 50:
+        print(f"\n... ({len(lines) - 50} more lines)")
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -75,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(0)
     if args.command == "verify":
         return cmd_verify(args)
+    if args.command == "plan" and args.plan_command == "show":
+        cmd_plan_show(args)
+        return 0
     parser.print_help()
     raise SystemExit(1)
 
