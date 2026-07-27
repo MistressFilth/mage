@@ -154,3 +154,59 @@ def test_halt_and_resume_cycle(tmp_path):
     # Plan load now succeeds with new digest
     content = PlanArtifact.load(plan_path, log)
     assert content == "# revised plan content\n"
+
+
+def test_approval_gate_required_emits_warning(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
+
+    log = EventsLog(project_dir / "events.jsonl")
+    mapping = MappingArtifact(project_id="feat-001")
+
+    agent = MagicMock(spec=DecompositionAgent)
+    agent.run.return_value = DecompositionOutput(
+        architecture=ArchitectureSpec(parts=[], components=[], layers=[]),
+        behaviors=[BehaviorSpec(name="auth", description="Login")],
+    )
+
+    host_config = HostConfig(require_plan_approval=True)
+    stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
+    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+
+    import warnings
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        stage.run(ctx)
+        approval_warnings = [
+            x for x in w if "require_plan_approval" in str(x.message)
+        ]
+        assert len(approval_warnings) >= 1
+
+
+def test_approval_gate_disabled_runs_silently(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
+
+    log = EventsLog(project_dir / "events.jsonl")
+    mapping = MappingArtifact(project_id="feat-001")
+
+    agent = MagicMock(spec=DecompositionAgent)
+    agent.run.return_value = DecompositionOutput(
+        architecture=ArchitectureSpec(parts=[], components=[], layers=[]),
+        behaviors=[BehaviorSpec(name="auth", description="Login")],
+    )
+
+    host_config = HostConfig(require_plan_approval=False)
+    stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
+    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+
+    import warnings
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        stage.run(ctx)
+        approval_warnings = [
+            x for x in w if "require_plan_approval" in str(x.message)
+        ]
+        assert len(approval_warnings) == 0
