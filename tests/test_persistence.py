@@ -21,43 +21,49 @@ class SampleState(BaseModel):
 class TestFileStatePersistence:
     def test_init_creates_dir(self, tmp_path: Path):
         state_dir = tmp_path / "state"
-        FileStatePersistence(state_dir)
+        FileStatePersistence(state_dir, SampleState)
         assert state_dir.exists()
 
     def test_load_when_no_state(self, tmp_path: Path):
-        persistence = FileStatePersistence(tmp_path / "state")
-        assert persistence.load_state(SampleState) is None
+        persistence = FileStatePersistence(tmp_path / "state", SampleState)
+        assert persistence.load_state() is None
 
     def test_round_trip(self, tmp_path: Path):
-        persistence = FileStatePersistence(tmp_path / "state")
+        persistence = FileStatePersistence(tmp_path / "state", SampleState)
         state = SampleState(iteration=3, current_scenario="00000-A", notes="hello")
         persistence.save_state(state)
-        loaded = persistence.load_state(SampleState)
+        loaded = persistence.load_state()
         assert loaded is not None
         assert loaded.iteration == 3
         assert loaded.current_scenario == "00000-A"
         assert loaded.notes == "hello"
 
     def test_save_is_atomic(self, tmp_path: Path):
-        persistence = FileStatePersistence(tmp_path / "state")
+        persistence = FileStatePersistence(tmp_path / "state", SampleState)
         state = SampleState(iteration=1)
         persistence.save_state(state)
         # No temp files should remain.
         assert list((tmp_path / "state").glob("*.tmp")) == []
 
     def test_save_overwrites(self, tmp_path: Path):
-        persistence = FileStatePersistence(tmp_path / "state")
+        persistence = FileStatePersistence(tmp_path / "state", SampleState)
         persistence.save_state(SampleState(iteration=1))
         persistence.save_state(SampleState(iteration=2))
-        loaded = persistence.load_state(SampleState)
+        loaded = persistence.load_state()
         assert loaded is not None
         assert loaded.iteration == 2
 
-    def test_recovers_from_corrupt_state(self, tmp_path: Path):
-        # Write garbage to the state file; load should raise a clear error.
-        persistence = FileStatePersistence(tmp_path / "state")
+    def test_recovers_from_corrupt_state_by_quarantining(self, tmp_path: Path):
+        """Corrupt state file is quarantined and load returns None."""
+        persistence = FileStatePersistence(tmp_path / "state", SampleState)
         state_file = tmp_path / "state" / "pipeline-state.yaml"
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text("not: valid: yaml: at all: :::")
-        with pytest.raises(Exception):  # Pydantic ValidationError or yaml.YAMLError
-            persistence.load_state(SampleState)
+        # Recovery: load returns None, file is quarantined
+        result = persistence.load_state()
+        assert result is None
+        # Original file no longer at expected location
+        assert not state_file.exists()
+        # Quarantined file exists
+        quarantined = list((tmp_path / "state").glob("pipeline-state.yaml.corrupt.*"))
+        assert len(quarantined) == 1

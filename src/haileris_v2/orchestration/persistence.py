@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Type, TypeVar
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -18,8 +19,9 @@ class FileStatePersistence:
     write-temp-then-rename pattern so partial writes never corrupt state.
     """
 
-    def __init__(self, state_dir: Path) -> None:
+    def __init__(self, state_dir: Path, state_type: Type[T]) -> None:
         self.state_dir = Path(state_dir)
+        self.state_type = state_type
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.state_dir / "pipeline-state.yaml"
 
@@ -30,9 +32,21 @@ class FileStatePersistence:
         tmp_path.write_text(yaml.safe_dump(data, sort_keys=False))
         tmp_path.replace(self.state_file)
 
-    def load_state(self, state_type: Type[T]) -> T | None:
-        """Load state, or return None if no state file exists."""
+    def load_state(self) -> T | None:
+        """Load state, or return None if no state file exists.
+
+        On corrupt state, quarantine the file and return None.
+        """
         if not self.state_file.exists():
             return None
-        data = yaml.safe_load(self.state_file.read_text())
-        return state_type.model_validate(data)
+        try:
+            data = yaml.safe_load(self.state_file.read_text())
+            return self.state_type.model_validate(data)
+        except (yaml.YAMLError, ValidationError) as e:
+            # Quarantine the corrupt file for diagnosis.
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+            quarantine_path = self.state_file.with_name(
+                f"{self.state_file.name}.corrupt.{timestamp}"
+            )
+            self.state_file.rename(quarantine_path)
+            return None
