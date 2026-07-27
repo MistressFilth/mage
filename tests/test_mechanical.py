@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from haileris_v2.verification.mechanical import (
     MechanicalCheck,
     MechanicalVerifier,
     ScenarioDraft,
+    StepDefinitionsResolvableCheck,
 )
 from haileris_v2.verification.mechanical import GherkinSyntaxCheck
 from haileris_v2.verification.mechanical import ScenarioNameUniqueCheck
@@ -232,3 +234,45 @@ class TestTagsRegisteredCheck:
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "@unknown_tag" in (result.detail or "")
+
+
+class TestStepDefinitionsResolvableCheck:
+    def test_all_resolvable_passes(self, tmp_project_dir: Path):
+        # Step registry keyed by step keyword + pattern snippet.
+        check = StepDefinitionsResolvableCheck(
+            registered_patterns=[
+                re.compile(r"Given a precondition"),
+                re.compile(r"When an action"),
+                re.compile(r"Then a result"),
+            ]
+        )
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given a precondition\nWhen an action\nThen a result",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given a precondition", "When an action", "Then a result"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "pass"
+
+    def test_unresolvable_step_fails(self, tmp_project_dir: Path):
+        check = StepDefinitionsResolvableCheck(
+            registered_patterns=[re.compile(r"Given a precondition")]
+        )
+        draft = ScenarioDraft(
+            feature_path=tmp_project_dir / "test.feature",
+            scenario_name="Test",
+            gherkin_text="Given a precondition\nWhen undefined action",
+            tags=[],
+            sub_bid="A",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given a precondition", "When undefined action"],
+        )
+        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        result = check.run(draft, mapping)
+        assert result.outcome == "fail"
+        assert "undefined action" in (result.detail or "")

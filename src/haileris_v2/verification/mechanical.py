@@ -148,3 +148,26 @@ class TagsRegisteredCheck(MechanicalCheck):
                 detail=f"unregistered tags: {', '.join(unregistered)}",
             )
         return CheckResult(name=self.name, outcome="pass", detail=None)
+
+
+class StepDefinitionsResolvableCheck(MechanicalCheck):
+    """Validates that every step maps to a registered step-definition pattern."""
+
+    name = "step-definitions-resolvable"
+
+    def __init__(self, registered_patterns: list[re.Pattern[str]]) -> None:
+        super().__init__()
+        self.registered_patterns = registered_patterns
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        unresolvable = []
+        for step in draft.step_texts:
+            if not any(p.search(step) for p in self.registered_patterns):
+                unresolvable.append(step)
+        if unresolvable:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"unresolvable steps: {'; '.join(unresolvable)}",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
