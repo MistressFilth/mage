@@ -27,6 +27,8 @@ class HostConfig(BaseModel):
 
     max_iterations: int = 3  # spec default
     check_set: str = "default"
+    require_plan_approval: bool = True
+    plan_template_path: Path | None = None
 
 
 def default_check_set(
@@ -43,6 +45,11 @@ def default_check_set(
         SubBidAssignedCheck(),
         CrossBehaviorTagsValidCheck(),
     ]
+
+
+def default_host_config() -> HostConfig:
+    """Return the default host config."""
+    return HostConfig()
 
 
 def load_host_config(project_dir: Path) -> HostConfig:
