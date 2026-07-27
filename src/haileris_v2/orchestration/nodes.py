@@ -1,0 +1,65 @@
+"""Stage node base classes for the orchestration state machine."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
+
+from haileris_v2.artifacts.mapping import MappingArtifact
+from haileris_v2.orchestration.events import Event, EventType, EventsLog
+
+
+class PipelineContext(BaseModel):
+    """Runtime context passed between stages."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    project_dir: Path
+    mapping: MappingArtifact
+    events_log: EventsLog
+    current_stage: str | None = None
+    current_sub_bid: str | None = None
+    iteration: int = 0
+
+
+class StageNode(ABC):
+    """Abstract base for all pipeline stages.
+
+    Subclasses must define `name` and implement `run()`. The base class
+    emits STAGE_STARTED and STAGE_COMPLETED events around each run.
+    """
+
+    name: str = ""
+
+    def __init__(self, events_log: EventsLog) -> None:
+        if not self.name:
+            raise ValueError(f"{type(self).__name__} must define `name`")
+        self.events_log = events_log
+
+    def run(self, context: PipelineContext) -> PipelineContext:
+        """Execute the stage, emitting start/complete events."""
+        self._emit(EventType.STAGE_STARTED)
+        try:
+            result = self._run(context)
+            self._emit(EventType.STAGE_COMPLETED)
+            return result
+        except Exception:
+            # Don't emit COMPLETED on failure; let the exception propagate.
+            raise
+
+    @abstractmethod
+    def _run(self, context: PipelineContext) -> PipelineContext:
+        """Stage-specific execution. Must be implemented by subclasses."""
+        ...
+
+    def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
+        """Emit an event to the log."""
+        event = Event(
+            timestamp=datetime.now(timezone.utc),
+            event_type=event_type,
+            payload={"stage": self.name, **(payload or {})},
+        )
+        self.events_log.append(event)
