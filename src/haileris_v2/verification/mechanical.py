@@ -74,3 +74,27 @@ class MechanicalVerifier:
     def all_passed(self, results: list[CheckResult]) -> bool:
         """True iff every check passed."""
         return all(r.outcome == "pass" for r in results)
+
+
+class GherkinSyntaxCheck(MechanicalCheck):
+    """Validates Gherkin structure: Given, When, Then all present."""
+
+    name = "gherkin-syntax"
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        steps = draft.step_texts
+        if not steps:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail="scenario has no steps",
+            )
+        keywords = {step.split()[0] for step in steps if step.strip()}
+        missing = [k for k in ("Given", "When", "Then") if k not in keywords]
+        if missing:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"missing required step keywords: {', '.join(missing)}",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
