@@ -197,3 +197,29 @@ class LifecycleStatusTagPresentCheck(MechanicalCheck):
                 detail=f"invalid lifecycle tag(s): {', '.join(invalid)}",
             )
         return CheckResult(name=self.name, outcome="pass", detail=None)
+
+
+class SubBidAssignedCheck(MechanicalCheck):
+    """Validates sub-BID format (Base85) and parent base-BID existence."""
+
+    name = "sub-bid-assigned"
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        # Validate sub-BID is in Base85 alphabet.
+        try:
+            Base85BID(value=draft.sub_bid)
+        except ValueError as e:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"sub-BID not in Base85 alphabet: {e}",
+            )
+        # Validate parent base-BID exists in mapping.
+        parent = draft.parent_base_bid.value
+        if not any(entry.base_bid == parent for entry in mapping.base_bids):
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"parent base-BID {parent} not found in mapping artifact",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
