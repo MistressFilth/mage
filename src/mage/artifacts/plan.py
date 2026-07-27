@@ -29,6 +29,21 @@ class PlanDigestMismatchError(PlanError):
     """Raised when load() finds the on-disk digest doesn't match the recorded digest."""
 
 
+class PlanRevisionRequired(PlanError):
+    """Raised by a stage when the Plan itself is wrong."""
+
+    def __init__(
+        self,
+        reason: str,
+        originating_stage: str,
+        affected_behaviors: list[str],
+    ) -> None:
+        self.reason = reason
+        self.originating_stage = originating_stage
+        self.affected_behaviors = affected_behaviors
+        super().__init__(reason)
+
+
 class PlanArtifact:
     """Digest-pinned Plan operations."""
 
