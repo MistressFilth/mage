@@ -29,6 +29,34 @@ class TestBaseBIDEntry:
         assert base("00000").base_bid == "00000"
 
 
+def test_base_bid_entry_has_depends_on_and_notes():
+    entry = BaseBIDEntry(
+        base_bid="00000",
+        behavior_name="Authenticate user",
+        behavior_description="User logs in with email and password",
+        depends_on=[],
+        notes="Foundation behavior; everything else depends on this.",
+    )
+    assert entry.depends_on == []
+    assert entry.notes == "Foundation behavior; everything else depends on this."
+
+
+def test_base_bid_entry_round_trip_with_new_fields(tmp_path):
+    entry = BaseBIDEntry(
+        base_bid="00001",
+        behavior_name="Place order",
+        behavior_description="User places an order",
+        depends_on=["00000"],
+        notes="Depends on authentication.",
+    )
+    mapping = MappingArtifact(project_id="test-project", base_bids=[entry])
+    path = tmp_path / "mapping.yaml"
+    mapping.save(path)
+    loaded = MappingArtifact.load(path)
+    assert loaded.base_bids[0].depends_on == ["00000"]
+    assert loaded.base_bids[0].notes == "Depends on authentication."
+
+
 class TestMappingArtifact:
     def test_empty_artifact(self):
         artifact = MappingArtifact(project_id="test-project")

@@ -53,6 +53,8 @@ class BaseBIDEntry(BaseModel):
     base_bid: str
     behavior_name: str
     behavior_description: str
+    depends_on: list[str] = Field(default_factory=list)
+    notes: str = ""
     scenarios: list[ScenarioEntry] = Field(default_factory=list)
     reversion_log: list[ReversionLogEntry] = Field(default_factory=list)
     post_live_revisions: list[PostLiveRevisionEntry] = Field(default_factory=list)
