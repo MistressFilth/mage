@@ -9,8 +9,8 @@ iteration that uses StageNode.run() per stage.
 
 from __future__ import annotations
 
-from haileris_v2.orchestration.events import EventsLog
-from haileris_v2.orchestration.nodes import PipelineContext, StageNode
+from mage.orchestration.events import EventsLog
+from mage.orchestration.nodes import PipelineContext, StageNode
 
 
 class PipelineGraph:

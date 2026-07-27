@@ -13,8 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from haileris_v2.artifacts.bid import Base85BID
-from haileris_v2.artifacts.mapping import LifecycleStatus, MappingArtifact
+from mage.artifacts.bid import Base85BID
+from mage.artifacts.mapping import LifecycleStatus, MappingArtifact
 
 
 class ScenarioDraft(BaseModel):

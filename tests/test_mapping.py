@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from haileris_v2.artifacts.bid import Base85BID
-from haileris_v2.artifacts.mapping import BaseBIDEntry, LifecycleStatus, MappingArtifact, ScenarioEntry
+from mage.artifacts.bid import Base85BID
+from mage.artifacts.mapping import BaseBIDEntry, LifecycleStatus, MappingArtifact, ScenarioEntry
 
 
 def base(value: str, name: str = "b") -> BaseBIDEntry:
