@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 from haileris_v2.artifacts.mapping import MappingArtifact
 from haileris_v2.orchestration.events import Event, EventType, EventsLog
@@ -23,6 +23,19 @@ class PipelineContext(BaseModel):
     current_stage: str | None = None
     current_sub_bid: str | None = None
     iteration: int = 0
+
+    @field_serializer("events_log")
+    def _serialize_events_log(self, log: EventsLog) -> str:
+        """Serialize EventsLog by its log path so the context can persist."""
+        return str(log.log_path)
+
+    @field_validator("events_log", mode="before")
+    @classmethod
+    def _deserialize_events_log(cls, value: object) -> object:
+        """Reconstruct EventsLog from a serialized path string on load."""
+        if isinstance(value, str):
+            return EventsLog(Path(value))
+        return value
 
 
 class StageNode(ABC):
