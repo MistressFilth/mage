@@ -19,6 +19,35 @@ class TestEvent:
         assert event.payload == {"stage": "harvest"}
 
 
+def test_new_event_types_exist():
+    from mage.orchestration.events import EventType
+    expected = {
+        "DECOMPOSITION_STARTED",
+        "DECOMPOSITION_COMPLETED",
+        "BEHAVIORS_ENUMERATED",
+        "PLAN_FINALIZED",
+        "PLAN_REVISED",
+        "PLAN_DIGEST_MISMATCH",
+        "HALT_PERSISTED",
+        "BEHAVIORS_REVISED",
+    }
+    actual = {member.name for member in EventType}
+    missing = expected - actual
+    assert not missing, f"missing event types: {missing}"
+
+
+def test_new_event_types_have_expected_string_values():
+    from mage.orchestration.events import EventType
+    assert EventType.DECOMPOSITION_STARTED.value == "decomposition_started"
+    assert EventType.DECOMPOSITION_COMPLETED.value == "decomposition_completed"
+    assert EventType.BEHAVIORS_ENUMERATED.value == "behaviors_enumerated"
+    assert EventType.PLAN_FINALIZED.value == "plan_finalized"
+    assert EventType.PLAN_REVISED.value == "plan_revised"
+    assert EventType.PLAN_DIGEST_MISMATCH.value == "plan_digest_mismatch"
+    assert EventType.HALT_PERSISTED.value == "halt_persisted"
+    assert EventType.BEHAVIORS_REVISED.value == "behaviors_revised"
+
+
 class TestEventsLog:
     def test_init_creates_file(self, tmp_path: Path):
         log_path = tmp_path / "events.jsonl"

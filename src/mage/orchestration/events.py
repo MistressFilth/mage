@@ -21,6 +21,24 @@ class EventType(str, Enum):
     COSMETIC_REVIEW_QUEUED = "cosmetic_review_queued"
     HUMAN_REVIEW_REQUESTED = "human_review_requested"
 
+    # Plan 2 — Decomposition stage
+    DECOMPOSITION_STARTED = "decomposition_started"
+    DECOMPOSITION_COMPLETED = "decomposition_completed"
+
+    # Plan 2 — behavior enumeration sub-step
+    BEHAVIORS_ENUMERATED = "behaviors_enumerated"
+
+    # Plan 2 — Plan lifecycle
+    PLAN_FINALIZED = "plan_finalized"
+    PLAN_REVISED = "plan_revised"
+    PLAN_DIGEST_MISMATCH = "plan_digest_mismatch"
+
+    # Plan 2 — halt/recovery
+    HALT_PERSISTED = "halt_persisted"
+
+    # Plan 5 placeholder (defined here so events log schema is stable)
+    BEHAVIORS_REVISED = "behaviors_revised"
+
 
 class Event(BaseModel):
     """One event in the log."""
