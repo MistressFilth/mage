@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from haileris_v2.artifacts.bid import BASE85_ALPHABET, BASE_BID_LENGTH, Base85BID
+from haileris_v2.artifacts.bid import Base85BID, next_base_bid
 
 
 class LifecycleStatus(str, Enum):
@@ -71,11 +71,8 @@ class MappingArtifact(BaseModel):
         return Base85BID(value=max(self.base_bids, key=lambda e: e.base_bid).base_bid)
 
     def next_base_bid(self) -> Base85BID:
-        highest = self.highest_base_bid()
-        if highest is None:
-            return Base85BID(value="0" * BASE_BID_LENGTH)
-        padded = highest.value.rjust(BASE_BID_LENGTH, BASE85_ALPHABET[0])
-        return Base85BID(value=padded).increment()
+        """Derive the next available base BID."""
+        return next_base_bid(highest=self.highest_base_bid())
 
     def lookup_sub_bid(self, base: Base85BID, sub: str) -> ScenarioEntry | None:
         for entry in self.base_bids:

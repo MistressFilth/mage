@@ -67,3 +67,26 @@ class TestFileStatePersistence:
         # Quarantined file exists
         quarantined = list((tmp_path / "state").glob("pipeline-state.yaml.corrupt.*"))
         assert len(quarantined) == 1
+
+    def test_pipeline_context_round_trip_through_persistence(self, tmp_path: Path):
+        """PipelineContext with EventsLog survives FileStatePersistence round-trip."""
+        from haileris_v2.orchestration.events import EventsLog
+        from haileris_v2.orchestration.nodes import PipelineContext
+        from haileris_v2.artifacts.mapping import MappingArtifact
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=MappingArtifact(schema_version=1, project_id="rt", base_bids=[]),
+            events_log=log,
+            iteration=42,
+            current_stage="test_stage",
+        )
+        persistence = FileStatePersistence(tmp_path / "state", PipelineContext)
+        persistence.save_state(ctx)
+        restored = persistence.load_state()
+        assert restored is not None
+        assert restored.iteration == 42
+        assert restored.current_stage == "test_stage"
+        # EventsLog survives via the path-based serializer/validator pair
+        assert restored.events_log.log_path == log.log_path
