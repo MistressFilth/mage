@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from haileris_v2.artifacts.bid import Base85BID
-from haileris_v2.artifacts.mapping import MappingArtifact
+from haileris_v2.artifacts.mapping import LifecycleStatus, MappingArtifact
 
 
 class ScenarioDraft(BaseModel):
@@ -169,5 +169,31 @@ class StepDefinitionsResolvableCheck(MechanicalCheck):
                 name=self.name,
                 outcome="fail",
                 detail=f"unresolvable steps: {'; '.join(unresolvable)}",
+            )
+        return CheckResult(name=self.name, outcome="pass", detail=None)
+
+
+class LifecycleStatusTagPresentCheck(MechanicalCheck):
+    """Validates that the scenario has a valid lifecycle status tag."""
+
+    name = "lifecycle-status-tag-present"
+
+    PREFIX = "@status-"
+    VALID_VALUES = {s.value for s in LifecycleStatus}
+
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
+        lifecycle_tags = [t for t in draft.tags if t.startswith(self.PREFIX)]
+        if not lifecycle_tags:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail="missing lifecycle status tag (e.g. @status-inscribing)",
+            )
+        invalid = [t for t in lifecycle_tags if t[len(self.PREFIX):] not in self.VALID_VALUES]
+        if invalid:
+            return CheckResult(
+                name=self.name,
+                outcome="fail",
+                detail=f"invalid lifecycle tag(s): {', '.join(invalid)}",
             )
         return CheckResult(name=self.name, outcome="pass", detail=None)
