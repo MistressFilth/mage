@@ -25,11 +25,15 @@ class HostConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    max_iterations: int = 3  # spec default; Plan 3 addition
+    max_iterations: int = 3  # spec default; Plan 3 addition (Inscribe)
     check_set: str = "default"
     require_plan_approval: bool = True
     plan_template_path: Path | None = None
     enabled_reviewers: list[str] | None = None  # Plan 3 addition; None = all enabled
+
+    # Plan 4 — Inner TDD loop iteration budgets
+    per_loop_max_iterations: int = 8  # per scenario, shared by Realize + per-loop Inspect
+    eof_max_iterations: int = 3  # per feature, end-of-feature Inspect fix-wave (Plan 5)
 
 
 def default_check_set(
