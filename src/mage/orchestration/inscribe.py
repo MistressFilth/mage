@@ -24,6 +24,19 @@ from mage.verification.reviewers.base import ReviewerAgent
 from mage.verification.reviewers.registry import aggregate_verdicts
 
 
+class ReviewBudgetExhausted(Exception):
+    """Raised when the iteration budget is exhausted without reaching approved."""
+
+    def __init__(self, base_bid: str, scenario_name: str, iteration: int) -> None:
+        self.base_bid = base_bid
+        self.scenario_name = scenario_name
+        self.iteration = iteration
+        super().__init__(
+            f"Review budget exhausted for scenario {scenario_name!r} "
+            f"under base_bid {base_bid!r} at iteration {iteration}"
+        )
+
+
 class InscribeStage(StageNode):
     """Runs once per feature; loops over behaviors and scenarios to APPROVED."""
 
@@ -181,6 +194,26 @@ class InscribeStage(StageNode):
                                 payload={"base_bid": base_bid, "scenario_name": scenario.name},
                             )
                         )
+
+            if not approved:
+                # Budget exhausted: emit halt event and raise.
+                self.events_log.append(
+                    Event(
+                        timestamp=datetime.now(UTC),
+                        event_type=EventType.REVIEW_HALT_PERSISTED,
+                        payload={
+                            "base_bid": base_bid,
+                            "behavior_name": behavior_name,
+                            "iteration": iteration,
+                            "max_iterations": self.host_config.max_iterations,
+                        },
+                    )
+                )
+                raise ReviewBudgetExhausted(
+                    base_bid=base_bid,
+                    scenario_name=behavior_name,
+                    iteration=iteration,
+                )
 
             self.events_log.append(
                 Event(
