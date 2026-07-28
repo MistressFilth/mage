@@ -127,3 +127,88 @@ def test_reviewer_aggregate_decision_literal():
             per_dimension={},
             decision="weird",  # invalid literal
         )
+
+
+def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
+    from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict
+    from mage.orchestration.events import EventsLog
+    from datetime import datetime, UTC
+    log = EventsLog(tmp_path / "events.jsonl")
+    verdict = ReviewerVerdict(
+        dimension="spec_compliance",
+        outcome="pass",
+        draft_hash="abc",
+        reviewed_at=datetime.now(UTC),
+        reviewer_id="spec_compliance@v1",
+    )
+    path = tmp_path / ".haileris" / "verdicts" / "abc" / "spec_compliance.yaml"
+    digest = VerdictArtifact.finalize(path, verdict, log)
+
+    assert path.exists()
+    assert len(digest) == 64  # sha256 hex
+    events = log.read_all()
+    assert any(e.event_type.value == "reviewer_verdict_recorded" for e in events)
+
+
+def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path):
+    from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict
+    from mage.orchestration.events import EventsLog
+    from datetime import datetime, UTC
+    log = EventsLog(tmp_path / "events.jsonl")
+    verdict = ReviewerVerdict(
+        dimension="d",
+        outcome="pass",
+        draft_hash="x",
+        reviewed_at=datetime.now(UTC),
+        reviewer_id="d@v1",
+    )
+    path = tmp_path / "v.yaml"
+    VerdictArtifact.finalize(path, verdict, log)
+    loaded = VerdictArtifact.load(path, log)
+    assert isinstance(loaded, ReviewerVerdict)
+    assert loaded.dimension == "d"
+
+
+def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
+    from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict, VerdictDigestMismatchError
+    from mage.orchestration.events import EventsLog
+    from datetime import datetime, UTC
+    log = EventsLog(tmp_path / "events.jsonl")
+    verdict = ReviewerVerdict(
+        dimension="d",
+        outcome="pass",
+        draft_hash="x",
+        reviewed_at=datetime.now(UTC),
+        reviewer_id="d@v1",
+    )
+    path = tmp_path / "v.yaml"
+    VerdictArtifact.finalize(path, verdict, log)
+    # Tamper with the file
+    path.write_text("tampered: yes\n")
+    import pytest
+    with pytest.raises(VerdictDigestMismatchError):
+        VerdictArtifact.load(path, log)
+
+
+def test_verdict_artifact_finalize_aggregate_uses_aggregate_event(tmp_path):
+    from mage.artifacts.verdict import (
+        VerdictArtifact, ReviewerAggregate, DimensionSummary,
+    )
+    from mage.orchestration.events import EventsLog
+    from datetime import datetime, UTC
+    log = EventsLog(tmp_path / "events.jsonl")
+    agg = ReviewerAggregate(
+        draft_hash="x",
+        aggregated_at=datetime.now(UTC),
+        iteration=1,
+        per_dimension={
+            "spec_compliance": DimensionSummary(
+                outcome="pass", reviewer_verdict_ref="r.yaml", findings_count=0
+            ),
+        },
+        decision="approved",
+    )
+    path = tmp_path / "agg.yaml"
+    VerdictArtifact.finalize(path, agg, log)
+    events = log.read_all()
+    assert any(e.event_type.value == "review_aggregate_recorded" for e in events)
