@@ -52,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run the pipeline")
     run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
 
+    # mage review <subcommand>
+    review_parser = subparsers.add_parser("review", help="Review operations")
+    review_subparsers = review_parser.add_subparsers(dest="review_command", required=True)
+    review_subparsers.add_parser("show", help="Display latest aggregate verdict")
+
     return parser
 
 
@@ -165,6 +170,32 @@ def cmd_run(args):
     raise NotImplementedError("mage run pipeline execution is deferred to Plan 6; stage wiring is not implemented")
 
 
+def cmd_review_show(args):
+    """Display the latest aggregate verdict for the project."""
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+
+    events = log.read_all()
+    aggregate_events = [
+        e for e in events if e.event_type.value == "review_aggregate_recorded"
+    ]
+    if not aggregate_events:
+        print(f"mage review show: no aggregate verdicts found in {project_dir}", file=sys.stderr)
+        sys.exit(2)
+
+    latest = max(aggregate_events, key=lambda e: e.timestamp)
+    digest = latest.payload.get("verdict_sha256")
+    decision = latest.payload.get("outcome")
+
+    print(f"Latest aggregate verdict:")
+    print(f"  Draft hash: {latest.payload.get('draft_hash')}")
+    print(f"  Digest:     {digest}")
+    print(f"  Decision:   {decision}")
+    print(f"  Recorded:   {latest.timestamp.isoformat()}")
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -209,6 +240,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "review" and args.review_command == "show":
+        cmd_review_show(args)
+        return 0
     parser.print_help()
     raise SystemExit(1)
 
