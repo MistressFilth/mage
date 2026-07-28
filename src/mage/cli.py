@@ -57,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     review_subparsers = review_parser.add_subparsers(dest="review_command", required=True)
     review_subparsers.add_parser("show", help="Display latest aggregate verdict")
 
+    # mage review resume
+    resume_parser = review_subparsers.add_parser("resume", help="Resume after review halt")
+    resume_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
+
     return parser
 
 
@@ -196,6 +200,22 @@ def cmd_review_show(args):
     print(f"  Recorded:   {latest.timestamp.isoformat()}")
 
 
+def cmd_review_resume(args):
+    """Verify a review halt and print resume readiness."""
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+    events = log.read_all()
+    halt_events = [e for e in events if e.event_type.value == "review_halt_persisted"]
+    if not halt_events:
+        print(f"mage review resume: error: no REVIEW_HALT_PERSISTED event found in {project_dir}", file=sys.stderr)
+        sys.exit(2)
+
+    print(f"Review halt found. Pipeline resume is ready (full wiring deferred to Plan 6).")
+    print(f"Run: mage run --project-dir {project_dir}")
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -242,6 +262,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args)
     if args.command == "review" and args.review_command == "show":
         cmd_review_show(args)
+        return 0
+    if args.command == "review" and args.review_command == "resume":
+        cmd_review_resume(args)
         return 0
     parser.print_help()
     raise SystemExit(1)
