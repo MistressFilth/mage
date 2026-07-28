@@ -123,7 +123,11 @@ class InspectLoopStage(StageNode):
         )
 
         # 1. Mechanical pre-check
-        raw_mech_results = self.mechanical_verifier.run(scope="increment")
+        # Important 3 fix: MechanicalVerifier exposes `verify(scope=...)`,
+        # not `run(...)`. The previous call would AttributeError in
+        # production against the real verifier. _normalize_mechanical_findings
+        # adapts the return shape (CheckResult vs MechanicalFinding).
+        raw_mech_results = self.mechanical_verifier.verify(scope="increment")
         mech_findings = _normalize_mechanical_findings(raw_mech_results)
         if mech_findings:
             iteration = context.iteration + 1

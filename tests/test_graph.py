@@ -333,7 +333,7 @@ class TestPlan4HaltCatching:
         )
 
         class AlwaysPassMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         finding = ReviewerFinding(
@@ -450,7 +450,7 @@ class TestPlan4HaltCatching:
         )
 
         class CleanMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         class CleanReviewer:
