@@ -134,3 +134,30 @@ def test_append_scenario_raises_on_unknown_base_bid():
     import pytest
     with pytest.raises(BaseBIDNotFoundError, match="99999"):
         mapping.append_scenario("99999", scenario)
+
+
+class TestPlan4MappingFields:
+    def test_inspect_journal_defaults_empty(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1")
+        assert m.inspect_journal == {}
+
+    def test_feature_inspect_defaults_none(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1")
+        assert m.feature_inspect is None
+
+    def test_feature_cosmetic_queue_defaults_empty(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1")
+        assert m.feature_cosmetic_queue == []
+
+    def test_feature_status_defaults_pending(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1")
+        assert m.feature_status == "pending"
+
+    def test_feature_status_live_assembling(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1", feature_status="live_assembling")
+        assert m.feature_status == "live_assembling"
