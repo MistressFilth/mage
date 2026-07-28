@@ -51,7 +51,7 @@ class TestE2EInnerTDDHappyPath:
 
         # Stub agents
         class CleanMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         class CleanReviewer:
@@ -128,7 +128,7 @@ class TestE2EPerLoopHalt:
         )
 
         class AlwaysFailMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return [MechanicalFinding(
                     check="tests_pass",
                     severity="critical",
@@ -189,7 +189,7 @@ class TestE2ESpecRouteHalt:
         )
 
         class CleanMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         @dataclass
@@ -263,7 +263,7 @@ class TestE2ECodeRouteCarryForward:
         )
 
         class CleanMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         @dataclass
