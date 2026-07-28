@@ -156,3 +156,76 @@ def test_inscribe_stage_runs_end_to_end_with_test_model(
     assert "inscribe_started" in event_types
     assert "inscribe_completed" in event_types
     assert "scenario_approved" in event_types
+
+
+def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
+    """When iteration >= max_iterations and aggregate says needs_refactor,
+    emit REVIEW_HALT_PERSISTED and raise ReviewBudgetExhausted."""
+    from mage.orchestration.inscribe import InscribeStage, ReviewBudgetExhausted
+    from mage.agents.inscribe import InscribeAgent, ScenarioSpec, InscribeOutput
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+    (project_dir / "behaviors.yaml").write_text(yaml.safe_dump({
+        "schema_version": 1,
+        "feature_id": "f",
+        "enumerated_at": "2026-07-27T00:00:00Z",
+        "behaviors": [{
+            "id": "00000", "name": "authenticate-user",
+            "description": "User logs in", "depends_on": [],
+            "notes": "", "cross_behavior_links": [],
+        }],
+    }))
+
+    mapping = MappingArtifact(
+        project_id="p",
+        base_bids=[{
+            "base_bid": "00000", "behavior_name": "authenticate-user",
+            "behavior_description": "User logs in", "depends_on": [],
+            "notes": "", "scenarios": [], "reversion_log": [],
+            "post_live_revisions": [], "cross_behavior_links": [],
+        }],
+    )
+    mapping.save(project_dir / "mapping.yaml")
+
+    context = PipelineContext(
+        project_dir=project_dir, mapping=mapping, events_log=log,
+        plan_path=project_dir / "plan.md",
+    )
+
+    # Force InscribeAgent to draft a scenario
+    inscribe_agent = InscribeAgent(model=TestModel(custom_output_args=None))
+
+    # Reviewers that always fail (we'll use TestModel that returns fail verdicts
+    # via custom_output_args)
+    from mage.verification.reviewers.spec_compliance import SpecComplianceReviewer
+    from mage.artifacts.verdict import ReviewerVerdict
+    from datetime import datetime, UTC
+
+    class AlwaysFailReviewer(SpecComplianceReviewer):
+        def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
+            v = ReviewerVerdict(
+                dimension=self.dimension, outcome="fail", draft_hash="x",
+                reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1",
+                findings=[],
+            )
+            from mage.artifacts.verdict import VerdictArtifact
+            VerdictArtifact.finalize(verdict_path, v, events_log)
+            return v
+
+    failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
+
+    host_config = HostConfig(max_iterations=2)  # small budget
+    stage = InscribeStage(
+        events_log=log, agent=inscribe_agent, host_config=host_config,
+        reviewers=[failing_reviewer],
+    )
+
+    with pytest.raises(ReviewBudgetExhausted):
+        stage.run(context)
+
+    # Halt event was emitted
+    events = log.read_all()
+    event_types = {e.event_type.value for e in events}
+    assert "review_halt_persisted" in event_types
