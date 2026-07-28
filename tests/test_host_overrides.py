@@ -123,3 +123,25 @@ def test_load_host_config_parses_max_iterations(tmp_path: Path):
     )
     config = load_host_config(tmp_path)
     assert config.max_iterations == 7
+
+
+class TestPlan4HostConfig:
+    def test_per_loop_max_iterations_default(self):
+        from mage.verification.host_overrides import HostConfig
+        cfg = HostConfig()
+        assert cfg.per_loop_max_iterations == 8
+
+    def test_eof_max_iterations_default(self):
+        from mage.verification.host_overrides import HostConfig
+        cfg = HostConfig()
+        assert cfg.eof_max_iterations == 3
+
+    def test_per_loop_max_iterations_override(self):
+        from mage.verification.host_overrides import HostConfig
+        cfg = HostConfig(per_loop_max_iterations=4)
+        assert cfg.per_loop_max_iterations == 4
+
+    def test_eof_max_iterations_override(self):
+        from mage.verification.host_overrides import HostConfig
+        cfg = HostConfig(eof_max_iterations=5)
+        assert cfg.eof_max_iterations == 5
