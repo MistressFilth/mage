@@ -32,24 +32,19 @@ class PipelineGraph:
         for stage in self.stages:
             try:
                 context = stage.run(context)
-            except ScenarioInspectHalted as e:
-                log_event = Event(
-                    timestamp=datetime.now(UTC),
-                    event_type=EventType.SCENARIO_HALT_PERSISTED,
-                    payload={
-                        "base_bid": e.base_bid,
-                        "scenario_name": e.scenario_name,
-                        "sub_bid": e.sub_bid,
-                        "iteration": e.iteration,
-                    },
-                )
-                context.events_log.append(log_event)
-                # Save updated mapping state — feature_status="inspect_pending"
-                # so resume picks up.
-                updated_mapping = context.mapping.model_copy(
+            except ScenarioInspectHalted:
+                # CRITICAL 1: Update in-memory mapping so subsequent stages in
+                # this same graph run observe the inspect_pending status.
+                # CRITICAL 2: InspectLoopStage is the SOLE owner of the
+                # SCENARIO_HALT_PERSISTED event; we don't re-emit it here.
+                context.mapping = context.mapping.model_copy(
                     update={"feature_status": "inspect_pending"}
                 )
-                updated_mapping.save(context.project_dir / "mapping.yaml")
+                # Guard persistence: only save when project_dir exists so
+                # callers can construct a PipelineContext without a real
+                # project directory.
+                if context.project_dir is not None and context.project_dir.exists():
+                    context.mapping.save(context.project_dir / "mapping.yaml")
             except ReviewBudgetExhausted as e:
                 # I1: review-budget halts the same way as plan-revision halts.
                 # The InscribeStage already emitted REVIEW_HALT_PERSISTED and
