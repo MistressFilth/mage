@@ -53,6 +53,30 @@ class EventType(str, Enum):
     SCENARIO_NEEDS_REFACTOR = "scenario_needs_refactor"
     REVIEW_HALT_PERSISTED = "review_halt_persisted"
 
+    # Plan 4 — Etch stage
+    ETCH_STARTED = "etch_started"
+    ETCH_RED_CONFIRMED = "etch_red_confirmed"
+    ETCH_COMPLETED = "etch_completed"
+
+    # Plan 4 — Realize stage
+    REALIZE_STARTED = "realize_started"
+    REALIZE_INCREMENT_DONE = "realize_increment_done"
+    REALIZE_COMPLETED = "realize_completed"
+    SCENARIO_OUTER_GREEN = "scenario_outer_green"
+    SCENARIO_LIVE = "scenario_live"
+
+    # Plan 4 — Inspect-loop stage
+    INSPECT_LOOP_STARTED = "inspect_loop_started"
+    INSPECT_LOOP_PASSED = "inspect_loop_passed"
+    INSPECT_LOOP_FAILED = "inspect_loop_failed"
+    INSPECT_LOOP_COMPLETED = "inspect_loop_completed"
+    INSPECT_JOURNAL_APPENDED = "inspect_journal_appended"
+    SCENARIO_HALT_PERSISTED = "scenario_halt_persisted"
+
+    # Plan 5 placeholder members (kept here so events log schema is stable)
+    INSPECT_FEATURE_STARTED = "inspect_feature_started"
+    INSPECT_FEATURE_FINALIZED = "inspect_feature_finalized"
+
 
 class Event(BaseModel):
     """One event in the log."""
