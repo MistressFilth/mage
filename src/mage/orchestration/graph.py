@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 
 from mage.artifacts.plan import PlanRevisionRequired
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.etch import ScenarioInspectHalted
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.persistence import FileStatePersistence
 
@@ -32,6 +32,24 @@ class PipelineGraph:
         for stage in self.stages:
             try:
                 context = stage.run(context)
+            except ScenarioInspectHalted as e:
+                log_event = Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.SCENARIO_HALT_PERSISTED,
+                    payload={
+                        "base_bid": e.base_bid,
+                        "scenario_name": e.scenario_name,
+                        "sub_bid": e.sub_bid,
+                        "iteration": e.iteration,
+                    },
+                )
+                context.events_log.append(log_event)
+                # Save updated mapping state — feature_status="inspect_pending"
+                # so resume picks up.
+                updated_mapping = context.mapping.model_copy(
+                    update={"feature_status": "inspect_pending"}
+                )
+                updated_mapping.save(context.project_dir / "mapping.yaml")
             except ReviewBudgetExhausted as e:
                 # I1: review-budget halts the same way as plan-revision halts.
                 # The InscribeStage already emitted REVIEW_HALT_PERSISTED and
@@ -48,7 +66,7 @@ class PipelineGraph:
     ) -> None:
         """Persist halt record (event + state)."""
         halt_event = Event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             event_type=EventType.HALT_PERSISTED,
             payload={
                 "reason": halt.reason,
