@@ -43,7 +43,36 @@ class TestBase85BID:
             Base85BID.parse("0004 ")
 
 
-class TestNextBaseBid:
+def test_derive_sub_bid_with_index_zero():
+    from mage.artifacts.bid import Base85BID
+    parent = Base85BID(value="00000")
+    sub = Base85BID.derive(parent, 0)
+    assert sub.value == "00000" + "0"  # parent + '0' = first scenario
+
+
+def test_derive_sub_bid_with_index_84():
+    from mage.artifacts.bid import Base85BID
+    parent = Base85BID(value="00001")
+    sub = Base85BID.derive(parent, 84)
+    # index 84 → single char '~' (last in alphabet)
+    assert sub.value == "00001~"
+
+
+def test_derive_sub_bid_with_index_85():
+    from mage.artifacts.bid import Base85BID
+    parent = Base85BID(value="00010")
+    sub = Base85BID.derive(parent, 85)
+    # index 85 → two chars: "01" (since 85 = 1*85 + 0)
+    assert sub.value == "00010" + "10"
+
+
+def test_derive_sub_bid_rejects_negative_index():
+    from mage.artifacts.bid import Base85BID
+    parent = Base85BID(value="00000")
+    import pytest
+    with pytest.raises(ValueError, match="non-negative"):
+        Base85BID.derive(parent, -1)
+
     def test_next_from_zero(self):
         # No BIDs assigned yet; next is "00000"
         next_bid = next_base_bid(highest=None)

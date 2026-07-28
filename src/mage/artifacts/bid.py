@@ -64,6 +64,31 @@ class Base85BID(BaseModel):
         # All digits rolled over — exhausted.
         raise OverflowError(f"BID space exhausted for value {self.value!r}")
 
+    @classmethod
+    def derive(cls, parent: "Base85BID", scenario_index: int) -> "Base85BID":
+        """Derive a sub-BID by appending a Base85-encoded scenario_index to parent.
+
+        The result is parent.value + encode_base85(scenario_index). The encoding
+        is the shortest natural Base85 representation with no leading zeros
+        (i.e., index 0 → "0", index 1 → "1", ..., index 84 → "~", index 85 → "10").
+        """
+        if scenario_index < 0:
+            raise ValueError(f"scenario_index must be non-negative; got {scenario_index}")
+
+        if scenario_index == 0:
+            suffix = BASE85_ALPHABET[0]  # "0"
+        else:
+            # Convert to Base85 with no leading zeros.
+            digits: list[int] = []
+            n = scenario_index
+            while n > 0:
+                digits.append(n % BASE85_RADIX)
+                n //= BASE85_RADIX
+            digits.reverse()
+            suffix = "".join(BASE85_ALPHABET[d] for d in digits)
+
+        return cls(value=parent.value + suffix)
+
 
 def next_base_bid(highest: Base85BID | None) -> Base85BID:
     """Derive the next base-BID from the highest assigned (or zero if none).
