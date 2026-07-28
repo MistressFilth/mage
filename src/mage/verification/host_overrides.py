@@ -23,12 +23,13 @@ from mage.verification.mechanical import (
 class HostConfig(BaseModel):
     """Parsed host-project configuration."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="allow")
 
-    max_iterations: int = 3  # spec default
+    max_iterations: int = 3  # spec default; Plan 3 addition
     check_set: str = "default"
     require_plan_approval: bool = True
     plan_template_path: Path | None = None
+    enabled_reviewers: list[str] | None = None  # Plan 3 addition; None = all enabled
 
 
 def default_check_set(
