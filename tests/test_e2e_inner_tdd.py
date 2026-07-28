@@ -166,3 +166,76 @@ class TestE2EPerLoopHalt:
         events = log.read_all()
         types = [e.event_type.value for e in events]
         assert types.count("scenario_halt_persisted") == 1
+
+
+class TestE2ESpecRouteHalt:
+    def test_spec_route_finding_halts_scenario(self, tmp_path):
+        from dataclasses import dataclass
+        from datetime import UTC, datetime
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_loop import InspectLoopStage
+        from mage.orchestration.etch import ScenarioInspectHalted
+        from mage.orchestration.nodes import PipelineContext
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.verification.host_overrides import HostConfig
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=MappingArtifact(project_id="p1"),
+            events_log=log,
+            plan_path=tmp_path / "plan.md",
+            iteration=0,
+        )
+
+        class CleanMech:
+            def run(self, scope):
+                return []
+
+        @dataclass
+        class FindingWithRoute:
+            id: str = "f-1"
+            severity: str = "major"
+            location: str = "src/foo.py"
+            issue: str = "Spec is wrong"
+            rationale: str = "Scenario doesn't describe this"
+            suggestion: str = "spec:Halt"
+            citations: list = None
+            route: str = "spec"
+
+            def __post_init__(self):
+                if self.citations is None:
+                    self.citations = []
+
+        @dataclass
+        class VerdictWithRoute:
+            dimension: str = "increment_quality"
+            outcome: str = "fail"
+            draft_hash: str = ""
+            reviewed_at: datetime = None
+            reviewer_id: str = "increment_quality@v1"
+            findings: list = None
+            notes: str = ""
+
+            def __post_init__(self):
+                if self.reviewed_at is None:
+                    self.reviewed_at = datetime.now(UTC)
+                if self.findings is None:
+                    self.findings = []
+
+        class SpecRouteReviewer:
+            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+                return VerdictWithRoute(findings=[FindingWithRoute()])
+
+        stage = InspectLoopStage(
+            log, CleanMech(), SpecRouteReviewer(), HostConfig()
+        )
+
+        with pytest.raises(ScenarioInspectHalted):
+            stage._run_single_increment(
+                ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+            )
+
+        events = log.read_all()
+        types = [e.event_type.value for e in events]
+        assert types.count("scenario_halt_persisted") == 1
