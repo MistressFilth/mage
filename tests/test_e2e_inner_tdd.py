@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 
 class TestE2EInnerTDDHappyPath:
     def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
@@ -104,3 +106,63 @@ class TestE2EInnerTDDHappyPath:
         assert types.count("inspect_loop_passed") == 6  # 2 scenarios × 3 increments
         assert types.count("inspect_loop_started") == 6
         assert types.count("scenario_live") == 2
+
+
+class TestE2EPerLoopHalt:
+    def test_mechanical_overflow_halts_scenario(self, tmp_path):
+        from mage.orchestration.events import EventsLog, EventType
+        from mage.orchestration.inspect_loop import InspectLoopStage
+        from mage.orchestration.etch import ScenarioInspectHalted
+        from mage.orchestration.nodes import PipelineContext
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.verification.host_overrides import HostConfig
+        from mage.verification.mechanical import MechanicalFinding
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=MappingArtifact(project_id="p1"),
+            events_log=log,
+            plan_path=tmp_path / "plan.md",
+            iteration=7,  # 1 below budget
+        )
+
+        class AlwaysFailMech:
+            def run(self, scope):
+                return [MechanicalFinding(
+                    check="tests_pass",
+                    severity="critical",
+                    location="tests/test_x.py",
+                    issue="Tests still failing",
+                    rationale="Won't converge",
+                )]
+
+        class NoopReviewer:
+            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+                from mage.artifacts.verdict import ReviewerVerdict
+                return ReviewerVerdict(
+                    dimension="increment_quality",
+                    outcome="pass",
+                    draft_hash="",
+                    reviewed_at=datetime.now(UTC),
+                    reviewer_id="increment_quality@v1",
+                    findings=[],
+                )
+
+        stage = InspectLoopStage(
+            log, AlwaysFailMech(), NoopReviewer(), HostConfig(per_loop_max_iterations=8)
+        )
+
+        # First call: iteration goes 7 → 8, budget not exceeded yet, no halt
+        stage._run_single_increment(
+            ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+        )
+        # Second call: iteration 8 → 9, over budget, halt
+        with pytest.raises(ScenarioInspectHalted):
+            stage._run_single_increment(
+                ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+            )
+
+        events = log.read_all()
+        types = [e.event_type.value for e in events]
+        assert types.count("scenario_halt_persisted") == 1
