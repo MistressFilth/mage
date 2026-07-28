@@ -71,6 +71,14 @@ class MappingArtifact(BaseModel):
     project_id: str
     base_bids: list[BaseBIDEntry] = Field(default_factory=list)
 
+    # Plan 4 — Inner TDD loop + feature lifecycle state
+    inspect_journal: dict[str, list[dict]] = Field(default_factory=dict)
+    # ^ sub_bid (str) -> list[InspectJournalEntry] (kept as dict[str, list[dict]] to avoid circular import; see Tasks 6 + 11 for typed helpers)
+    feature_inspect: dict | None = None  # InspectArtifactRef; typing loose to avoid circular import
+    feature_cosmetic_queue: list[dict] = Field(default_factory=list)
+    # ^ list[CosmeticItem]; typing loose to avoid circular import
+    feature_status: str = "pending"  # pending | live_assembling | inspect_pending | inspect_passed | settled | halted
+
     def highest_base_bid(self) -> Base85BID | None:
         if not self.base_bids:
             return None
