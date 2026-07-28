@@ -73,6 +73,8 @@ def test_derive_sub_bid_rejects_negative_index():
     with pytest.raises(ValueError, match="non-negative"):
         Base85BID.derive(parent, -1)
 
+
+class TestNextBaseBid:
     def test_next_from_zero(self):
         # No BIDs assigned yet; next is "00000"
         next_bid = next_base_bid(highest=None)
