@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from mage.artifacts.mapping import MappingArtifact
-from mage.orchestration.events import EventType, EventsLog
+from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.graph import PipelineGraph
 from mage.orchestration.nodes import PipelineContext, StageNode
 
@@ -79,10 +79,10 @@ class TestPipelineGraph:
 
 
 def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path):
+    from mage.artifacts.plan import PlanRevisionRequired
+    from mage.orchestration.events import EventsLog, EventType
     from mage.orchestration.graph import PipelineGraph
     from mage.orchestration.nodes import PipelineContext, StageNode
-    from mage.orchestration.events import EventsLog, EventType
-    from mage.artifacts.plan import PlanRevisionRequired
 
     log = EventsLog(tmp_path / "events.jsonl")
 
@@ -125,10 +125,10 @@ def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path):
     """I1: ReviewBudgetExhausted raised by InscribeStage is caught by the
     graph; the graph exits cleanly (SystemExit 0) without re-raising.
     """
+    from mage.orchestration.events import EventsLog
     from mage.orchestration.graph import PipelineGraph
     from mage.orchestration.inscribe import ReviewBudgetExhausted
     from mage.orchestration.nodes import PipelineContext, StageNode
-    from mage.orchestration.events import EventsLog
 
     log = EventsLog(tmp_path / "events.jsonl")
 
@@ -158,3 +158,51 @@ def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path):
     with pytest.raises(SystemExit) as exc_info:
         graph.run(ctx)
     assert exc_info.value.code == 0
+
+
+class TestPlan4HaltCatching:
+    def test_graph_catches_scenario_inspect_halted(self, tmp_path):
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.orchestration.etch import ScenarioInspectHalted
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.graph import PipelineGraph
+        from mage.orchestration.nodes import PipelineContext, StageNode
+
+        log = EventsLog(tmp_path / "events.jsonl")
+
+        class HaltStage(StageNode):
+            name = "halt-stage"
+
+            def _run(self, context):
+                raise ScenarioInspectHalted(
+                    base_bid="00000",
+                    scenario_name="happy",
+                    sub_bid="00000-0",
+                    iteration=8,
+                )
+
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=MappingArtifact(project_id="p1"),
+            events_log=log,
+            plan_path=tmp_path / "plan.md",
+            iteration=0,
+        )
+        graph = PipelineGraph(stages=[HaltStage(log)], events_log=log)
+        result = graph.run(ctx)
+
+        assert result is not None
+        halt_events = [
+            event
+            for event in log.read_all()
+            if event.event_type.value == "scenario_halt_persisted"
+        ]
+        assert len(halt_events) == 1
+        assert halt_events[0].payload == {
+            "base_bid": "00000",
+            "scenario_name": "happy",
+            "sub_bid": "00000-0",
+            "iteration": 8,
+        }
+        saved_mapping = MappingArtifact.load(tmp_path / "mapping.yaml")
+        assert saved_mapping.feature_status == "inspect_pending"
