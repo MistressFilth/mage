@@ -3,16 +3,59 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mage.artifacts.inspect import CosmeticItem, InspectJournalEntry
 from mage.orchestration.etch import ScenarioInspectHalted
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
+from mage.verification.mechanical import CheckResult, MechanicalFinding
 
 if TYPE_CHECKING:
     from mage.orchestration.realize import RealizeStage
+
+
+def _normalize_mechanical_findings(items: list[Any]) -> list[MechanicalFinding]:
+    """Adapt `mechanical_verifier.run()` output to `list[MechanicalFinding]`.
+
+    Plan 1's `MechanicalVerifier.verify()` returns `list[CheckResult]` (with
+    `name`/`outcome`/`detail`). Plan 4's `InspectLoopStage` expects a
+    `list[MechanicalFinding]` (with `check`/`severity`/`location`/`issue`/
+    `rationale`). Either shape can show up at runtime (and the test stub
+    returns `MechanicalFinding` directly), so we detect-and-translate:
+
+    - Already `MechanicalFinding` → pass through unchanged.
+    - `CheckResult` with `outcome == "fail"` → translate to `MechanicalFinding`
+      (`name` → `check`, `severity="critical"` on fail, `detail` → `issue`
+      and `rationale`).
+    - `CheckResult` with `outcome == "pass"` → drop (counted as a non-finding).
+    - Anything else → pass through (duck-typing for custom verifier return).
+    """
+    out: list[MechanicalFinding] = []
+    for item in items:
+        if isinstance(item, MechanicalFinding):
+            out.append(item)
+            continue
+        if isinstance(item, CheckResult):
+            if item.outcome == "pass":
+                continue
+            severity = "critical" if item.outcome == "fail" else "major"
+            detail = item.detail or ""
+            out.append(
+                MechanicalFinding(
+                    check=item.name,
+                    severity=severity,  # type: ignore[arg-type]
+                    location="",
+                    issue=detail,
+                    rationale=detail,
+                )
+            )
+            continue
+        # Unknown shape — let the attribute access below raise loudly so the
+        # caller learns about the mismatch instead of silently dropping.
+        out.append(item)
+    return out
 
 
 class InspectLoopStage(StageNode):
@@ -81,7 +124,8 @@ class InspectLoopStage(StageNode):
         )
 
         # 1. Mechanical pre-check
-        mech_findings = self.mechanical_verifier.run(scope="increment")
+        raw_mech_results = self.mechanical_verifier.run(scope="increment")
+        mech_findings = _normalize_mechanical_findings(raw_mech_results)
         if mech_findings:
             iteration = context.iteration + 1
             for f in mech_findings:
@@ -101,6 +145,23 @@ class InspectLoopStage(StageNode):
                             "iteration": iteration,
                         },
                     )
+                )
+                # Persist into the inspect journal so the next Realize prompt
+                # (which reads recent_journal_window) carries mechanical
+                # findings forward alongside IncrementQuality findings.
+                context.mapping = context.mapping.append_inspect_journal(
+                    sub_bid,
+                    InspectJournalEntry(
+                        timestamp=datetime.now(UTC),
+                        iteration=iteration,
+                        dimension="mechanical",
+                        severity=f.severity,
+                        route="code",
+                        finding_id=f.check,
+                        location=f.location,
+                        issue=f.issue,
+                        rationale=f.rationale,
+                    ),
                 )
             context.iteration = iteration
             if iteration >= self.host_config.per_loop_max_iterations:
