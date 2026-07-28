@@ -125,3 +125,94 @@ class TestInspectArtifactContent:
         assert "digest" not in fields
         assert "inspect_sha256" not in fields
         assert "digest_placeholder" not in fields
+
+
+class TestInspectArtifact:
+    def test_finalize_writes_yaml_and_emits_event(self, tmp_path):
+        from mage.orchestration.events import EventsLog
+        from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        artifact_path = tmp_path / "inspect.yaml"
+        content = InspectArtifactContent(
+            feature_id="feat-1",
+            inspected_at=datetime.now(UTC),
+            iteration=1,
+            eof_max_iterations=3,
+            scenarios=[],
+            per_reviewer=[],
+            critical=[],
+            important=[],
+            minor=[],
+            cross_scenario=[],
+            ready_to_merge=False,
+            ledger_markdown="",
+        )
+
+        digest = InspectArtifact.finalize(artifact_path, content, log)
+
+        assert len(digest) == 64  # sha256 hex
+        assert artifact_path.exists()
+        events = log.read_all()
+        assert len(events) == 1
+        assert events[0].payload["inspect_sha256"] == digest
+        assert events[0].payload["inspect_path"] == str(artifact_path)
+
+    def test_load_returns_content(self, tmp_path):
+        from mage.orchestration.events import EventsLog
+        from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        artifact_path = tmp_path / "inspect.yaml"
+        content = InspectArtifactContent(
+            feature_id="feat-1",
+            inspected_at=datetime.now(UTC),
+            iteration=1,
+            eof_max_iterations=3,
+            scenarios=[],
+            per_reviewer=[],
+            critical=[],
+            important=[],
+            minor=[],
+            cross_scenario=[],
+            ready_to_merge=True,
+            ledger_markdown="ledger text",
+        )
+        InspectArtifact.finalize(artifact_path, content, log)
+
+        loaded = InspectArtifact.load(artifact_path, log)
+        assert loaded.feature_id == "feat-1"
+        assert loaded.ready_to_merge is True
+        assert loaded.ledger_markdown == "ledger text"
+
+    def test_load_raises_on_digest_mismatch(self, tmp_path):
+        from mage.orchestration.events import EventsLog
+        from mage.artifacts.inspect import (
+            InspectArtifact,
+            InspectArtifactContent,
+            InspectArtifactDigestMismatchError,
+        )
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        artifact_path = tmp_path / "inspect.yaml"
+        content = InspectArtifactContent(
+            feature_id="feat-1",
+            inspected_at=datetime.now(UTC),
+            iteration=1,
+            eof_max_iterations=3,
+            scenarios=[],
+            per_reviewer=[],
+            critical=[],
+            important=[],
+            minor=[],
+            cross_scenario=[],
+            ready_to_merge=False,
+            ledger_markdown="",
+        )
+        InspectArtifact.finalize(artifact_path, content, log)
+
+        # Tamper with the file
+        artifact_path.write_text("feature_id: tampered\n")
+
+        with pytest.raises(InspectArtifactDigestMismatchError):
+            InspectArtifact.load(artifact_path, log)
