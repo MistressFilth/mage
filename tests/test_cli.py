@@ -155,3 +155,37 @@ def test_mage_run_raises_not_implemented(tmp_path, capsys):
     with patch.object(sys, "argv", test_argv):
         with pytest.raises(NotImplementedError, match="deferred to Plan 6"):
             main()
+
+
+def test_review_show_prints_latest_aggregate(tmp_path, capsys):
+    from mage.artifacts.verdict import (
+        VerdictArtifact, ReviewerAggregate, DimensionSummary,
+    )
+    from mage.cli import main
+    from mage.orchestration.events import EventsLog
+    from datetime import datetime, UTC
+    import sys
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+
+    agg = ReviewerAggregate(
+        draft_hash="x", aggregated_at=datetime.now(UTC), iteration=1,
+        per_dimension={
+            "spec_compliance": DimensionSummary(
+                outcome="pass", reviewer_verdict_ref="r.yaml", findings_count=0,
+            ),
+        },
+        decision="approved", reasoning="all passed",
+    )
+    path = project_dir / "agg.yaml"
+    VerdictArtifact.finalize(path, agg, log)
+
+    test_argv = ["mage", "--project-dir", str(project_dir), "review", "show"]
+    with patch.object(sys, "argv", test_argv):
+        rc = main()
+    assert rc == 0
+
+    captured = capsys.readouterr()
+    assert "approved" in captured.out
