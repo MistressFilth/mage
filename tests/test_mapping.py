@@ -94,3 +94,43 @@ class TestMappingArtifactIO:
         MappingArtifact(project_id="atomic").save(path)
         assert list(tmp_project_dir.glob("*.tmp")) == []
         assert path.exists()
+
+
+def test_append_scenario_adds_to_matching_base_bid():
+    from mage.artifacts.mapping import (
+        BaseBIDEntry, MappingArtifact, ScenarioEntry, LifecycleStatus,
+    )
+    entry = BaseBIDEntry(
+        base_bid="00000",
+        behavior_name="Authenticate user",
+        behavior_description="User logs in",
+    )
+    mapping = MappingArtifact(project_id="p", base_bids=[entry])
+
+    new_scenario = ScenarioEntry(
+        sub_bid="000000",
+        scenario_text_hash="abc123",
+        lifecycle_status=LifecycleStatus.APPROVED,
+    )
+    updated = mapping.append_scenario("00000", new_scenario)
+
+    target = next(e for e in updated.base_bids if e.base_bid == "00000")
+    assert len(target.scenarios) == 1
+    assert target.scenarios[0].sub_bid == "000000"
+    # Original mapping is unchanged (frozen).
+    assert mapping.base_bids[0].scenarios == []
+
+
+def test_append_scenario_raises_on_unknown_base_bid():
+    from mage.artifacts.mapping import (
+        BaseBIDEntry, MappingArtifact, ScenarioEntry, LifecycleStatus, BaseBIDNotFoundError,
+    )
+    mapping = MappingArtifact(project_id="p", base_bids=[
+        BaseBIDEntry(base_bid="00000", behavior_name="x", behavior_description="y"),
+    ])
+    scenario = ScenarioEntry(
+        sub_bid="000000", scenario_text_hash="h", lifecycle_status=LifecycleStatus.APPROVED,
+    )
+    import pytest
+    with pytest.raises(BaseBIDNotFoundError, match="99999"):
+        mapping.append_scenario("99999", scenario)

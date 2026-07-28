@@ -20,6 +20,10 @@ class LifecycleStatus(str, Enum):
     RETIRED = "retired"
 
 
+class BaseBIDNotFoundError(Exception):
+    """Raised when an operation references a base_bid not in the mapping."""
+
+
 class ReversionLogEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
     sub_bid: str
@@ -83,6 +87,27 @@ class MappingArtifact(BaseModel):
                     if scenario.sub_bid == sub:
                         return scenario
         return None
+
+    def append_scenario(self, base_bid: str, scenario: "ScenarioEntry") -> "MappingArtifact":
+        """Return a new MappingArtifact with `scenario` appended to the matching BaseBIDEntry.scenarios.
+
+        Raises BaseBIDNotFoundError if no entry matches.
+        """
+        new_entries: list[BaseBIDEntry] = []
+        matched = False
+        for entry in self.base_bids:
+            if entry.base_bid == base_bid:
+                matched = True
+                new_entries.append(
+                    entry.model_copy(update={"scenarios": [*entry.scenarios, scenario]})
+                )
+            else:
+                new_entries.append(entry)
+        if not matched:
+            raise BaseBIDNotFoundError(
+                f"base_bid {base_bid!r} not found in mapping with project_id={self.project_id!r}"
+            )
+        return self.model_copy(update={"base_bids": new_entries})
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
