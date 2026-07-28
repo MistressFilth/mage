@@ -116,6 +116,25 @@ class TestPlan4EventTypes:
         assert EventType.INSPECT_FEATURE_FINALIZED.value == "inspect_feature_finalized"
 
 
+class TestPlan5EventTypes:
+    def test_inspect_feature_events_full(self):
+        from mage.orchestration.events import EventType
+        # Plan 4 added placeholders; Plan 5 adds the rest.
+        assert EventType.INSPECT_FEATURE_PASSED.value == "inspect_feature_passed"
+        assert EventType.INSPECT_FEATURE_HALT_PERSISTED.value == "inspect_feature_halt_persisted"
+        assert EventType.INSPECT_FEATURE_COMPLETED.value == "inspect_feature_completed"
+        assert EventType.FIX_WAVE_DISPATCHED.value == "fix_wave_dispatched"
+
+    def test_settle_feature_events(self):
+        from mage.orchestration.events import EventType
+        assert EventType.SETTLE_FEATURE_STARTED.value == "settle_feature_started"
+        assert EventType.SETTLE_COSMETIC_QUEUED.value == "settle_cosmetic_queued"
+        assert EventType.SETTLE_TESTS_FAILED.value == "settle_tests_failed"
+        assert EventType.SETTLE_FEATURE_FINALIZED.value == "settle_feature_finalized"
+        assert EventType.SETTLE_FEATURE_COMPLETED.value == "settle_feature_completed"
+        assert EventType.SETTLE_BRANCH_DISCARDED.value == "settle_branch_discarded"
+
+
 class TestEventsLog:
     def test_init_creates_file(self, tmp_path: Path):
         log_path = tmp_path / "events.jsonl"
