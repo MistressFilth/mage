@@ -164,7 +164,7 @@ class InspectLoopStage(StageNode):
                     ),
                 )
             context.iteration = iteration
-            if iteration >= self.host_config.per_loop_max_iterations:
+            if iteration > self.host_config.per_loop_max_iterations:
                 self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
