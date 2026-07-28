@@ -61,6 +61,17 @@ def build_parser() -> argparse.ArgumentParser:
     resume_parser = review_subparsers.add_parser("resume", help="Resume after review halt")
     resume_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
 
+    # mage inspect <subcommand>
+    inspect_parser = subparsers.add_parser("inspect", help="Inspect operations")
+    inspect_subparsers = inspect_parser.add_subparsers(dest="inspect_command", required=True)
+
+    # mage inspect show
+    inspect_show_parser = inspect_subparsers.add_parser(
+        "show", help="Display latest Inspect artifact"
+    )
+    inspect_show_parser.add_argument("feature_id")
+    inspect_show_parser.add_argument("--project-dir", type=Path, default=argparse.SUPPRESS)
+
     return parser
 
 
@@ -218,6 +229,41 @@ def cmd_review_show(args):
     print(f"  Recorded:   {latest.timestamp.isoformat()}")
 
 
+def cmd_inspect_show(args):
+    """Display the latest Inspect artifact for a feature."""
+    from mage.artifacts.inspect import InspectArtifact
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+    inspect_dir = project_dir / ".haileris" / "inspect" / args.feature_id
+    if not inspect_dir.exists():
+        print(f"No inspect directory for feature {args.feature_id!r}", file=sys.stderr)
+        return 1
+
+    # Find the highest iteration
+    candidates = sorted(inspect_dir.glob("*.yaml"))
+    if not candidates:
+        print(f"No inspect artifacts for feature {args.feature_id!r}", file=sys.stderr)
+        return 1
+    latest = candidates[-1]
+
+    content = InspectArtifact.load(latest, log)
+    print(f"# Inspect Feature {content.feature_id}")
+    print(f"iteration: {content.iteration}/{content.eof_max_iterations}")
+    print(f"ready_to_merge: {content.ready_to_merge}")
+    print(f"scenarios: {len(content.scenarios)}")
+    print(
+        f"critical: {len(content.critical)}, important: {len(content.important)}, "
+        f"minor: {len(content.minor)}"
+    )
+    print(f"cross_scenario findings: {len(content.cross_scenario)}")
+    if content.ledger_markdown:
+        print("\n## Ledger\n")
+        print(content.ledger_markdown)
+    return 0
+
+
 def cmd_review_resume(args):
     """Verify a review halt and print resume readiness."""
     from mage.orchestration.events import EventsLog
@@ -281,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "review" and args.review_command == "show":
         cmd_review_show(args)
         return 0
+    if args.command == "inspect" and args.inspect_command == "show":
+        return cmd_inspect_show(args)
     if args.command == "review" and args.review_command == "resume":
         cmd_review_resume(args)
         return 0
