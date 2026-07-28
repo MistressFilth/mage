@@ -177,6 +177,7 @@ def cmd_run(args):
 def cmd_review_show(args):
     """Display the latest aggregate verdict for the project."""
     from mage.orchestration.events import EventsLog
+    from mage.artifacts.verdict import VerdictArtifact
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
@@ -191,10 +192,27 @@ def cmd_review_show(args):
 
     latest = max(aggregate_events, key=lambda e: e.timestamp)
     digest = latest.payload.get("verdict_sha256")
-    decision = latest.payload.get("outcome")
+
+    # C4: read the decision from the AGGREGATE file on disk (single source
+    # of truth) rather than relying on the event payload, which the
+    # VerdictArtifact schema doesn't include. The verdict_path in the
+    # payload points to the aggregate.yaml we wrote.
+    aggregate_path_str = latest.payload.get("verdict_path")
+    decision = None
+    if aggregate_path_str:
+        aggregate_path = Path(aggregate_path_str)
+        try:
+            aggregate = VerdictArtifact.load(aggregate_path, log)
+            decision = aggregate.decision
+        except Exception as e:
+            print(
+                f"mage review show: warning: failed to read aggregate at "
+                f"{aggregate_path}: {e}",
+                file=sys.stderr,
+            )
 
     print(f"Latest aggregate verdict:")
-    print(f"  Draft hash: {latest.payload.get('draft_hash')}")
+    print(f"  Path:       {aggregate_path_str}")
     print(f"  Digest:     {digest}")
     print(f"  Decision:   {decision}")
     print(f"  Recorded:   {latest.timestamp.isoformat()}")

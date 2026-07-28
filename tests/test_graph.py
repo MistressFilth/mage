@@ -119,3 +119,42 @@ def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path):
     assert len(halt_events) == 1
     assert halt_events[0].payload["reason"] == "Plan ordering is wrong"
     assert halt_events[0].payload["originating_stage"] == "halting"
+
+
+def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path):
+    """I1: ReviewBudgetExhausted raised by InscribeStage is caught by the
+    graph; the graph exits cleanly (SystemExit 0) without re-raising.
+    """
+    from mage.orchestration.graph import PipelineGraph
+    from mage.orchestration.inscribe import ReviewBudgetExhausted
+    from mage.orchestration.nodes import PipelineContext, StageNode
+    from mage.orchestration.events import EventsLog
+
+    log = EventsLog(tmp_path / "events.jsonl")
+
+    class BudgetExhaustedStage(StageNode):
+        name = "budget_exhausted"
+        def _run(self, context):
+            raise ReviewBudgetExhausted(
+                base_bid="00000", scenario_name="authenticate-user", iteration=3,
+            )
+
+    class NeverRunStage(StageNode):
+        name = "never"
+        def _run(self, context):
+            raise AssertionError("should not run after halt")
+
+    graph = PipelineGraph(
+        stages=[BudgetExhaustedStage(log), NeverRunStage(log)],
+        events_log=log,
+    )
+
+    ctx = PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(schema_version=1, project_id="t", base_bids=[]),
+        events_log=log,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        graph.run(ctx)
+    assert exc_info.value.code == 0

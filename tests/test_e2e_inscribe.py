@@ -279,3 +279,68 @@ def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     events = log.read_all()
     event_types = {e.event_type.value for e in events}
     assert "review_halt_persisted" in event_types
+
+
+def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
+    """With the default empty-check MechanicalVerifier, every scenario
+    passes pre-check and emits MECHANICAL_PRECHECK_PASSED before the
+    reviewer loop runs."""
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+
+    (project_dir / "behaviors.yaml").write_text(yaml.safe_dump({
+        "schema_version": 1,
+        "feature_id": "f",
+        "enumerated_at": "2026-07-27T00:00:00Z",
+        "behaviors": [{
+            "id": "00000", "name": "authenticate-user",
+            "description": "User logs in", "depends_on": [],
+            "notes": "", "cross_behavior_links": [],
+        }],
+    }))
+    mapping = MappingArtifact(
+        project_id="p",
+        base_bids=[{
+            "base_bid": "00000", "behavior_name": "authenticate-user",
+            "behavior_description": "User logs in", "depends_on": [],
+            "notes": "", "scenarios": [], "reversion_log": [],
+            "post_live_revisions": [], "cross_behavior_links": [],
+        }],
+    )
+    mapping.save(project_dir / "mapping.yaml")
+
+    context = PipelineContext(
+        project_dir=project_dir, mapping=mapping, events_log=log,
+        plan_path=project_dir / "plan.md",
+    )
+
+    host_config = HostConfig(max_iterations=3)
+    inscribe_agent = InscribeAgent(
+        model=TestModel(custom_output_args=_canned_inscribe_output())
+    )
+    # No mechanical verifier passed → default is empty checks → all pass.
+    stage = InscribeStage(
+        events_log=log,
+        agent=inscribe_agent,
+        host_config=host_config,
+        reviewers=_all_seven_reviewers(),
+    )
+
+    stage.run(context)
+
+    events = log.read_all()
+    precheck_passed = [
+        e for e in events
+        if e.event_type.value == "mechanical_precheck_passed"
+    ]
+    assert len(precheck_passed) >= 1
+    # The first PRECHECK_PASSED comes before any REVIEWER_VERDICT_RECORDED.
+    first_precheck = precheck_passed[0]
+    first_reviewer_verdict = next(
+        (e for e in events
+         if e.event_type.value == "reviewer_verdict_recorded"),
+        None,
+    )
+    assert first_reviewer_verdict is not None
+    assert first_precheck.timestamp < first_reviewer_verdict.timestamp
