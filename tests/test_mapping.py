@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from mage.artifacts.bid import Base85BID
@@ -161,3 +162,96 @@ class TestPlan4MappingFields:
         from mage.artifacts.mapping import MappingArtifact
         m = MappingArtifact(project_id="p1", feature_status="live_assembling")
         assert m.feature_status == "live_assembling"
+
+
+class TestPlan4MappingMethods:
+    def test_append_inspect_journal(self):
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.inspect import InspectJournalEntry
+        m = MappingArtifact(project_id="p1")
+        entry = InspectJournalEntry(
+            timestamp=datetime.now(UTC),
+            iteration=1,
+            dimension="increment_quality",
+            severity="major",
+            route="code",
+            finding_id="f-1",
+            location="src/foo.py",
+            issue="x",
+            rationale="y",
+        )
+        m2 = m.append_inspect_journal("00000-0", entry)
+        assert m is not m2  # immutable
+        assert len(m2.inspect_journal["00000-0"]) == 1
+        assert m2.inspect_journal["00000-0"][0]["finding_id"] == "f-1"
+
+    def test_append_inspect_journal_appends_to_existing(self):
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.inspect import InspectJournalEntry
+        m = MappingArtifact(project_id="p1")
+        entry1 = InspectJournalEntry(
+            timestamp=datetime.now(UTC),
+            iteration=1,
+            dimension="increment_quality",
+            severity="major",
+            route="code",
+            finding_id="f-1",
+            location="src/foo.py",
+            issue="x",
+            rationale="y",
+        )
+        entry2 = InspectJournalEntry(
+            timestamp=datetime.now(UTC),
+            iteration=2,
+            dimension="increment_quality",
+            severity="minor",
+            route="cosmetic",
+            finding_id="f-2",
+            location="src/foo.py",
+            issue="x",
+            rationale="y",
+        )
+        m = m.append_inspect_journal("00000-0", entry1)
+        m = m.append_inspect_journal("00000-0", entry2)
+        assert len(m.inspect_journal["00000-0"]) == 2
+
+    def test_attach_feature_inspect(self):
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.inspect import InspectArtifactRef
+        m = MappingArtifact(project_id="p1")
+        ref = InspectArtifactRef(
+            inspect_path=".haileris/inspect/feat-1/1.yaml",
+            inspect_sha256="abc",
+            finalized_at=datetime.now(UTC),
+        )
+        m2 = m.attach_feature_inspect(ref)
+        assert m2.feature_inspect is not None
+        assert m2.feature_inspect["inspect_sha256"] == "abc"
+
+    def test_append_cosmetic(self):
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.inspect import CosmeticItem
+        m = MappingArtifact(project_id="p1")
+        item = CosmeticItem(
+            sub_bid="00000-0",
+            scenario_name="happy",
+            location="Given step",
+            text="Rephrase",
+            proposed_by="increment_quality",
+        )
+        m2 = m.append_cosmetic(item)
+        assert len(m2.feature_cosmetic_queue) == 1
+        assert m2.feature_cosmetic_queue[0]["text"] == "Rephrase"
+
+    def test_feature_resume_state_halted(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1", feature_status="halted")
+        state = m.feature_resume_state()
+        assert state["status"] == "halted"
+        assert state["should_resume"] is True
+
+    def test_feature_resume_state_running(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1", feature_status="live_assembling")
+        state = m.feature_resume_state()
+        assert state["should_resume"] is False

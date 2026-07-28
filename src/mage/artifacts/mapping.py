@@ -5,11 +5,19 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from mage.artifacts.bid import Base85BID, next_base_bid
+
+if TYPE_CHECKING:
+    from mage.artifacts.inspect import (
+        CosmeticItem,
+        InspectArtifactRef,
+        InspectJournalEntry,
+    )
 
 
 class LifecycleStatus(str, Enum):
@@ -116,6 +124,44 @@ class MappingArtifact(BaseModel):
                 f"base_bid {base_bid!r} not found in mapping with project_id={self.project_id!r}"
             )
         return self.model_copy(update={"base_bids": new_entries})
+
+    def append_inspect_journal(
+        self, sub_bid: str, entry: "InspectJournalEntry"
+    ) -> "MappingArtifact":
+        """Return a new MappingArtifact with `entry` appended to inspect_journal[sub_bid].
+
+        Creates the sub_bid key if absent. Parallel to append_scenario.
+        """
+        new_journal = {
+            k: list(v) for k, v in self.inspect_journal.items()
+        }
+        existing = new_journal.get(sub_bid, [])
+        new_journal[sub_bid] = [*existing, entry.model_dump(mode="json")]
+        return self.model_copy(update={"inspect_journal": new_journal})
+
+    def attach_feature_inspect(self, ref: "InspectArtifactRef") -> "MappingArtifact":
+        """Return a new MappingArtifact with feature_inspect set to ref."""
+        return self.model_copy(update={"feature_inspect": ref.model_dump(mode="json")})
+
+    def append_cosmetic(self, item: "CosmeticItem") -> "MappingArtifact":
+        """Return a new MappingArtifact with item appended to feature_cosmetic_queue."""
+        return self.model_copy(
+            update={"feature_cosmetic_queue": [*self.feature_cosmetic_queue, item.model_dump(mode="json")]}
+        )
+
+    def feature_resume_state(self) -> dict:
+        """Return a snapshot dict describing whether/how to resume this feature.
+
+        Plan 4 only adds the dict shape; Plan 5 uses the "should_resume" semantics.
+        """
+        halted_states = {"halted", "inspect_pending"}
+        return {
+            "status": self.feature_status,
+            "should_resume": self.feature_status in halted_states,
+            "has_inspect_journal": bool(self.inspect_journal),
+            "has_feature_inspect": self.feature_inspect is not None,
+            "cosmetic_queue_size": len(self.feature_cosmetic_queue),
+        }
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
