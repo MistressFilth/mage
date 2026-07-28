@@ -85,6 +85,37 @@ def test_plan3_event_type_values():
     assert EventType.REVIEW_HALT_PERSISTED.value == "review_halt_persisted"
 
 
+class TestPlan4EventTypes:
+    def test_etch_events_present(self):
+        from mage.orchestration.events import EventType
+        assert EventType.ETCH_STARTED.value == "etch_started"
+        assert EventType.ETCH_RED_CONFIRMED.value == "etch_red_confirmed"
+        assert EventType.ETCH_COMPLETED.value == "etch_completed"
+
+    def test_realize_events_present(self):
+        from mage.orchestration.events import EventType
+        assert EventType.REALIZE_STARTED.value == "realize_started"
+        assert EventType.REALIZE_INCREMENT_DONE.value == "realize_increment_done"
+        assert EventType.REALIZE_COMPLETED.value == "realize_completed"
+        assert EventType.SCENARIO_OUTER_GREEN.value == "scenario_outer_green"
+        assert EventType.SCENARIO_LIVE.value == "scenario_live"
+
+    def test_inspect_loop_events_present(self):
+        from mage.orchestration.events import EventType
+        assert EventType.INSPECT_LOOP_STARTED.value == "inspect_loop_started"
+        assert EventType.INSPECT_LOOP_PASSED.value == "inspect_loop_passed"
+        assert EventType.INSPECT_LOOP_FAILED.value == "inspect_loop_failed"
+        assert EventType.INSPECT_LOOP_COMPLETED.value == "inspect_loop_completed"
+        assert EventType.INSPECT_JOURNAL_APPENDED.value == "inspect_journal_appended"
+        assert EventType.SCENARIO_HALT_PERSISTED.value == "scenario_halt_persisted"
+
+    def test_inspect_feature_events_placeholders(self):
+        """Plan 5 events get placeholder members so the schema is stable."""
+        from mage.orchestration.events import EventType
+        assert EventType.INSPECT_FEATURE_STARTED.value == "inspect_feature_started"
+        assert EventType.INSPECT_FEATURE_FINALIZED.value == "inspect_feature_finalized"
+
+
 class TestEventsLog:
     def test_init_creates_file(self, tmp_path: Path):
         log_path = tmp_path / "events.jsonl"
