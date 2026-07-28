@@ -239,3 +239,90 @@ class TestE2ESpecRouteHalt:
         events = log.read_all()
         types = [e.event_type.value for e in events]
         assert types.count("scenario_halt_persisted") == 1
+
+
+class TestE2ECodeRouteCarryForward:
+    def test_code_route_finding_injects_into_next_increment(self, tmp_path):
+        from dataclasses import dataclass
+        from datetime import UTC, datetime
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_loop import InspectLoopStage
+        from mage.orchestration.realize import RealizeStage
+        from mage.orchestration.nodes import PipelineContext
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.agents.realize import RealizeOutput
+        from mage.verification.host_overrides import HostConfig
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=MappingArtifact(project_id="p1"),
+            events_log=log,
+            plan_path=tmp_path / "plan.md",
+            iteration=0,
+        )
+
+        class CleanMech:
+            def run(self, scope):
+                return []
+
+        @dataclass
+        class FindingWithRoute:
+            id: str = "f-1"
+            severity: str = "major"
+            location: str = "src/foo.py:42"
+            issue: str = "Missing edge case"
+            rationale: str = "Empty input not tested"
+            suggestion: str = "code:Add empty-input test"
+            citations: list = None
+            route: str = "code"
+
+            def __post_init__(self):
+                if self.citations is None:
+                    self.citations = []
+
+        @dataclass
+        class VerdictWithRoute:
+            dimension: str = "increment_quality"
+            outcome: str = "fail"
+            draft_hash: str = ""
+            reviewed_at: datetime = None
+            reviewer_id: str = "increment_quality@v1"
+            findings: list = None
+            notes: str = ""
+
+            def __post_init__(self):
+                if self.reviewed_at is None:
+                    self.reviewed_at = datetime.now(UTC)
+                if self.findings is None:
+                    self.findings = []
+
+        class CodeRouteReviewer:
+            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+                return VerdictWithRoute(findings=[FindingWithRoute()])
+
+        captured_carry_forward = []
+
+        class CapturingRealizeAgent:
+            def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
+                captured_carry_forward.append(list(carry_forward))
+                return RealizeOutput(files_changed=[], summary="stub")
+
+        stage = InspectLoopStage(
+            log, CleanMech(), CodeRouteReviewer(), HostConfig()
+        )
+        realize_stage = RealizeStage(log, CapturingRealizeAgent())
+
+        # First increment: code-route finding → journal entry
+        stage._run_single_increment(
+            ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+        )
+        # Second increment: realize should see the code-route finding in carry_forward
+        realize_stage._run_single_increment(
+            ctx, sub_bid="00000-0", step="step-1", red_test_path="t.py"
+        )
+
+        assert len(captured_carry_forward) == 1
+        assert len(captured_carry_forward[0]) == 1
+        assert captured_carry_forward[0][0].finding_id == "f-1"
+        assert captured_carry_forward[0][0].route == "code"
