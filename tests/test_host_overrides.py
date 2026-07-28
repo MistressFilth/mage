@@ -91,3 +91,35 @@ def test_default_host_config_returns_default():
     config = default_host_config()
     assert isinstance(config, HostConfig)
     assert config.require_plan_approval is True
+
+
+def test_host_config_max_iterations_default_is_3():
+    config = HostConfig()
+    assert config.max_iterations == 3
+
+
+def test_host_config_max_iterations_override():
+    config = HostConfig(max_iterations=5)
+    assert config.max_iterations == 5
+
+
+def test_host_config_enabled_reviewers_default_is_none():
+    config = HostConfig()
+    assert config.enabled_reviewers is None
+
+
+def test_host_config_enabled_reviewers_override():
+    config = HostConfig(enabled_reviewers=["spec_compliance", "testability"])
+    assert config.enabled_reviewers == ["spec_compliance", "testability"]
+
+
+def test_load_host_config_parses_max_iterations(tmp_path: Path):
+    import yaml
+
+    config_dir = tmp_path / ".haileris"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        yaml.safe_dump({"max_iterations": 7})
+    )
+    config = load_host_config(tmp_path)
+    assert config.max_iterations == 7
