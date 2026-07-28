@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from mage.artifacts.bid import Base85BID, next_base_bid
 
@@ -86,6 +86,62 @@ class MappingArtifact(BaseModel):
     feature_cosmetic_queue: list[dict] = Field(default_factory=list)
     # ^ list[CosmeticItem]; typing loose to avoid circular import
     feature_status: str = "pending"  # pending | live_assembling | inspect_pending | inspect_passed | settled | halted
+
+    @model_validator(mode="after")
+    def _validate_plan4_fields(self) -> "MappingArtifact":
+        """Defensive validation for Plan 4 fields whose types are kept loose
+        (dict / list[dict]) to avoid circular imports.
+
+        Important 5 fix: validate that
+        - inspect_journal keys are non-empty strings and values are lists of dicts
+        - feature_cosmetic_queue items are dicts
+        - feature_inspect is None or a dict (and has expected shape)
+
+        Failures surface here (on load / save) instead of as cryptic errors
+        in downstream consumers.
+        """
+        # Validate inspect_journal.
+        if not isinstance(self.inspect_journal, dict):
+            raise ValueError(
+                f"MappingArtifact.inspect_journal must be a dict; "
+                f"got {type(self.inspect_journal).__name__}"
+            )
+        for k, v in self.inspect_journal.items():
+            if not isinstance(k, str) or not k:
+                raise ValueError(
+                    f"MappingArtifact.inspect_journal keys must be non-empty "
+                    f"strings; got {k!r}"
+                )
+            if not isinstance(v, list):
+                raise ValueError(
+                    f"MappingArtifact.inspect_journal[{k!r}] must be a list; "
+                    f"got {type(v).__name__}"
+                )
+            for i, entry in enumerate(v):
+                if not isinstance(entry, dict):
+                    raise ValueError(
+                        f"MappingArtifact.inspect_journal[{k!r}][{i}] must be "
+                        f"a dict; got {type(entry).__name__}"
+                    )
+        # Validate feature_cosmetic_queue.
+        if not isinstance(self.feature_cosmetic_queue, list):
+            raise ValueError(
+                f"MappingArtifact.feature_cosmetic_queue must be a list; "
+                f"got {type(self.feature_cosmetic_queue).__name__}"
+            )
+        for i, item in enumerate(self.feature_cosmetic_queue):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"MappingArtifact.feature_cosmetic_queue[{i}] must be a "
+                    f"dict; got {type(item).__name__}"
+                )
+        # Validate feature_inspect (None or a dict).
+        if self.feature_inspect is not None and not isinstance(self.feature_inspect, dict):
+            raise ValueError(
+                f"MappingArtifact.feature_inspect must be None or a dict; "
+                f"got {type(self.feature_inspect).__name__}"
+            )
+        return self
 
     def highest_base_bid(self) -> Base85BID | None:
         if not self.base_bids:
