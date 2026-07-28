@@ -27,7 +27,7 @@ class TestInspectLoopStage:
         )
 
         class AlwaysPassMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         class CleanReviewer:
@@ -78,7 +78,7 @@ class TestInspectLoopStage:
         )
 
         class AlwaysPassMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return []
 
         @dataclass
@@ -159,7 +159,7 @@ class TestInspectLoopStage:
         )
 
         class AlwaysFailMech:
-            def run(self, scope):
+            def verify(self, scope):
                 from mage.verification.mechanical import MechanicalFinding
 
                 return [
@@ -216,7 +216,7 @@ class TestInspectLoopStage:
         )
 
         class AlwaysFailMech:
-            def run(self, scope):
+            def verify(self, scope):
                 return [
                     MechanicalFinding(
                         check="tests_pass",
@@ -299,7 +299,7 @@ class TestInspectLoopStage:
         class PlanOneStyleMech:
             """Returns list[CheckResult] (the real Plan 1 shape)."""
 
-            def run(self, scope):
+            def verify(self, scope):
                 return [
                     CheckResult(name="gherkin-syntax", outcome="fail", detail="missing Then"),
                     CheckResult(name="happy-path", outcome="pass", detail=None),
@@ -344,3 +344,108 @@ class TestInspectLoopStage:
         assert entry["dimension"] == "mechanical"
         assert entry["issue"] == "missing Then"
         assert entry["rationale"] == "missing Then"
+
+    def test_real_mechanical_verifier_wires_via_verify(self, tmp_path):
+        """Important 3 regression: the production MechanicalVerifier exposes
+        `verify(...)` (not `run(...)`). Wiring the real verifier into
+        InspectLoopStage._run_single_increment must not AttributeError.
+        The find/replace was applied in production code; this test is the
+        canary that catches future regressions where someone reintroduces
+        `mechanical_verifier.run(...)`.
+        """
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        from mage.artifacts.bid import Base85BID
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.verdict import ReviewerVerdict
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_loop import InspectLoopStage
+        from mage.orchestration.nodes import PipelineContext
+        from mage.verification.host_overrides import HostConfig
+        from mage.verification.mechanical import (
+            GherkinSyntaxCheck,
+            MechanicalVerifier,
+            ScenarioDraft,
+        )
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        mapping = MappingArtifact(
+            project_id="p1",
+            base_bids=[],
+        )
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=mapping,
+            events_log=log,
+            plan_path=tmp_path / "plan.md",
+            iteration=0,
+        )
+
+        feature_path = tmp_path / "feature.feature"
+        feature_path.write_text(
+            "Feature: x\n"
+            "  Scenario: demo\n"
+            "    Given a precondition\n"
+            "    When an action\n"
+            "    Then a result\n"
+        )
+
+        # Real MechanicalVerifier with one Gherkin-syntax check.
+        verifier = MechanicalVerifier(checks=[GherkinSyntaxCheck()])
+
+        # The verifier's interface is verify(scope=...) — confirm.
+        assert hasattr(verifier, "verify"), (
+            "real MechanicalVerifier must expose verify(scope=...)"
+        )
+        assert not hasattr(verifier, "run"), (
+            "real MechanicalVerifier exposes verify, not run"
+        )
+
+        # Draft used (note: scope='increment' is a sentinel; real Plan 4
+        # wiring needs to thread draft through; the adapter accepts whatever
+        # the verifier returns).
+        draft = ScenarioDraft(
+            feature_path=feature_path,
+            scenario_name="demo",
+            gherkin_text="",
+            tags=[],
+            sub_bid="00000-0",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=["Given a precondition", "When an action", "Then a result"],
+        )
+        # Pre-flight: confirm the verifier returns list[CheckResult].
+        result = verifier.verify(scope="increment")
+        # InspectLoopStage should invoke `verify` with no positional args
+        # besides the scope keyword. With our adapter + real Plan 1 verifier,
+        # empty results mean "no findings" → stage will advance.
+
+        class CleanReviewer:
+            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+                return ReviewerVerdict(
+                    dimension="increment_quality",
+                    outcome="pass",
+                    draft_hash="",
+                    reviewed_at=datetime.now(UTC),
+                    reviewer_id="increment_quality@v1",
+                    findings=[],
+                )
+
+        stage = InspectLoopStage(
+            log,
+            mechanical_verifier=verifier,
+            increment_quality_reviewer=CleanReviewer(),
+            host_config=HostConfig(per_loop_max_iterations=8),
+        )
+        # Should not raise AttributeError on `mechanical_verifier.run(...)`.
+        stage._run_single_increment(
+            ctx,
+            sub_bid="00000-0",
+            increment_diff="",
+            new_test="",
+            scenario_steps=[],
+        )
+        types = [e.event_type.value for e in log.read_all()]
+        assert "inspect_loop_passed" in types, (
+            f"expected inspect_loop_passed with real verifier; got {types}"
+        )
