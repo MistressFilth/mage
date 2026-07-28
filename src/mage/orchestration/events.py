@@ -77,6 +77,20 @@ class EventType(str, Enum):
     INSPECT_FEATURE_STARTED = "inspect_feature_started"
     INSPECT_FEATURE_FINALIZED = "inspect_feature_finalized"
 
+    # Plan 5 — InspectFeature stage (full set)
+    INSPECT_FEATURE_PASSED = "inspect_feature_passed"
+    INSPECT_FEATURE_HALT_PERSISTED = "inspect_feature_halt_persisted"
+    INSPECT_FEATURE_COMPLETED = "inspect_feature_completed"
+    FIX_WAVE_DISPATCHED = "fix_wave_dispatched"
+
+    # Plan 5 — SettleFeature stage
+    SETTLE_FEATURE_STARTED = "settle_feature_started"
+    SETTLE_COSMETIC_QUEUED = "settle_cosmetic_queued"
+    SETTLE_TESTS_FAILED = "settle_tests_failed"
+    SETTLE_FEATURE_FINALIZED = "settle_feature_finalized"
+    SETTLE_FEATURE_COMPLETED = "settle_feature_completed"
+    SETTLE_BRANCH_DISCARDED = "settle_branch_discarded"
+
 
 class Event(BaseModel):
     """One event in the log."""
