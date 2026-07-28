@@ -43,17 +43,12 @@ class ReviewerAgent(ABC):
 
     def run(self, *, draft: ScenarioSpec, spec_context: dict[str, Any], mapping: MappingArtifact,
             events_log: EventsLog, verdict_path: Path) -> ReviewerVerdict:
-        del mapping
         draft_hash = self._compute_draft_hash(draft, spec_context)
         prompt = (f"Draft scenario:\n{draft.model_dump_json(indent=2)}\n\n"
                   f"Spec context:\n{json.dumps(spec_context, indent=2, default=str)}")
-        try:
-            result = self._agent.run_sync(prompt).output
-        except Exception:
-            from mage.artifacts.verdict import ReviewerFinding
-            result = ReviewerVerdict(dimension=self.dimension, outcome="pass", draft_hash=draft_hash, reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1")
+        result = self._agent.run_sync(prompt).output
+
         result_dict = result.model_dump()
-        # TestModel emits placeholders that may not satisfy datetime fields.
         result_dict.update(dimension=self.dimension, draft_hash=draft_hash,
                            reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1")
         finalized = ReviewerVerdict.model_validate(result_dict)

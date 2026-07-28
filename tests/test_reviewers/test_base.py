@@ -21,7 +21,19 @@ class FakeReviewer(ReviewerAgent):
 
 @pytest.fixture
 def fake_reviewer():
-    return FakeReviewer(model=TestModel(custom_output_args=None))
+    return FakeReviewer(
+        model=TestModel(
+            custom_output_args={
+                "dimension": "fake_dimension",
+                "outcome": "pass",
+                "draft_hash": "x",
+                "reviewed_at": "2026-01-01T00:00:00Z",
+                "reviewer_id": "fake_dimension@v1",
+                "findings": [],
+                "notes": "",
+            }
+        )
+    )
 
 
 def test_reviewer_agent_has_dimension_attribute():
