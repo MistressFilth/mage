@@ -507,9 +507,10 @@ def test_scenario_spec_with_all_fields():
 
 def test_scenario_spec_is_frozen():
     from mage.agents.inscribe import ScenarioSpec
+    from pydantic import ValidationError
     spec = ScenarioSpec(name="x", gherkin_body="y")
     import pytest
-    with pytest.raises(Exception):  # ValidationError or AttributeError
+    with pytest.raises(ValidationError):
         spec.name = "mutated"
 
 
