@@ -255,3 +255,123 @@ class TestPlan4MappingMethods:
         m = MappingArtifact(project_id="p1", feature_status="live_assembling")
         state = m.feature_resume_state()
         assert state["should_resume"] is False
+
+
+class TestMappingArtifactValidation:
+    """Important 5 fix: MappingArtifact.model_validator rejects malformed
+    inspect_journal / feature_cosmetic_queue / feature_inspect at load time
+    (or save time) instead of letting bad data flow through to a later
+    consumer that fails cryptically."""
+
+    def test_valid_empty_passes(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(project_id="p1")
+        assert m.inspect_journal == {}
+        assert m.feature_cosmetic_queue == []
+        assert m.feature_inspect is None
+
+    def test_valid_journal_entry_passes(self):
+        from mage.artifacts.mapping import MappingArtifact
+        m = MappingArtifact(
+            project_id="p1",
+            inspect_journal={"00000-0": [{"dimension": "mechanical", "route": "code"}]},
+        )
+        assert m.inspect_journal["00000-0"][0]["dimension"] == "mechanical"
+
+    def test_invalid_inspect_journal_key_not_string(self, tmp_path: Path):
+        """Validator rejects non-string keys at load time."""
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        with pytest.raises(ValidationError):
+            MappingArtifact.model_validate(
+                {"project_id": "p1", "inspect_journal": {123: []}}
+            )
+
+    def test_invalid_inspect_journal_empty_key(self):
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        with pytest.raises(ValidationError):
+            MappingArtifact.model_validate(
+                {"project_id": "p1", "inspect_journal": {"": []}}
+            )
+
+    def test_invalid_inspect_journal_value_not_list(self):
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        with pytest.raises(ValidationError):
+            MappingArtifact.model_validate(
+                {"project_id": "p1", "inspect_journal": {"00000-0": "not-a-list"}}
+            )
+
+    def test_invalid_inspect_journal_entry_not_dict(self):
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        with pytest.raises(ValidationError):
+            MappingArtifact.model_validate(
+                {"project_id": "p1", "inspect_journal": {"00000-0": ["not-a-dict"]}}
+            )
+
+    def test_invalid_feature_cosmetic_queue_item_not_dict(self):
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        with pytest.raises(ValidationError):
+            MappingArtifact.model_validate(
+                {"project_id": "p1", "feature_cosmetic_queue": ["not-a-dict"]}
+            )
+
+    def test_invalid_feature_inspect_not_dict(self):
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        with pytest.raises(ValidationError):
+            MappingArtifact.model_validate(
+                {"project_id": "p1", "feature_inspect": "not-a-dict"}
+            )
+
+    def test_round_trip_through_yaml_preserves_validation(self, tmp_path: Path):
+        """Validation must apply on load() too, not only on model_validate()."""
+        from mage.artifacts.mapping import MappingArtifact
+
+        m = MappingArtifact(
+            project_id="p1",
+            inspect_journal={"00000-0": [{"route": "code", "dimension": "mechanical"}]},
+            feature_cosmetic_queue=[{"text": "rephrase"}],
+        )
+        path = tmp_path / "mapping.yaml"
+        m.save(path)
+        loaded = MappingArtifact.load(path)
+        assert loaded.inspect_journal == {"00000-0": [{"route": "code", "dimension": "mechanical"}]}
+        assert loaded.feature_cosmetic_queue == [{"text": "rephrase"}]
+
+    def test_save_rejects_malformed_journal(self, tmp_path: Path):
+        """The save() path also goes through model construction; manual
+        construction with bad data must raise loudly.
+        """
+        import pytest
+        from pydantic import ValidationError
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        # ValidationError at construction time, before save is invoked.
+        with pytest.raises(ValidationError):
+            MappingArtifact(
+                project_id="p1",
+                inspect_journal={"k": "not-a-list"},
+            )
