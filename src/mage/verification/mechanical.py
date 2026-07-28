@@ -41,6 +41,23 @@ class CheckResult(BaseModel):
     detail: str | None = None
 
 
+class MechanicalFinding(BaseModel):
+    """A single finding emitted by mechanical verification.
+
+    Parallel to ReviewerFinding, but tagged with the originating `check`
+    name (instead of a free-form `id`) so callers can group/route findings
+    back to the specific check that raised them.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    check: str
+    severity: Literal["critical", "major", "minor"]
+    location: str
+    issue: str
+    rationale: str
+
+
 class MechanicalCheck(ABC):
     """Abstract base for mechanical checks.
 
