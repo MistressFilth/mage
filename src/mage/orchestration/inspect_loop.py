@@ -88,16 +88,15 @@ class InspectLoopStage(StageNode):
         self.realize_stage = realize_stage
 
     def _run(self, context: PipelineContext) -> PipelineContext:
-        # Plan 4 stub: emit INSPECT_LOOP_COMPLETED. The per-increment loop is
-        # orchestrated by the calling driver (RealizeStage or external script).
-        self.events_log.append(
-            Event(
-                timestamp=datetime.now(UTC),
-                event_type=EventType.INSPECT_LOOP_COMPLETED,
-                payload={"stub": True},
-            )
+        # Minor 6 fix: InspectLoopStage is not driven via the linear graph
+        # runner. The real entry point is `_run_single_increment`, which the
+        # RealizeStage (or external driver) calls per increment. The previous
+        # stub returned a false completion event; raise loudly instead.
+        raise NotImplementedError(
+            "InspectLoopStage._run is not wired into the graph driver. "
+            "Use InspectLoopStage._run_single_increment from RealizeStage "
+            "(or an external driver) to inspect each increment."
         )
-        return context
 
     def _run_single_increment(
         self,
