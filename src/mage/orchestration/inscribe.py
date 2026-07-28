@@ -19,8 +19,8 @@ from mage.artifacts.verdict import VerdictArtifact
 from mage.orchestration.events import Event, EventType, EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
-from mage.verification.mechanical import MechanicalVerifier
-from mage.verification.reviewers.base import ReviewerAgent
+from mage.verification.mechanical import MechanicalVerifier, ScenarioDraft
+from mage.verification.reviewers.base import ReviewerAgent, compute_draft_hash
 from mage.verification.reviewers.registry import aggregate_verdicts
 
 
@@ -76,8 +76,9 @@ class InscribeStage(StageNode):
         behaviors_data = yaml.safe_load((project_dir / "behaviors.yaml").read_text())
         behavior_specs = behaviors_data["behaviors"]
 
-        # Load mapping
-        mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+        # I3: use the in-memory mapping (source of truth) rather than re-reading
+        # the on-disk artifact; any changes from prior stages are reflected here.
+        mapping = context.mapping
 
         # Iterate behaviors (in plan order — topological; Plan 3 just uses source order)
         iteration = context.iteration
@@ -94,6 +95,14 @@ class InscribeStage(StageNode):
 
             # Find the BaseBIDEntry
             entry = next(e for e in mapping.base_bids if e.base_bid == base_bid)
+            # I2: existing_scenarios currently uses sub_bid as a placeholder name
+            # and an empty body. ScenarioEntry doesn't carry scenario_name or
+            # gherkin_body, so we can't reconstruct the real on-disk scenario
+            # text without a separate file lookup. Defer the proper lookup to
+            # Plan 6, which adds a richer scenario metadata entry; for now
+            # the agent sees the sub_bid so it doesn't draft duplicates of
+            # the same scenario (the InscribeAgent already keys on sub_bid).
+            # TODO(plan6): replace sub_bid placeholder with real name+gherkin.
             existing_scenarios = [
                 {"name": s.sub_bid, "gherkin_body": ""} for s in entry.scenarios
             ]
@@ -108,7 +117,7 @@ class InscribeStage(StageNode):
                     behavior=entry, existing_scenarios=existing_scenarios, mapping=mapping
                 )
 
-                # For each scenario, run 7 reviewers + aggregate
+                # For each scenario, run mechanical pre-check, then 7 reviewers + aggregate
                 approved = True  # assume all approved; revise if any fail
                 for scenario_idx, scenario in enumerate(output.scenarios):
                     self.events_log.append(
@@ -123,35 +132,111 @@ class InscribeStage(StageNode):
                         )
                     )
 
-                    # 7 reviewers
-                    per_dimension_verdicts = {}
-                    verdicts_dir = project_dir / ".haileris" / "verdicts" / f"iter-{iteration}"
+                    # C1: mechanical pre-check BEFORE the reviewer loop.
+                    # Build a ScenarioDraft from the freshly drafted scenario.
+                    # Use a synthetic sub_bid="-" because the real sub_bid is
+                    # only assigned when the scenario is approved; the
+                    # SubBidAssignedCheck still validates Base85 alphabet,
+                    # but the pre-check is best-effort at draft time.
+                    draft_for_precheck = ScenarioDraft(
+                        feature_path=project_dir / "scenarios" / base_bid / f"{scenario.name}.feature",
+                        scenario_name=scenario.name,
+                        gherkin_text=scenario.gherkin_body,
+                        tags=list(scenario.tags),
+                        sub_bid="-",
+                        parent_base_bid=Base85BID(value=base_bid),
+                        step_texts=[],
+                    )
+                    precheck_results = self.mechanical_verifier.verify(
+                        draft_for_precheck, mapping
+                    )
+                    precheck_passed = self.mechanical_verifier.all_passed(precheck_results)
+                    if precheck_passed:
+                        self.events_log.append(
+                            Event(
+                                timestamp=datetime.now(UTC),
+                                event_type=EventType.MECHANICAL_PRECHECK_PASSED,
+                                payload={
+                                    "base_bid": base_bid,
+                                    "scenario_name": scenario.name,
+                                    "iteration": iteration,
+                                    "checks_run": len(precheck_results),
+                                },
+                            )
+                        )
+                    else:
+                        failed = [r for r in precheck_results if r.outcome == "fail"]
+                        self.events_log.append(
+                            Event(
+                                timestamp=datetime.now(UTC),
+                                event_type=EventType.MECHANICAL_PRECHECK_FAILED,
+                                payload={
+                                    "base_bid": base_bid,
+                                    "scenario_name": scenario.name,
+                                    "iteration": iteration,
+                                    "failed_checks": [r.name for r in failed],
+                                    "details": {r.name: r.detail for r in failed},
+                                },
+                            )
+                        )
+                        # Pre-check failure → treat as needs_refactor.
+                        approved = False
+                        self.events_log.append(
+                            Event(
+                                timestamp=datetime.now(UTC),
+                                event_type=EventType.SCENARIO_NEEDS_REFACTOR,
+                                payload={
+                                    "base_bid": base_bid,
+                                    "scenario_name": scenario.name,
+                                    "reason": "mechanical_precheck_failed",
+                                },
+                            )
+                        )
+                        # Skip the reviewer loop for this scenario; go to next iteration.
+                        break
+
+                    # Compute draft_hash for per-draft verdict storage namespace.
+                    spec_context = {"behavior_name": behavior_name}
+                    draft_hash = compute_draft_hash(scenario, spec_context)
+
+                    # C3: verdicts keyed by draft_hash (not iteration) so the
+                    # aggregate's reviewer_verdict_ref paths resolve.
+                    verdicts_dir = project_dir / ".haileris" / "verdicts" / draft_hash
                     verdicts_dir.mkdir(parents=True, exist_ok=True)
-                    for reviewer in self.reviewers:
+
+                    # C2: honor HostConfig.enabled_reviewers (the host-project
+                    # override mechanism). When None, run all reviewers.
+                    enabled_set = (
+                        set(self.host_config.enabled_reviewers)
+                        if self.host_config.enabled_reviewers is not None
+                        else None
+                    )
+                    reviewers_to_run = (
+                        [r for r in self.reviewers if r.dimension in enabled_set]
+                        if enabled_set is not None
+                        else list(self.reviewers)
+                    )
+
+                    # Run each enabled reviewer; verdicts stored alongside aggregate.
+                    per_dimension_verdicts = {}
+                    for reviewer in reviewers_to_run:
                         verdict_path = verdicts_dir / f"{reviewer.dimension}.yaml"
                         verdict = reviewer.run(
                             draft=scenario,
-                            spec_context={"behavior_name": behavior_name},
+                            spec_context=spec_context,
                             mapping=mapping,
                             events_log=self.events_log,
                             verdict_path=verdict_path,
                         )
                         per_dimension_verdicts[reviewer.dimension] = verdict
 
-                    # Aggregate
+                    # Aggregate (registry builds reviewer_verdict_ref as
+                    # `.haileris/verdicts/{draft_hash}/{dimension}.yaml`).
                     aggregate = aggregate_verdicts(per_dimension_verdicts, iteration=iteration)
                     aggregate_path = verdicts_dir / "aggregate.yaml"
+                    # C4: VerdictArtifact.finalize already emits REVIEW_AGGREGATE_RECORDED;
+                    # do NOT manually re-emit it here.
                     VerdictArtifact.finalize(aggregate_path, aggregate, self.events_log)
-                    self.events_log.append(
-                        Event(
-                            timestamp=datetime.now(UTC),
-                            event_type=EventType.REVIEW_AGGREGATE_RECORDED,
-                            payload={
-                                "draft_hash": aggregate.draft_hash,
-                                "decision": aggregate.decision,
-                            },
-                        )
-                    )
 
                     if aggregate.decision == "approved":
                         # Assign sub-BID
@@ -209,6 +294,10 @@ class InscribeStage(StageNode):
                         },
                     )
                 )
+                # I5: pass behavior_name as the exception's scenario_name for
+                # now; scenario-level granularity (each scenario exhausted
+                # independently) is Plan 6 territory.
+                # TODO(plan6): emit halt per-scenario rather than per-behavior.
                 raise ReviewBudgetExhausted(
                     base_bid=base_bid,
                     scenario_name=behavior_name,

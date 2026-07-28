@@ -41,6 +41,12 @@ def aggregate_verdicts(
     Decision rule:
     - all 7 dimensions pass → 'approved'
     - any dimension fails → 'needs_refactor'
+
+    I4: this function intentionally never produces 'needs_human_review'.
+    That decision belongs to the downstream decision-gate stage (Plan 6),
+    which evaluates the aggregate alongside other context (escalation
+    history, severity of findings, etc.) to decide whether a human must
+    weigh in. Aggregating reviewers should not pre-empt that stage.
     """
     per_dimension: dict[str, DimensionSummary] = {}
     any_fail = False
