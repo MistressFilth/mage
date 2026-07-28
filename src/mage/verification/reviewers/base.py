@@ -17,6 +17,21 @@ from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
 from mage.orchestration.events import EventsLog
 
 
+def compute_draft_hash(draft: ScenarioSpec, spec_context: dict[str, Any]) -> str:
+    """Compute the deterministic SHA-256 hash of (draft, spec_context).
+
+    Used to namespace per-draft verdict storage on disk and to identify the
+    same logical draft across reviewer runs. This is the shared algorithm
+    used by both ReviewerAgent and InscribeStage; both must call it to
+    guarantee the verdict paths match.
+    """
+    payload = json.dumps(
+        {"draft": draft.model_dump(mode="json"), "spec_context": spec_context},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 class ReviewerAgent(ABC):
     """Base class for the 7 reviewer dimensions."""
 
@@ -35,11 +50,7 @@ class ReviewerAgent(ABC):
         ...
 
     def _compute_draft_hash(self, draft: ScenarioSpec, spec_context: dict[str, Any]) -> str:
-        payload = json.dumps(
-            {"draft": draft.model_dump(mode="json"), "spec_context": spec_context},
-            sort_keys=True,
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return compute_draft_hash(draft, spec_context)
 
     def run(self, *, draft: ScenarioSpec, spec_context: dict[str, Any], mapping: MappingArtifact,
             events_log: EventsLog, verdict_path: Path) -> ReviewerVerdict:

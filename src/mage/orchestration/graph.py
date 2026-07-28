@@ -10,6 +10,7 @@ from mage.orchestration.events import Event, EventType, EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.persistence import FileStatePersistence
 
+
 class PipelineGraph:
     """Runs a list of stages in order, threading PipelineContext through them."""
 
@@ -23,10 +24,20 @@ class PipelineGraph:
         For Plan 1, runs stages directly (not via Pydantic-Graph's async runner).
         Plan 6 will wire in the full async runner for cross-cutting discipline.
         """
+        # I1: lazy-import the InscribeStage exception to avoid a circular import
+        # (inscribe.py imports from orchestration.nodes; graph.py lives alongside).
+        from mage.orchestration.inscribe import ReviewBudgetExhausted
+
         context = initial_context
         for stage in self.stages:
             try:
                 context = stage.run(context)
+            except ReviewBudgetExhausted as e:
+                # I1: review-budget halts the same way as plan-revision halts.
+                # The InscribeStage already emitted REVIEW_HALT_PERSISTED and
+                # the halt is visible in the events log; we just need to stop
+                # the graph cleanly.
+                raise SystemExit(0) from e
             except PlanRevisionRequired as e:
                 self._persist_halt(context, e)
                 raise SystemExit(0) from e
