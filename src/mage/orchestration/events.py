@@ -39,6 +39,20 @@ class EventType(str, Enum):
     # Plan 5 placeholder (defined here so events log schema is stable)
     BEHAVIORS_REVISED = "behaviors_revised"
 
+    # Plan 3 — Inscribe stage
+    INSCRIBE_STARTED = "inscribe_started"
+    INSCRIBE_COMPLETED = "inscribe_completed"
+    BEHAVIOR_INSCRIBE_STARTED = "behavior_inscribe_started"
+    BEHAVIOR_INSCRIBE_COMPLETED = "behavior_inscribe_completed"
+    SCENARIO_DRAFTED = "scenario_drafted"
+    MECHANICAL_PRECHECK_PASSED = "mechanical_precheck_passed"
+    MECHANICAL_PRECHECK_FAILED = "mechanical_precheck_failed"
+    REVIEWER_VERDICT_RECORDED = "reviewer_verdict_recorded"
+    REVIEW_AGGREGATE_RECORDED = "review_aggregate_recorded"
+    SCENARIO_APPROVED = "scenario_approved"
+    SCENARIO_NEEDS_REFACTOR = "scenario_needs_refactor"
+    REVIEW_HALT_PERSISTED = "review_halt_persisted"
+
 
 class Event(BaseModel):
     """One event in the log."""
