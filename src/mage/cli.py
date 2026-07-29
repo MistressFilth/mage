@@ -5,14 +5,20 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
+from mage.orchestration.events import EventsLog
+from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import default_check_set, load_host_config
 from mage.verification.mechanical import (
     MechanicalVerifier,
     ScenarioDraft,
 )
+
+if TYPE_CHECKING:
+    from mage.orchestration.runner import FeatureRunner
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
     # mage run
     run_parser = subparsers.add_parser("run", help="Run the pipeline")
     run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
+    run_parser.add_argument("--dry-run", action="store_true", help="Use stub agents")
+    run_parser.add_argument("--model", help="Override the LLM model identifier")
 
     # mage review <subcommand>
     review_parser = subparsers.add_parser("review", help="Review operations")
@@ -93,6 +101,114 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+class _StubEtchAgent:
+    """Returns one trivial RedTestSpec per call. Used in --dry-run mode."""
+
+    def run(self, *, step: str, scenario_context: dict):
+        from mage.agents.etch import RedTestSpec
+
+        return RedTestSpec(
+            step_name=step,
+            test_path=f"tests/{step}.py",
+            test_code=f"def test_{step}(): pass\n",
+        )
+
+
+class _StubRealizeAgent:
+    """Returns no file changes and a stub summary. Used in --dry-run mode."""
+
+    def __init__(self, system_prompt_only: bool = True) -> None:
+        from mage.agents.realize import RealizeAgent
+
+        self._inner = RealizeAgent(model=None, system_prompt_only=system_prompt_only)
+
+    def run(self, **kwargs):
+        from mage.agents.realize import RealizeOutput
+
+        return RealizeOutput(files_changed=[], summary="(dry-run)")
+
+
+class _StubIncrementQualityReviewer:
+    """Returns a clean verdict. Used in --dry-run mode."""
+
+    def run(self, **kwargs) -> object:
+        from pydantic import BaseModel, ConfigDict
+
+        class _V(BaseModel):
+            model_config = ConfigDict(frozen=True)
+
+            dimension: str = "increment_quality"
+            findings: list = []
+
+        return _V()
+
+
+class _NoopMechanicalVerifier:
+    def verify(self, *, scope: str) -> list:
+        return []
+
+
+class _StubStageNode(StageNode):
+    """No-op stage used in --dry-run mode.
+
+    Emits STAGE_STARTED and STAGE_COMPLETED events like a real StageNode but
+    performs no work. Stands in for stages whose real wiring (decomposition,
+    inscribe, inspect_feature, settle_feature) lives in Plan 9 and would
+    otherwise reject an empty project.
+    """
+
+    def __init__(self, events_log: EventsLog, name: str) -> None:
+        self.events_log = events_log
+        self.name = name
+
+    def _run(self, context: PipelineContext) -> PipelineContext:
+        return context
+
+
+def _make_dry_run_runner(log, host_config) -> FeatureRunner:
+    """Construct a FeatureRunner wired with stub agents for --dry-run mode."""
+    from mage.orchestration.etch import EtchStage
+    from mage.orchestration.inspect_loop import InspectLoopStage
+    from mage.orchestration.realize import RealizeStage
+    from mage.orchestration.runner import FeatureRunner
+
+    etch = EtchStage(log, agent=_StubEtchAgent())  # type: ignore[arg-type]
+    realize = RealizeStage(log, agent=_StubRealizeAgent())  # type: ignore[arg-type]
+    inspect = InspectLoopStage(
+        log,
+        mechanical_verifier=_NoopMechanicalVerifier(),
+        increment_quality_reviewer=_StubIncrementQualityReviewer(),
+        host_config=host_config,
+    )
+    return FeatureRunner(
+        etch=etch,
+        realize=realize,
+        inspect_loop=inspect,
+        per_loop_max_iterations=host_config.per_loop_max_iterations,
+    )
+
+
+def _make_dry_run_stages(log, host_config):
+    """Build the full pipeline stages list in --dry-run mode.
+
+    Real-agent stages (decomposition, inscribe, inspect_feature,
+    settle_feature) are replaced by no-op _StubStageNode instances because
+    their real wiring lives in Plan 9. The automation stage uses the real
+    AutomationStage with a stubbed FeatureRunner, so a project with no
+    approved scenarios runs cleanly.
+    """
+    from mage.orchestration.automation import AutomationStage
+
+    runner = _make_dry_run_runner(log, host_config)
+    return [
+        _StubStageNode(log, "decomposition"),
+        _StubStageNode(log, "inscribe"),
+        AutomationStage(log, runner=runner),
+        _StubStageNode(log, "inspect_feature"),
+        _StubStageNode(log, "settle_feature"),
+    ]
 
 
 def cmd_plan_show(args):
@@ -188,21 +304,60 @@ def cmd_plan_revise(args):
 
 def cmd_run(args):
     """Run the pipeline with halt handling and resume support."""
-    from mage.orchestration.events import EventsLog
-    from mage.orchestration.nodes import PipelineContext
+    from mage.orchestration.graph import PipelineGraph
     from mage.orchestration.persistence import FileStatePersistence
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
     state_dir = project_dir / ".haileris" / "state"
 
-    # Try to load halted context
+    mapping_path = project_dir / "mapping.yaml"
+    if mapping_path.exists():
+        # Brief had MappingArtifact.load(mapping_path, log) but the actual
+        # signature is load(path) — drop the spurious log kwarg.
+        mapping = MappingArtifact.load(mapping_path)
+    else:
+        mapping = MappingArtifact(
+            schema_version=1, project_id=project_dir.name, base_bids=[]
+        )
+
     persistence = FileStatePersistence(
         state_dir=state_dir, state_type=PipelineContext
     )
-    halted_ctx = persistence.load_state()
+    saved = persistence.load_state()
+    initial_context = saved or PipelineContext(
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+        plan_path=project_dir / "plan.md",
+        iteration=0,
+    )
 
-    raise NotImplementedError("mage run pipeline execution is deferred to Plan 6; stage wiring is not implemented")
+    host_config = load_host_config(project_dir)
+    if getattr(args, "model", None):
+        host_config = host_config.model_copy(update={"model": args.model})
+    initial_context.host_config = host_config
+
+    if args.dry_run:
+        stages = _make_dry_run_stages(log, host_config)
+    else:
+        # Real-agent wiring is deferred to Plan 9. Until then, --dry-run is
+        # the only working path; running without --dry-run errors out.
+        raise NotImplementedError(
+            "mage run without --dry-run requires LLM agent wiring (Plan 9). "
+            "Re-run with --dry-run to exercise the pipeline end-to-end on stubs."
+        )
+
+    graph = PipelineGraph(stages=stages, events_log=log)
+    try:
+        graph.run(initial_context)
+    except SystemExit:
+        raise
+    except Exception as error:  # noqa: BLE001 — top-level CLI guard
+        print(f"mage run: error: {error}", file=sys.stderr)
+        return 1
+    print(f"mage run: complete for {project_dir}")
+    return 0
 
 
 def cmd_review_show(args):
