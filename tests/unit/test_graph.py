@@ -531,3 +531,51 @@ class TestPlan5HaltCatching:
             if event.event_type.value == "inspect_feature_halt_persisted"
         ]
         assert len(halt_events) == 1
+
+
+def test_graph_stops_on_scenario_inspect_halted(tmp_path):
+    """GC-10: ScenarioInspectHalted now shares the halt-persistence path
+    with the other halt types. The graph must raise SystemExit(0), persist
+    the mapping as 'halted', and persist halt state — preventing later
+    stages (InspectFeature, Settle) from running against a feature whose
+    scenarios are not all live.
+    """
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.etch import ScenarioInspectHalted
+    from mage.orchestration.events import EventsLog
+    from mage.orchestration.graph import PipelineGraph
+    from mage.orchestration.nodes import PipelineContext, StageNode
+    from mage.orchestration.persistence import FileStatePersistence
+
+    class _HaltStage(StageNode):
+        name = "halt_stage"
+
+        def _run(self, context):
+            raise ScenarioInspectHalted("spec finding")
+
+    class _Dummy(StageNode):
+        name = "dummy"
+
+        def _run(self, context):
+            return context
+
+    log = EventsLog(tmp_path / "events.jsonl")
+    graph = PipelineGraph(stages=[_HaltStage(log), _Dummy(log)], events_log=log)
+    ctx = PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(project_id="p"),
+        events_log=log,
+        plan_path=tmp_path / "plan.md",
+        iteration=0,
+    )
+    with pytest.raises(SystemExit):
+        graph.run(ctx)
+    # Mapping was persisted as halted.
+    saved = MappingArtifact.load(tmp_path / "mapping.yaml")
+    assert saved.feature_status == "halted"
+    # State was persisted.
+    state = FileStatePersistence(
+        state_dir=tmp_path / ".haileris" / "state",
+        state_type=PipelineContext,
+    ).load_state()
+    assert state is not None
