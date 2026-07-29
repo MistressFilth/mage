@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format follows
   failed report write cannot leave a settled status with no record.
 - `mage settle run` reports `ValueError` the same way it reports `SettleError`
   instead of surfacing a traceback.
+- A conflicted `git merge` now rolls the base branch back too, not only a
+  failing post-merge test run.
+- A rollback that itself fails chains the original failure as its cause and
+  still records `settle_merge_rolled_back` with `rollback_succeeded: false`.
 
 ## [0.1.0] - 2026-07-10
 
