@@ -102,3 +102,23 @@ def test_pipeline_context_plan_path_overridable(tmp_path):
         plan_path=custom,
     )
     assert ctx.plan_path == custom
+
+
+def test_pipeline_context_carries_automation_cursor(tmp_path):
+    from mage.orchestration.nodes import PipelineContext
+    from mage.orchestration.runner import AutomationCursor
+
+    ctx = PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(schema_version=1, project_id="p", base_bids=[]),
+        events_log=EventsLog(tmp_path / "events.jsonl"),
+        iteration=0,
+    )
+    assert ctx.automation_cursor is None
+
+    cursor = AutomationCursor(sub_bid="00001-0001", increment_index=0, iteration=1)
+    ctx.automation_cursor = cursor
+    assert ctx.automation_cursor is cursor
+
+    ctx.automation_cursor = None
+    assert ctx.automation_cursor is None
