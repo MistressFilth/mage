@@ -1,59 +1,85 @@
-"""Tests for EtchStage and EtchAgent."""
+"""Tests for EtchStage.run_scenario."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
+from pydantic import BaseModel, ConfigDict
+
+from mage.agents.etch import EtchAgent, RedTestSpec
+from mage.orchestration.events import EventsLog
+from mage.orchestration.etch import EtchStage
+from mage.orchestration.runner import ScenarioTarget
 
 
-class TestEtchAgent:
-    def test_red_test_spec_has_step_and_test_path(self):
-        from mage.agents.etch import RedTestSpec
-        spec = RedTestSpec(
-            step_name="compute_total",
-            test_path="tests/test_invoice.py",
-            test_code="def test_compute_total_empty(): assert compute_total([]) == 0",
-        )
-        assert spec.step_name == "compute_total"
-        assert "test_compute_total_empty" in spec.test_code
+class _StubAgent:
+    """Returns one RedTestSpec per call, mirroring EtchAgent's signature."""
 
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
 
-class TestEtchStage:
-    def test_etch_emits_events_per_step(self, tmp_path):
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.etch import EtchStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.artifacts.mapping import MappingArtifact
-
-        log = EventsLog(tmp_path / "events.jsonl")
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=MappingArtifact(project_id="p1"),
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
+    def run(self, *, step: str, scenario_context: dict) -> RedTestSpec:
+        self.calls.append((step, scenario_context))
+        return RedTestSpec(
+            step_name=step,
+            test_path=f"tests/{step}.py",
+            test_code=f"def test_{step}(): pass\n",
         )
 
-        # Stub agent that returns 2 red tests
-        class StubAgent:
-            def __init__(self, specs):
-                self.specs = specs
-            def run(self, *, step, scenario_context):
-                return self.specs.pop(0)
 
-        from mage.agents.etch import RedTestSpec
-        specs = [
-            RedTestSpec(step_name="s1", test_path="t1.py", test_code="def test_x(): assert False"),
-            RedTestSpec(step_name="s2", test_path="t2.py", test_code="def test_y(): assert False"),
-        ]
+def _context(tmp_path):
+    from mage.orchestration.nodes import PipelineContext
+    from mage.artifacts.mapping import MappingArtifact
 
-        stage = EtchStage(log, agent=StubAgent(specs))
-        stage._run(ctx)
+    return PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(project_id="p"),
+        events_log=EventsLog(tmp_path / "events.jsonl"),
+        plan_path=tmp_path / "plan.md",
+        iteration=0,
+    )
 
-        events = log.read_all()
-        types = [e.event_type.value for e in events]
-        assert types.count("etch_started") == 1
-        assert types.count("etch_red_confirmed") == 2  # one per step
-        assert types.count("etch_completed") == 1
+
+def test_run_scenario_emits_one_increment_per_step(tmp_path):
+    ctx = _context(tmp_path)
+    agent = _StubAgent()
+    stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
+    target = ScenarioTarget(
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["seed", "grow", "harvest"],
+    )
+
+    increments = stage.run_scenario(ctx, target)
+
+    assert [inc.index for inc in increments] == [0, 1, 2]
+    assert [inc.step for inc in increments] == ["seed", "grow", "harvest"]
+    assert [inc.red_test_path for inc in increments] == [
+        "tests/seed.py",
+        "tests/grow.py",
+        "tests/harvest.py",
+    ]
+    types = [e.event_type.value for e in ctx.events_log.read_all()]
+    assert types.count("etch_started") == 1
+    assert types.count("etch_red_confirmed") == 3
+    assert types.count("etch_completed") == 3
+
+
+def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
+    ctx = _context(tmp_path)
+    agent = _StubAgent()
+    stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
+    target = ScenarioTarget(
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["only"],
+    )
+
+    stage.run_scenario(ctx, target)
+
+    assert agent.calls == [("only", {"sub_bid": "00001-0001"})]
