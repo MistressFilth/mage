@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+from typing import Any, Callable
 
 from mage.artifacts.verdict import (
     DimensionSummary,
@@ -32,33 +33,36 @@ def default_reviewer_registry() -> dict[str, type[ReviewerAgent]]:
     }
 
 
-def feature_reviewer_registry() -> list[ReviewerAgent]:
-    """Return the end-of-feature Inspect reviewers (7 from Plan 3 + cross_scenario).
+def feature_reviewer_registry(
+    *,
+    model: Any | None = None,
+    model_factory: Callable[[], Any] | None = None,
+) -> list[ReviewerAgent]:
+    """Build the end-of-feature reviewer set with an injected model.
 
-    Distinct from default_reviewer_registry (which is the Inscribe 7-reviewer set).
-    Both share dimension names for the 7 original; cross_scenario is added here.
+    Exactly one of ``model`` or ``model_factory`` is required. A factory is useful
+    for providers that require an independent model instance per agent. Reviewers
+    are rebuilt on every call so host/model changes cannot be hidden by process-wide
+    cached agents.
     """
-    if not getattr(feature_reviewer_registry, "_cache", None):
-        from pydantic_ai.models.test import TestModel
+    if (model is None) == (model_factory is None):
+        raise ValueError("provide exactly one of model or model_factory")
 
-        from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+    from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
 
-        # Use a TestModel placeholder — InspectFeatureStage will inject real models
-        # based on host config in production. Tests pass canned TestModels.
-        # (A bare MagicMock would fail pydantic_ai's model-name validation.)
-        model = TestModel()
+    def next_model() -> Any:
+        return model_factory() if model_factory is not None else model
 
-        feature_reviewer_registry._cache = [
-            SpecComplianceReviewer(model=model),
-            ScenarioClarityReviewer(model=model),
-            StepGrammarReviewer(model=model),
-            TestabilityReviewer(model=model),
-            DeterminismReviewer(model=model),
-            NamingIdiomReviewer(model=model),
-            LifecycleTagsReviewer(model=model),
-            CrossScenarioReviewer(model=model),
-        ]
-    return list(feature_reviewer_registry._cache)
+    return [
+        SpecComplianceReviewer(model=next_model()),
+        ScenarioClarityReviewer(model=next_model()),
+        StepGrammarReviewer(model=next_model()),
+        TestabilityReviewer(model=next_model()),
+        DeterminismReviewer(model=next_model()),
+        NamingIdiomReviewer(model=next_model()),
+        LifecycleTagsReviewer(model=next_model()),
+        CrossScenarioReviewer(model=next_model()),
+    ]
 
 
 def aggregate_verdicts(

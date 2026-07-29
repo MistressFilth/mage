@@ -94,7 +94,9 @@ def test_aggregate_stores_findings_count():
 
 class TestFeatureReviewerRegistry:
     def test_feature_reviewer_registry_has_eight_dimensions(self):
-        registry = feature_reviewer_registry()
+        from pydantic_ai.models.test import TestModel
+
+        registry = feature_reviewer_registry(model=TestModel())
         dims = sorted(r.dimension for r in registry)
         assert dims == sorted([
             "cross_scenario",
@@ -106,3 +108,18 @@ class TestFeatureReviewerRegistry:
             "step_grammar",
             "testability",
         ])
+
+    def test_feature_reviewer_registry_uses_factory_without_caching(self):
+        from pydantic_ai.models.test import TestModel
+
+        calls = []
+
+        def factory():
+            calls.append(True)
+            return TestModel()
+
+        first = feature_reviewer_registry(model_factory=factory)
+        second = feature_reviewer_registry(model_factory=factory)
+
+        assert len(calls) == 16
+        assert first[0] is not second[0]
