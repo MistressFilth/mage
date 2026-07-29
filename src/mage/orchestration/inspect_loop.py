@@ -135,11 +135,16 @@ class InspectLoopStage:
 
         # 3. Route findings. Route is now an explicit field; no prefix parsing.
         spec_route: InspectRoute | None = None
+        spec_finding = None
         code_count = 0
         for f in verdict.findings:
             route: InspectRoute = f.route
             if route == "spec":
                 spec_route = "spec"
+                # Track the first spec-route finding so the emit below can
+                # quote its issue text. Latest finding wins if the reviewer
+                # emits multiple spec findings on the same increment.
+                spec_finding = f
             elif route == "code":
                 code_count += 1
             elif route == "cosmetic":
@@ -186,6 +191,27 @@ class InspectLoopStage:
             )
 
         if spec_route == "spec":
+            # Emit a SCENARIO_REVISION_REQUESTED event before returning the
+            # route so the DisciplineStage handler can call begin_revision.
+            # The runner (or the graph shim) translates this "spec" route
+            # into ScenarioInspectHalted; the event is the discipline hook
+            # for that halt path.
+            reason = (
+                getattr(spec_finding, "issue", None)
+                if spec_finding is not None
+                else "spec-route finding"
+            )
+            self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.SCENARIO_REVISION_REQUESTED,
+                    payload={
+                        "sub_bid": target.sub_bid,
+                        "reason": str(reason) if reason else "spec-route finding",
+                        "originating_stage": "inspect_loop",
+                    },
+                )
+            )
             return "spec"
         if code_count:
             return "code"
