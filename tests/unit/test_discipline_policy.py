@@ -109,3 +109,23 @@ def test_p2_release_clears_lock(tmp_path):
     release_cycle_lock(ctx)
     assert ctx.current_sub_bid is None
     acquire_cycle_lock(ctx, "B")  # no raise
+
+from mage.orchestration.discipline.policy import guard_automation_entry
+from mage.orchestration.exceptions import NotApprovedForAutomation
+
+
+def test_p3_passes_when_approved():
+    s = _scenario("A", LifecycleStatus.APPROVED)
+    guard_automation_entry(s)
+
+
+def test_p3_raises_when_inscribing():
+    s = _scenario("A", LifecycleStatus.INSCRIBING)
+    with pytest.raises(NotApprovedForAutomation):
+        guard_automation_entry(s)
+
+
+def test_p3_raises_when_live():
+    s = _scenario("A", LifecycleStatus.LIVE)
+    with pytest.raises(NotApprovedForAutomation):
+        guard_automation_entry(s)
