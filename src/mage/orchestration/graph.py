@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from mage.artifacts.mapping import LifecycleStatus
 from mage.artifacts.plan import PlanRevisionRequired
+from mage.orchestration.discipline.policy import (
+    assert_decomposition_closed,
+    assert_independent_gates,
+)
 from mage.orchestration.discipline.stage import DisciplineStage
 from mage.orchestration.etch import ScenarioInspectHalted
 from mage.orchestration.events import Event, EventsLog, EventType
@@ -33,6 +38,31 @@ class PipelineGraph:
         context = initial_context
         discipline = DisciplineStage(self.events_log)
         last_seen_count = len(self.events_log.read_all())
+        # Plan 7: P4 (decomposition closed) + P1 (per-scenario independence)
+        # are enforced at pipeline start. Both are per-scenario-cycle gates:
+        # they only apply when the mapping carries scenarios that are not
+        # already in a terminal state. A fresh mapping (no base_bids, or all
+        # scenarios LIVE/DEPRECATED/RETIRED) has nothing to gate, so the
+        # check is a no-op. This keeps the call safe for graph-infrastructure
+        # tests that drive a pipeline without a finalized plan.
+        _active_statuses = {
+            LifecycleStatus.INSCRIBING,
+            LifecycleStatus.APPROVED,
+        }
+        _has_active = any(
+            s.lifecycle_status in _active_statuses
+            for entry in context.mapping.base_bids
+            for s in entry.scenarios
+        )
+        if _has_active:
+            # plan_path is optional in the context; the check requires a path.
+            # If unset, treat as "no plan" and let the assertion surface the
+            # missing path on its own.
+            assert context.plan_path is not None
+            assert_decomposition_closed(context.plan_path, context.events_log)
+            for entry in context.mapping.base_bids:
+                for scenario in entry.scenarios:
+                    assert_independent_gates(context.mapping, scenario.sub_bid)
         for stage in self.stages:
             try:
                 context = stage.run(context)

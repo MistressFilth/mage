@@ -31,6 +31,7 @@ import pytest
 # module, so re-importing after a patch would resolve to the patched
 # function.
 from mage.cli import _make_dry_run_runner as _REAL_DRY_RUN_RUNNER
+from mage.orchestration.events import EventsLog
 
 # ---------------------------------------------------------------------------
 # Fixture helpers
@@ -91,6 +92,15 @@ def _plant_fixture(
     # Empty placeholders. The pipeline needs both files to exist on disk.
     (project_dir / "plan.md").touch()
     (project_dir / "events.jsonl").touch()
+
+    # Plan 7: finalize the plan so the pipeline-start P4 check
+    # (assert_decomposition_closed) passes. The dry-run path stubs
+    # decomposition, so the plan must be finalized by the fixture.
+    from mage.artifacts.plan import PlanArtifact
+
+    plan_path = project_dir / "plan.md"
+    log = EventsLog(project_dir / "events.jsonl")
+    PlanArtifact.finalize(plan_path, "# e2e fixture plan\n", log)
 
     return project_dir
 
@@ -203,7 +213,6 @@ def test_mage_run_dry_run_completes_a_feature(
     """
     from mage.artifacts.mapping import MappingArtifact
     from mage.cli import main
-    from mage.orchestration.events import EventsLog
 
     project_dir = _plant_fixture(tmp_path, approved_sub_bid="00001-0001")
 

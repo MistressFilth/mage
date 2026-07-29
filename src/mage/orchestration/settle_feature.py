@@ -483,6 +483,14 @@ class SettleFeatureStage(StageNode):
         disposition: str,
     ) -> None:
         """Finalize one merge-ready feature using the selected disposition."""
+        # TODO(plan8): wire supersession detection. When Settle identifies that
+        # the merging feature supersedes a previously live scenario, this is
+        # the site that must emit a SCENARIO_SUPERSESSION_REQUESTED event so
+        # the DisciplineStage handler can call begin_supersession. The event
+        # is intentionally NOT emitted today because supersession detection
+        # itself is stubbed: firing unconditionally would corrupt the
+        # mapping whenever a feature is settled. The placeholder below
+        # documents the required payload shape and is a no-op.
         if disposition not in _VALID_DISPOSITIONS:
             raise ValueError(
                 f"invalid disposition {disposition!r}; "

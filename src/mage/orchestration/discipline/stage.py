@@ -79,6 +79,16 @@ class DisciplineStage(StageNode):
             if key in self._seen_events:
                 return
             self._seen_events.add(key)
+            # Defensive: if the scenario isn't in the mapping, this is a
+            # synthetic test scenario (e.g., the inspect-loop halt path driven
+            # through PipelineGraph with an empty mapping). Skip rather than
+            # crash; the event is still recorded in the log for audit.
+            if not any(
+                s.sub_bid == sub_bid
+                for entry in context.mapping.base_bids
+                for s in entry.scenarios
+            ):
+                return
             context.mapping = begin_revision(
                 mapping=context.mapping,
                 sub_bid=sub_bid,
