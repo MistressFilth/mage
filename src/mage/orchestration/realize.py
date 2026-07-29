@@ -1,9 +1,10 @@
 """RealizeStage: drives one increment of the inner TDD loop, with diff capture.
 
-Plan 6: this stage is no longer a StageNode. It no longer pulls
-carry-forward from the mapping itself (FeatureRunner passes it), and it now
-returns an `IncrementResult` so `InspectLoopStage.inspect_increment` can
-hand the diff to the reviewer without keyword-argument guesswork.
+Plan 6: this stage is no longer a StageNode. It now rebuilds the
+carry-forward and cross-scenario observations windows from the mapping's
+inspect_journal before calling the agent (R3 / R21). It returns an
+`IncrementResult` so `InspectLoopStage.inspect_increment` can hand the
+diff to the reviewer without keyword-argument guesswork.
 """
 
 from __future__ import annotations
@@ -15,11 +16,18 @@ from pathlib import Path
 from subprocess import CompletedProcess
 
 from mage.agents.realize import RealizeAgent
+from mage.artifacts.inspect import InspectJournalEntry
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
 
 CommandRunner = Callable[..., CompletedProcess[str]]
+
+# Spec R21: default window sizes. The spec describes these as
+# "host-configurable" but `HostConfig` does not yet expose them; when it
+# does, these constants become the field defaults.
+DEFAULT_PER_SCENARIO_WINDOW = 5
+DEFAULT_CROSS_SCENARIO_WINDOW = 3
 
 
 def _default_command_runner(command: list[str], *, cwd: Path) -> CompletedProcess[str]:
@@ -41,10 +49,48 @@ class RealizeStage:
         agent: RealizeAgent,
         *,
         command_runner: CommandRunner | None = None,
+        per_scenario_window: int = DEFAULT_PER_SCENARIO_WINDOW,
+        cross_scenario_window: int = DEFAULT_CROSS_SCENARIO_WINDOW,
     ) -> None:
         self.events_log = events_log
         self.agent = agent
         self.command_runner = command_runner or _default_command_runner
+        self.per_scenario_window = per_scenario_window
+        self.cross_scenario_window = cross_scenario_window
+
+    def _build_carry_forward(
+        self, context: PipelineContext, sub_bid: str
+    ) -> list[InspectJournalEntry]:
+        """Build the per-scenario carry-forward window (R3 / R21).
+
+        Pulls the last `per_scenario_window` entries from
+        `mapping.inspect_journal[sub_bid]`.
+        """
+        my_journal = context.mapping.inspect_journal.get(sub_bid, [])
+        return [
+            InspectJournalEntry.model_validate(e)
+            for e in my_journal[-self.per_scenario_window :]
+        ]
+
+    def _build_cross_scenario_observations(
+        self, context: PipelineContext, sub_bid: str
+    ) -> list[InspectJournalEntry]:
+        """Build the cross-scenario observations window (R3 / R21).
+
+        Takes the last `cross_scenario_window` entries from every OTHER
+        sub_bid in `mapping.inspect_journal`, sorts by timestamp descending,
+        and trims to `cross_scenario_window`.
+        """
+        other: list[InspectJournalEntry] = []
+        for other_sb, entries in context.mapping.inspect_journal.items():
+            if other_sb == sub_bid:
+                continue
+            other.extend(
+                InspectJournalEntry.model_validate(e)
+                for e in entries[-self.cross_scenario_window :]
+            )
+        other.sort(key=lambda e: e.timestamp, reverse=True)
+        return other[: self.cross_scenario_window]
 
     def run_increment(
         self,
@@ -56,17 +102,22 @@ class RealizeStage:
     ) -> IncrementResult:
         """Run the agent, compute the diff, return an IncrementResult.
 
-        `carry_forward` is unused on the runner side; the journal-windowing
-        logic that previously lived here moved to FeatureRunner so the runner
-        owns its carry-forward policy. The parameter is kept for a future
-        Plan 7/8 where the carry-forward may need override at the call site.
+        Builds the per-scenario carry-forward and cross-scenario observations
+        from the mapping's inspect_journal before invoking the agent. An
+        optional `carry_forward` override is reserved for tests / Plan 7+8.
         """
+        if carry_forward is None:
+            carry_forward = self._build_carry_forward(context, target.sub_bid)
+        cross_scenario = self._build_cross_scenario_observations(
+            context, target.sub_bid
+        )
+
         output = self.agent.run(
             step=increment.step,
             scenario_context={"sub_bid": target.sub_bid},
             red_test_path=increment.red_test_path,
-            carry_forward=carry_forward or [],
-            cross_scenario_observations=[],
+            carry_forward=carry_forward,
+            cross_scenario_observations=cross_scenario,
         )
         diff = ""
         if output.files_changed:
