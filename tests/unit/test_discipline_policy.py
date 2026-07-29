@@ -11,8 +11,15 @@ from mage.orchestration.discipline.policy import assert_independent_gates
 from mage.orchestration.exceptions import ForwardOrderViolation
 
 
-def _scenario(sub_bid: str, status: LifecycleStatus) -> ScenarioEntry:
-    return ScenarioEntry(sub_bid=sub_bid, scenario_text_hash="h", lifecycle_status=status)
+def _scenario(
+    sub_bid: str, status: LifecycleStatus, supersedes: str | None = None
+) -> ScenarioEntry:
+    return ScenarioEntry(
+        sub_bid=sub_bid,
+        scenario_text_hash="h",
+        lifecycle_status=status,
+        supersedes=supersedes,
+    )
 
 
 def _mapping(scenarios: list[ScenarioEntry]) -> MappingArtifact:
@@ -208,3 +215,59 @@ from mage.artifacts.bid import Base85BID
 
 def _make_base85(v: str) -> Base85BID:
     return Base85BID(value=v)
+
+
+from mage.orchestration.discipline.policy import (
+    begin_supersession,
+    complete_supersession,
+)
+
+
+def test_supersession_begin_sets_supersedes_link_on_new():
+    # old in one base_bid, new in another
+    new_entry = BaseBIDEntry(base_bid="00001", behavior_name="b1", behavior_description="d1",
+                             scenarios=[_scenario("N", LifecycleStatus.INSCRIBING)])
+    m = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            BaseBIDEntry(base_bid="00000", behavior_name="b0", behavior_description="d0",
+                         scenarios=[_scenario("O", LifecycleStatus.LIVE)]),
+            new_entry,
+        ],
+    )
+    out = begin_supersession(m, "O", "N", "new spec", _now())
+    new = next(s for entry in out.base_bids for s in entry.scenarios if s.sub_bid == "N")
+    assert new.supersedes == "O"
+
+
+def test_supersession_complete_flips_old_to_deprecated():
+    new_entry = BaseBIDEntry(base_bid="00001", behavior_name="b1", behavior_description="d1",
+                             scenarios=[_scenario("N", LifecycleStatus.APPROVED, supersedes="O")])
+    m = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            BaseBIDEntry(base_bid="00000", behavior_name="b0", behavior_description="d0",
+                         scenarios=[_scenario("O", LifecycleStatus.LIVE)]),
+            new_entry,
+        ],
+    )
+    out = complete_supersession(m, "N", _now())
+    old = next(s for entry in out.base_bids for s in entry.scenarios if s.sub_bid == "O")
+    assert old.lifecycle_status == LifecycleStatus.DEPRECATED
+    assert old.superseded_by == "N"
+
+
+def test_supersession_complete_writes_reversion_log_entry():
+    new_entry = BaseBIDEntry(base_bid="00001", behavior_name="b1", behavior_description="d1",
+                             scenarios=[_scenario("N", LifecycleStatus.APPROVED, supersedes="O")])
+    m = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            BaseBIDEntry(base_bid="00000", behavior_name="b0", behavior_description="d0",
+                         scenarios=[_scenario("O", LifecycleStatus.LIVE)]),
+            new_entry,
+        ],
+    )
+    out = complete_supersession(m, "N", _now())
+    old_entry = next(e for e in out.base_bids if any(s.sub_bid == "O" for s in e.scenarios))
+    assert any(log.reason.startswith("superseded by") for log in old_entry.reversion_log)

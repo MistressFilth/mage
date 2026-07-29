@@ -154,3 +154,81 @@ def begin_revision(
     if not matched:
         raise ForwardOrderViolation(f"sub_bid {sub_bid!r} not found in mapping; cannot revise")
     return mapping.model_copy(update={"base_bids": new_entries})
+
+
+# Supersession (full only in v1)
+def begin_supersession(
+    mapping: MappingArtifact,
+    old_sub_bid: str,
+    new_sub_bid: str,
+    reason: str,
+    timestamp: datetime,
+) -> MappingArtifact:
+    """Mark new scenario as superseding old. Old stays live until new reaches live."""
+    new_entries: list[BaseBIDEntry] = []
+    for entry in mapping.base_bids:
+        new_scenarios = [
+            (s.model_copy(update={"supersedes": old_sub_bid}) if s.sub_bid == new_sub_bid else s)
+            for s in entry.scenarios
+        ]
+        if any(s.sub_bid == old_sub_bid for s in entry.scenarios):
+            new_log = [
+                *entry.reversion_log,
+                ReversionLogEntry(
+                    sub_bid=old_sub_bid,
+                    timestamp=timestamp,
+                    reason=reason,
+                    originating_stage="supersession",
+                ),
+            ]
+            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios, "reversion_log": new_log}))
+        else:
+            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios}))
+    return mapping.model_copy(update={"base_bids": new_entries})
+
+
+def complete_supersession(
+    mapping: MappingArtifact,
+    new_sub_bid: str,
+    timestamp: datetime,
+) -> MappingArtifact:
+    """Flip old scenario to DEPRECATED when new scenario reaches LIVE."""
+    # Find the new scenario's supersedes target
+    target_old: str | None = None
+    for entry in mapping.base_bids:
+        for s in entry.scenarios:
+            if s.sub_bid == new_sub_bid:
+                target_old = s.supersedes
+                break
+        if target_old:
+            break
+    if target_old is None:
+        raise ForwardOrderViolation(f"new sub_bid {new_sub_bid!r} has no supersedes link")
+
+    new_entries: list[BaseBIDEntry] = []
+    for entry in mapping.base_bids:
+        new_scenarios: list[ScenarioEntry] = []
+        for s in entry.scenarios:
+            if s.sub_bid == target_old:
+                new_scenarios.append(
+                    s.model_copy(update={
+                        "lifecycle_status": LifecycleStatus.DEPRECATED,
+                        "superseded_by": new_sub_bid,
+                    })
+                )
+            else:
+                new_scenarios.append(s)
+        if any(s.sub_bid == target_old for s in entry.scenarios):
+            new_log = [
+                *entry.reversion_log,
+                ReversionLogEntry(
+                    sub_bid=target_old,
+                    timestamp=timestamp,
+                    reason=f"superseded by {new_sub_bid}",
+                    originating_stage="supersession_complete",
+                ),
+            ]
+            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios, "reversion_log": new_log}))
+        else:
+            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios}))
+    return mapping.model_copy(update={"base_bids": new_entries})
