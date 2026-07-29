@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from mage.artifacts.plan import PlanRevisionRequired
+from mage.orchestration.discipline.stage import DisciplineStage
 from mage.orchestration.etch import ScenarioInspectHalted
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.inspect_feature import InspectFeatureHalted
@@ -30,9 +31,14 @@ class PipelineGraph:
         from mage.orchestration.inscribe import ReviewBudgetExhausted
 
         context = initial_context
+        discipline = DisciplineStage(self.events_log)
+        last_seen_count = len(self.events_log.read_all())
         for stage in self.stages:
             try:
                 context = stage.run(context)
+                last_seen_count = self._dispatch_new_events(
+                    context, discipline, last_seen_count
+                )
             except ScenarioInspectHalted as e:
                 # All halts now share the persistence path. The graph stops
                 # cleanly so a feature halt (or any other halt) cannot leak
@@ -43,6 +49,9 @@ class PipelineGraph:
                 if context.project_dir is not None and context.project_dir.exists():
                     context.mapping.save(context.project_dir / "mapping.yaml")
                 self._persist_halt(context, e)
+                last_seen_count = self._dispatch_new_events(
+                    context, discipline, last_seen_count
+                )
                 raise SystemExit(0) from e
             except InspectFeatureHalted as e:
                 # InspectFeatureStage is the sole owner of the halt event. The
@@ -53,17 +62,38 @@ class PipelineGraph:
                 )
                 if context.project_dir is not None and context.project_dir.exists():
                     context.mapping.save(context.project_dir / "mapping.yaml")
+                last_seen_count = self._dispatch_new_events(
+                    context, discipline, last_seen_count
+                )
                 raise SystemExit(0) from e
             except ReviewBudgetExhausted as e:
                 # I1: review-budget halts the same way as plan-revision halts.
                 # The InscribeStage already emitted REVIEW_HALT_PERSISTED and
                 # the halt is visible in the events log; we just need to stop
                 # the graph cleanly.
+                last_seen_count = self._dispatch_new_events(
+                    context, discipline, last_seen_count
+                )
                 raise SystemExit(0) from e
             except PlanRevisionRequired as e:
                 self._persist_halt(context, e)
+                last_seen_count = self._dispatch_new_events(
+                    context, discipline, last_seen_count
+                )
                 raise SystemExit(0) from e
         return context
+
+    def _dispatch_new_events(
+        self,
+        context: PipelineContext,
+        discipline: DisciplineStage,
+        last_seen_count: int,
+    ) -> int:
+        """Send events emitted since the previous stage to DisciplineStage."""
+        current_events = self.events_log.read_all()
+        for event in current_events[last_seen_count:]:
+            discipline._handle_event(context, event)
+        return len(current_events)
 
     def _persist_halt(self, context: PipelineContext, halt: BaseException) -> None:
         """Persist halt record (event + state).
