@@ -22,6 +22,13 @@ class DisciplineStage(StageNode):
 
     def __init__(self, events_log: EventsLog) -> None:
         super().__init__(events_log)
+        # Per-instance idempotency: a set of (event_type, sub_bid) keys recording
+        # which inbound events have already been dispatched. A replayed or
+        # re-emitted event for the same scenario is short-circuited so that
+        # resume from the events log does not duplicate reversion log entries
+        # or audit emissions, nor regress a re-approved scenario back to
+        # INSCRIBING.
+        self._seen_events: set[tuple[EventType, str]] = set()
 
     def _run(self, context: PipelineContext) -> PipelineContext:
         """No proactive work — DisciplineStage reacts to events.
@@ -36,17 +43,42 @@ class DisciplineStage(StageNode):
         """Public hook for the orchestrator to invoke on each emitted event.
 
         Routes events to the matching policy method. Idempotent on repeat
-        emissions of the same event for the same scenario.
+        emissions of the same event for the same scenario: a per-instance set
+        keyed by (event_type, sub_bid) records the first dispatch and
+        short-circuits subsequent identical dispatches. Resumed or replayed
+        event logs therefore neither duplicate reversion log entries nor
+        regress a re-approved scenario back to INSCRIBING.
+
+        The SCENARIO_APPROVED handler additionally correlates the cycle-lock
+        release to the payload's sub_bid: a stale or delayed approval for a
+        different scenario must not clear a lock currently held by another.
         """
         et = event.event_type
         payload = event.payload
 
         if et == EventType.SCENARIO_APPROVED:
-            release_cycle_lock(context)
+            payload_sub_bid = payload.get("sub_bid") or ""
+            key = (et, payload_sub_bid)
+            if key in self._seen_events:
+                return
+            self._seen_events.add(key)
+            # Correlate the lock release to the scenario being approved so a
+            # stale or delayed SCENARIO_APPROVED does not clear a lock
+            # currently held by a different sub_bid. Defensive: if no lock
+            # is held, release anyway (no-op on an already-cleared lock).
+            if (
+                context.current_sub_bid is None
+                or context.current_sub_bid == payload_sub_bid
+            ):
+                release_cycle_lock(context)
             return
 
         if et == EventType.SCENARIO_REVISION_REQUESTED:
             sub_bid = payload["sub_bid"]
+            key = (et, sub_bid)
+            if key in self._seen_events:
+                return
+            self._seen_events.add(key)
             context.mapping = begin_revision(
                 mapping=context.mapping,
                 sub_bid=sub_bid,
@@ -59,10 +91,15 @@ class DisciplineStage(StageNode):
             return
 
         if et == EventType.SCENARIO_SUPERSESSION_REQUESTED:
+            new_sub_bid = payload["new_sub_bid"]
+            key = (et, new_sub_bid)
+            if key in self._seen_events:
+                return
+            self._seen_events.add(key)
             context.mapping = begin_supersession(
                 mapping=context.mapping,
                 old_sub_bid=payload["old_sub_bid"],
-                new_sub_bid=payload["new_sub_bid"],
+                new_sub_bid=new_sub_bid,
                 reason=payload.get("reason", ""),
                 timestamp=event.timestamp,
             )
@@ -72,6 +109,10 @@ class DisciplineStage(StageNode):
             new_sub_bid = payload.get("sub_bid")
             if new_sub_bid is None:
                 return
+            key = (et, new_sub_bid)
+            if key in self._seen_events:
+                return
+            self._seen_events.add(key)
             # Check if this scenario supersedes another
             for entry in context.mapping.base_bids:
                 for s in entry.scenarios:
