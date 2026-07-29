@@ -72,6 +72,26 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_show_parser.add_argument("feature_id")
     inspect_show_parser.add_argument("--project-dir", type=Path, default=argparse.SUPPRESS)
 
+    # mage settle <subcommand>
+    settle_parser = subparsers.add_parser("settle", help="Settle operations")
+    settle_subparsers = settle_parser.add_subparsers(dest="settle_command", required=True)
+
+    # mage settle run
+    settle_run_parser = settle_subparsers.add_parser(
+        "run", help="Run SettleFeature for a feature"
+    )
+    settle_run_parser.add_argument("feature_id")
+    settle_run_parser.add_argument(
+        "--disposition",
+        type=str,
+        choices=["merged", "pr_opened", "kept", "discarded"],
+        default=None,
+        help="Non-interactive: choose merged|pr_opened|kept|discarded",
+    )
+    settle_run_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+
     return parser
 
 
@@ -280,6 +300,73 @@ def cmd_review_resume(args):
     print(f"Run: mage run --project-dir {project_dir}")
 
 
+def cmd_settle_run(args):
+    """Run SettleFeature for a feature. Interactive mode prompts for 4-option menu."""
+    from mage.orchestration.events import EventsLog
+    from mage.orchestration.nodes import PipelineContext
+    from mage.orchestration.settle_feature import SettleFeatureStage
+
+    project_dir: Path = args.project_dir
+    log = EventsLog(project_dir / "events.jsonl")
+
+    # Load mapping (default to empty if missing — matches cmd_verify pattern).
+    mapping_path = project_dir / "mapping.yaml"
+    if mapping_path.exists():
+        mapping = MappingArtifact.load(mapping_path)
+    else:
+        mapping = MappingArtifact(
+            schema_version=1,
+            project_id=project_dir.name,
+            base_bids=[],
+        )
+
+    ctx = PipelineContext(
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+        plan_path=project_dir / "plan.md",
+        iteration=0,
+    )
+
+    valid_dispositions = ("merged", "pr_opened", "kept", "discarded")
+    disposition = args.disposition
+
+    if disposition is None:
+        # Interactive mode: 4-option menu.
+        print("Choose a disposition:")
+        print("  1. merged")
+        print("  2. pr_opened")
+        print("  3. kept")
+        print("  4. discarded")
+        choice = input("Enter choice (1-4): ")
+        menu = {"1": "merged", "2": "pr_opened", "3": "kept", "4": "discarded"}
+        if choice not in menu:
+            print(f"Invalid choice {choice!r}", file=sys.stderr)
+            sys.exit(2)
+        disposition = menu[choice]
+
+    # argparse `choices=` already validates non-interactive values, but be
+    # explicit in case the function is called programmatically.
+    if disposition not in valid_dispositions:
+        print(
+            f"mage settle run: error: invalid disposition {disposition!r}; "
+            f"must be one of {list(valid_dispositions)}",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    if disposition == "discarded":
+        confirm = input("Type 'discard' to confirm: ")
+        if confirm != "discard":
+            print("Discard cancelled", file=sys.stderr)
+            sys.exit(2)
+
+    stage = SettleFeatureStage(log)
+    stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
+    print(f"Settle complete for {args.feature_id}: {disposition}")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -332,6 +419,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "review" and args.review_command == "resume":
         cmd_review_resume(args)
         return 0
+    if args.command == "settle" and args.settle_command == "run":
+        return cmd_settle_run(args)
     parser.print_help()
     raise SystemExit(1)
 

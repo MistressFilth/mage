@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -261,3 +262,44 @@ class TestInspectShow:
         assert "feat-1" in out
         assert "ready_to_merge" in out or "Ready" in out
         assert rc == 0
+
+
+class TestSettleRun:
+    def test_settle_run_non_interactive(self, tmp_path, capsys):
+        from mage.orchestration.events import EventsLog
+        from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+        from mage.cli import main
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        log = EventsLog(project / "events.jsonl")
+
+        # Build a ready-to-merge InspectArtifact
+        inspect_dir = project / ".haileris" / "inspect" / "feat-1"
+        inspect_dir.mkdir(parents=True)
+        artifact = InspectArtifactContent(
+            feature_id="feat-1",
+            inspected_at=datetime.now(UTC),
+            iteration=1,
+            eof_max_iterations=3,
+            scenarios=[],
+            per_reviewer=[],
+            critical=[],
+            important=[],
+            minor=[],
+            cross_scenario=[],
+            ready_to_merge=True,
+            ledger_markdown="",
+        )
+        InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+
+        rc = main(["settle", "run", "feat-1", "--disposition", "kept", "--project-dir", str(project)])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "settle" in out.lower() or "feat-1" in out
+
+        events = log.read_all()
+        types = [e.event_type.value for e in events]
+        assert "settle_feature_finalized" in types
+        disposal_events = [e for e in events if e.event_type.value == "settle_feature_finalized"]
+        assert disposal_events[0].payload["disposition"] == "kept"
