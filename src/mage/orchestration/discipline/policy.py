@@ -14,6 +14,7 @@ from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
     MappingArtifact,
+    PostLiveRevisionEntry,
     ReversionLogEntry,
     ScenarioEntry,
 )
@@ -22,6 +23,7 @@ from mage.orchestration.exceptions import (
     CycleAlreadyInProgress,
     DecompositionOpen,
     ForwardOrderViolation,
+    ModelCannotApplyCosmetic,
     NotApprovedForAutomation,
 )
 
@@ -232,3 +234,28 @@ def complete_supersession(
         else:
             new_entries.append(entry.model_copy(update={"scenarios": new_scenarios}))
     return mapping.model_copy(update={"base_bids": new_entries})
+
+
+from mage.artifacts.inspect import CosmeticItem
+
+
+# Cosmetic gate (parent v2 design line 327)
+def guard_cosmetic_application(
+    source: str,
+    item: CosmeticItem,
+    human_approver: str | None,
+) -> PostLiveRevisionEntry:
+    """Build a PostLiveRevisionEntry. Reject model source; require human approver."""
+    if source not in ("human", "human-authorized") or not human_approver:
+        raise ModelCannotApplyCosmetic(
+            f"cosmetic application source={source!r} with approver={human_approver!r} "
+            f"rejected; live-scenario text changes require human authorization"
+        )
+    from datetime import datetime, timezone
+    return PostLiveRevisionEntry(
+        sub_bid=item.sub_bid,
+        timestamp=datetime.now(timezone.utc),
+        human_approver=human_approver,
+        before_hash="",
+        after_hash="",
+    )
