@@ -1627,13 +1627,13 @@ def test_resume_at_mid_scenario_starts_at_cursor_iteration():
     runner.run(_ctx(), [t1], cursor=cursor)
 
     # increment 0 was skipped (completed before halt); increment 1 starts at iter 3
-    assert ctx_iterations := [i for i in inspect_iterations] == [3]
+    assert [i for i in inspect_iterations] == [3]
 
 
 def test_cursor_cleared_after_clean_scenario():
     t1 = _target()
     runner = FeatureRunner(
-        etch=type("E", (), {"run_scenario": lambda self, c, t: [Increment(0, "s", "t.py", "")]})(),
+        etch=type("E", (), {"run_scenario": lambda self, c, t: [Increment(index=0, step="s", red_test_path="t.py", red_test_code="")]})(),
         realize=type("R", (), {"run_increment": lambda self, c, *, target, increment, carry_forward=None: IncrementResult([], "", "")})(),
         inspect_loop=type("I", (), {"inspect_increment": lambda self, c, *, target, increment, result: None})(),
         per_loop_max_iterations=8,
