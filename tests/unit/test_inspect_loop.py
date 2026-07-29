@@ -1,451 +1,185 @@
-"""Tests for InspectLoopStage (mechanical + IncrementQualityReviewer + R20 routing)."""
+"""Tests for InspectLoopStage.inspect_increment."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from typing import Literal
 
 import pytest
+from pydantic import BaseModel, ConfigDict
+
+from mage.artifacts.mapping import MappingArtifact
+from mage.orchestration.events import EventsLog
+from mage.orchestration.inspect_loop import InspectLoopStage
+from mage.orchestration.nodes import PipelineContext
+from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
+from mage.verification.host_overrides import HostConfig
+from mage.verification.mechanical import CheckResult
 
 
-class TestInspectLoopStage:
-    def test_passes_when_mechanical_and_quality_clean(self, tmp_path):
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.verification.host_overrides import HostConfig
+def _context(tmp_path) -> PipelineContext:
+    return PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(project_id="p"),
+        events_log=EventsLog(tmp_path / "events.jsonl"),
+        plan_path=tmp_path / "plan.md",
+        iteration=0,
+    )
 
-        log = EventsLog(tmp_path / "events.jsonl")
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=MappingArtifact(project_id="p1"),
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
-        )
 
-        class AlwaysPassMech:
-            def verify(self, scope):
-                return []
+class _Finding(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-        class CleanReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
-                return ReviewerVerdict(
-                    dimension="increment_quality",
-                    outcome="pass",
-                    draft_hash="",
-                    reviewed_at=datetime.now(UTC),
-                    reviewer_id="increment_quality@v1",
-                    findings=[],
-                )
+    id: str
+    location: str
+    issue: str
+    suggestion: str
+    severity: str
+    route: Literal["spec", "code", "cosmetic"]
 
-        stage = InspectLoopStage(
-            log,
-            mechanical_verifier=AlwaysPassMech(),
-            increment_quality_reviewer=CleanReviewer(),
-            host_config=HostConfig(),
-        )
-        stage._run_single_increment(
-            ctx,
-            sub_bid="00000-0",
-            increment_diff="",
-            new_test="",
-            scenario_steps=[],
-        )
 
-        types = [e.event_type.value for e in log.read_all()]
-        assert "inspect_loop_started" in types
-        assert "inspect_loop_passed" in types
-        assert "inspect_loop_completed" in types
+class _Verdict(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-    def test_halts_on_spec_route_finding(self, tmp_path):
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.orchestration.etch import ScenarioInspectHalted
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.verification.host_overrides import HostConfig
+    dimension: str
+    findings: list[_Finding]
 
-        log = EventsLog(tmp_path / "events.jsonl")
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=MappingArtifact(project_id="p1"),
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
-        )
 
-        class AlwaysPassMech:
-            def verify(self, scope):
-                return []
+class _Reviewer:
+    def __init__(self, verdict: _Verdict) -> None:
+        self._verdict = verdict
+        self.calls: list[dict] = []
 
-        @dataclass
-        class FindingWithRoute:
-            id: str
-            severity: str
-            location: str
-            issue: str
-            rationale: str
-            suggestion: str
-            citations: list
-            route: str = "spec"
+    def run(self, **kwargs) -> _Verdict:
+        self.calls.append(kwargs)
+        return self._verdict
 
-        @dataclass
-        class VerdictWithRoute:
-            dimension: str = "increment_quality"
-            outcome: str = "fail"
-            draft_hash: str = ""
-            reviewed_at: datetime | None = None
-            reviewer_id: str = "increment_quality@v1"
-            findings: list | None = None
-            notes: str = ""
 
-            def __post_init__(self):
-                if self.reviewed_at is None:
-                    self.reviewed_at = datetime.now(UTC)
-                if self.findings is None:
-                    self.findings = []
+class _Mechanical:
+    def __init__(self, results: list[CheckResult]) -> None:
+        self._results = results
+        self.scopes: list[str] = []
 
-        class SpecRouteReviewerWithRoute:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
-                return VerdictWithRoute(
-                    findings=[
-                        FindingWithRoute(
-                            id="f-1",
-                            severity="major",
-                            location="src/foo.py",
-                            issue="Spec is wrong",
-                            rationale="Scenario doesn't describe this",
-                            suggestion="Halt",
-                            citations=[],
-                            route="spec",
-                        )
-                    ]
-                )
+    def verify(self, *, scope: str) -> list[CheckResult]:
+        self.scopes.append(scope)
+        return self._results
 
-        stage = InspectLoopStage(
-            log,
-            mechanical_verifier=AlwaysPassMech(),
-            increment_quality_reviewer=SpecRouteReviewerWithRoute(),
-            host_config=HostConfig(),
-        )
 
-        with pytest.raises(ScenarioInspectHalted):
-            stage._run_single_increment(
-                ctx,
-                sub_bid="00000-0",
-                increment_diff="",
-                new_test="",
-                scenario_steps=[],
-            )
+def _target() -> ScenarioTarget:
+    return ScenarioTarget(
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["seed"],
+    )
 
-    def test_halts_on_mechanical_overflow(self, tmp_path):
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.orchestration.etch import ScenarioInspectHalted
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.verification.host_overrides import HostConfig
 
-        log = EventsLog(tmp_path / "events.jsonl")
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=MappingArtifact(project_id="p1"),
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=8,
-        )
+def _increment() -> Increment:
+    return Increment(
+        index=0, step="seed", red_test_path="t.py", red_test_code="..."
+    )
 
-        class AlwaysFailMech:
-            def verify(self, scope):
-                from mage.verification.mechanical import MechanicalFinding
 
-                return [
-                    MechanicalFinding(
-                        check="tests_pass",
-                        severity="critical",
-                        location="tests/test_x.py",
-                        issue="Tests still failing",
-                        rationale="Will not converge",
-                    )
-                ]
+def test_clean_increment_returns_none(tmp_path):
+    ctx = _context(tmp_path)
+    reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[]))
+    mech = _Mechanical([])
+    stage = InspectLoopStage(
+        ctx.events_log,
+        mechanical_verifier=mech,
+        increment_quality_reviewer=reviewer,
+        host_config=HostConfig(test_runner_command=["pytest"]),
+    )
+    result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-        class NoopReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
-                raise AssertionError("reviewer must not run after mechanical failure")
+    route = stage.inspect_increment(
+        ctx, target=_target(), increment=_increment(), result=result
+    )
 
-        stage = InspectLoopStage(
-            log,
-            mechanical_verifier=AlwaysFailMech(),
-            increment_quality_reviewer=NoopReviewer(),
-            host_config=HostConfig(per_loop_max_iterations=8),
-        )
+    assert route is None
+    assert mech.scopes == ["increment"]
 
-        with pytest.raises(ScenarioInspectHalted):
-            stage._run_single_increment(
-                ctx,
-                sub_bid="00000-0",
-                increment_diff="",
-                new_test="",
-                scenario_steps=[],
-            )
 
-    def test_mechanical_finding_persisted_to_inspect_journal(self, tmp_path):
-        """Regression: mechanical-fail that doesn't halt must still leave an
-        entry in mapping.inspect_journal[sub_bid] (Finding 2 from review).
-        Without this, the next Realize prompt's recent_journal_window would
-        miss the mechanical feedback.
-        """
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.verification.host_overrides import HostConfig
-        from mage.verification.mechanical import MechanicalFinding
+def test_code_route_re_loops(tmp_path):
+    ctx = _context(tmp_path)
+    finding = _Finding(
+        id="f1",
+        location="a.py:1",
+        issue="naming",
+        suggestion="rename",
+        severity="major",
+        route="code",
+    )
+    reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[finding]))
+    mech = _Mechanical([])
+    stage = InspectLoopStage(
+        ctx.events_log,
+        mechanical_verifier=mech,
+        increment_quality_reviewer=reviewer,
+        host_config=HostConfig(test_runner_command=["pytest"]),
+    )
+    result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-        log = EventsLog(tmp_path / "events.jsonl")
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=MappingArtifact(project_id="p1"),
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
-        )
+    route = stage.inspect_increment(
+        ctx, target=_target(), increment=_increment(), result=result
+    )
 
-        class AlwaysFailMech:
-            def verify(self, scope):
-                return [
-                    MechanicalFinding(
-                        check="tests_pass",
-                        severity="critical",
-                        location="tests/test_x.py",
-                        issue="Tests still failing",
-                        rationale="Will not converge",
-                    )
-                ]
+    assert route == "code"
 
-        class CleanReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
-                return ReviewerVerdict(
-                    dimension="increment_quality",
-                    outcome="pass",
-                    draft_hash="",
-                    reviewed_at=datetime.now(UTC),
-                    reviewer_id="increment_quality@v1",
-                    findings=[],
-                )
 
-        # Budget high enough that the mechanical-fail returns to Realize
-        # without halting (the halt scenario is covered separately).
-        stage = InspectLoopStage(
-            log,
-            mechanical_verifier=AlwaysFailMech(),
-            increment_quality_reviewer=CleanReviewer(),
-            host_config=HostConfig(per_loop_max_iterations=8),
-        )
+def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
+    """Per GC-9: cosmetic is queued and does not re-loop. The runner must see
+    None for cosmetic-only passes, not "cosmetic", so the while loop breaks."""
+    ctx = _context(tmp_path)
+    finding = _Finding(
+        id="f1",
+        location="a.py:1",
+        issue="wording",
+        suggestion="tweak",
+        severity="minor",
+        route="cosmetic",
+    )
+    reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[finding]))
+    mech = _Mechanical([])
+    stage = InspectLoopStage(
+        ctx.events_log,
+        mechanical_verifier=mech,
+        increment_quality_reviewer=reviewer,
+        host_config=HostConfig(test_runner_command=["pytest"]),
+    )
+    result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-        stage._run_single_increment(
-            ctx,
-            sub_bid="00000-0",
-            increment_diff="",
-            new_test="",
-            scenario_steps=[],
-        )
+    route = stage.inspect_increment(
+        ctx, target=_target(), increment=_increment(), result=result
+    )
 
-        # The journal entry must be present even though we returned instead
-        # of halting.
-        sub_bid = "00000-0"
-        assert sub_bid in ctx.mapping.inspect_journal, (
-            f"expected mechanical finding persisted to inspect_journal[{sub_bid!r}], "
-            f"got keys: {list(ctx.mapping.inspect_journal.keys())}"
-        )
-        entries = ctx.mapping.inspect_journal[sub_bid]
-        assert len(entries) == 1
-        entry = entries[0]
-        assert entry["dimension"] == "mechanical"
-        assert entry["severity"] == "critical"
-        assert entry["route"] == "code"
-        assert entry["finding_id"] == "tests_pass"
-        assert entry["location"] == "tests/test_x.py"
-        assert entry["issue"] == "Tests still failing"
-        assert entry["rationale"] == "Will not converge"
-        assert entry["iteration"] == 1  # iteration was bumped from 0
+    assert route is None
+    cosmetic = ctx.mapping.feature_cosmetic_queue
+    assert len(cosmetic) == 1
 
-    def test_mechanical_check_result_list_is_adapted(self, tmp_path):
-        """Regression: Plan 1's MechanicalVerifier returns list[CheckResult],
-        not list[MechanicalFinding]. The adapter must translate so the
-        inspect journal entry has the expected fields (Finding 1 from review).
-        """
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.verification.host_overrides import HostConfig
-        from mage.verification.mechanical import CheckResult
 
-        log = EventsLog(tmp_path / "events.jsonl")
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=MappingArtifact(project_id="p1"),
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
-        )
+def test_spec_route_returns_spec(tmp_path):
+    ctx = _context(tmp_path)
+    finding = _Finding(
+        id="f1",
+        location="a.py:1",
+        issue="wrong contract",
+        suggestion="rewrite spec",
+        severity="critical",
+        route="spec",
+    )
+    reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[finding]))
+    mech = _Mechanical([])
+    stage = InspectLoopStage(
+        ctx.events_log,
+        mechanical_verifier=mech,
+        increment_quality_reviewer=reviewer,
+        host_config=HostConfig(test_runner_command=["pytest"]),
+    )
+    result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-        class PlanOneStyleMech:
-            """Returns list[CheckResult] (the real Plan 1 shape)."""
+    route = stage.inspect_increment(
+        ctx, target=_target(), increment=_increment(), result=result
+    )
 
-            def verify(self, scope):
-                return [
-                    CheckResult(name="gherkin-syntax", outcome="fail", detail="missing Then"),
-                    CheckResult(name="happy-path", outcome="pass", detail=None),
-                ]
-
-        class CleanReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
-                return ReviewerVerdict(
-                    dimension="increment_quality",
-                    outcome="pass",
-                    draft_hash="",
-                    reviewed_at=datetime.now(UTC),
-                    reviewer_id="increment_quality@v1",
-                    findings=[],
-                )
-
-        stage = InspectLoopStage(
-            log,
-            mechanical_verifier=PlanOneStyleMech(),
-            increment_quality_reviewer=CleanReviewer(),
-            host_config=HostConfig(per_loop_max_iterations=8),
-        )
-
-        stage._run_single_increment(
-            ctx,
-            sub_bid="00000-0",
-            increment_diff="",
-            new_test="",
-            scenario_steps=[],
-        )
-
-        # Adapter rules:
-        # - CheckResult with outcome == "fail" → MechanicalFinding
-        #   (severity="critical", check=name, issue=detail, rationale=detail)
-        # - CheckResult with outcome == "pass" → dropped
-        sub_bid = "00000-0"
-        entries = ctx.mapping.inspect_journal[sub_bid]
-        assert len(entries) == 1, f"expected 1 entry (pass dropped), got {entries}"
-        entry = entries[0]
-        assert entry["finding_id"] == "gherkin-syntax"
-        assert entry["severity"] == "critical"
-        assert entry["dimension"] == "mechanical"
-        assert entry["issue"] == "missing Then"
-        assert entry["rationale"] == "missing Then"
-
-    def test_real_mechanical_verifier_wires_via_verify(self, tmp_path):
-        """Important 3 regression: the production MechanicalVerifier exposes
-        `verify(...)` (not `run(...)`). Wiring the real verifier into
-        InspectLoopStage._run_single_increment must not AttributeError.
-        The find/replace was applied in production code; this test is the
-        canary that catches future regressions where someone reintroduces
-        `mechanical_verifier.run(...)`.
-        """
-        from datetime import UTC, datetime
-        from pathlib import Path
-
-        from mage.artifacts.bid import Base85BID
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
-        from mage.verification.host_overrides import HostConfig
-        from mage.verification.mechanical import (
-            GherkinSyntaxCheck,
-            MechanicalVerifier,
-            ScenarioDraft,
-        )
-
-        log = EventsLog(tmp_path / "events.jsonl")
-        mapping = MappingArtifact(
-            project_id="p1",
-            base_bids=[],
-        )
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=mapping,
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
-        )
-
-        feature_path = tmp_path / "feature.feature"
-        feature_path.write_text(
-            "Feature: x\n"
-            "  Scenario: demo\n"
-            "    Given a precondition\n"
-            "    When an action\n"
-            "    Then a result\n"
-        )
-
-        # Real MechanicalVerifier with one Gherkin-syntax check.
-        verifier = MechanicalVerifier(checks=[GherkinSyntaxCheck()])
-
-        # The verifier's interface is verify(scope=...) — confirm.
-        assert hasattr(verifier, "verify"), (
-            "real MechanicalVerifier must expose verify(scope=...)"
-        )
-        assert not hasattr(verifier, "run"), (
-            "real MechanicalVerifier exposes verify, not run"
-        )
-
-        # Draft used (note: scope='increment' is a sentinel; real Plan 4
-        # wiring needs to thread draft through; the adapter accepts whatever
-        # the verifier returns).
-        draft = ScenarioDraft(
-            feature_path=feature_path,
-            scenario_name="demo",
-            gherkin_text="",
-            tags=[],
-            sub_bid="00000-0",
-            parent_base_bid=Base85BID(value="00000"),
-            step_texts=["Given a precondition", "When an action", "Then a result"],
-        )
-        # Pre-flight: confirm the verifier returns list[CheckResult].
-        result = verifier.verify(scope="increment")
-        # InspectLoopStage should invoke `verify` with no positional args
-        # besides the scope keyword. With our adapter + real Plan 1 verifier,
-        # empty results mean "no findings" → stage will advance.
-
-        class CleanReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
-                return ReviewerVerdict(
-                    dimension="increment_quality",
-                    outcome="pass",
-                    draft_hash="",
-                    reviewed_at=datetime.now(UTC),
-                    reviewer_id="increment_quality@v1",
-                    findings=[],
-                )
-
-        stage = InspectLoopStage(
-            log,
-            mechanical_verifier=verifier,
-            increment_quality_reviewer=CleanReviewer(),
-            host_config=HostConfig(per_loop_max_iterations=8),
-        )
-        # Should not raise AttributeError on `mechanical_verifier.run(...)`.
-        stage._run_single_increment(
-            ctx,
-            sub_bid="00000-0",
-            increment_diff="",
-            new_test="",
-            scenario_steps=[],
-        )
-        types = [e.event_type.value for e in log.read_all()]
-        assert "inspect_loop_passed" in types, (
-            f"expected inspect_loop_passed with real verifier; got {types}"
-        )
+    assert route == "spec"
