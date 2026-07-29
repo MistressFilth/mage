@@ -1,5 +1,4 @@
 # tests/unit/test_discipline_policy.py — P1 section
-import pytest
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
@@ -8,6 +7,7 @@ from mage.artifacts.mapping import (
 )
 from mage.orchestration.discipline.policy import assert_independent_gates
 from mage.orchestration.exceptions import ForwardOrderViolation
+import pytest
 
 
 def _scenario(sub_bid: str, status: LifecycleStatus) -> ScenarioEntry:
