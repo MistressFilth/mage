@@ -223,10 +223,9 @@ def _now() -> datetime:
 def test_p5_flips_status_to_inscribing():
     m = _mapping([_scenario("A", LifecycleStatus.APPROVED)])
     out = begin_revision(m, "A", "spec ambiguity in step 2", "inspect_loop", _now())
-    assert (
-        out.lookup_sub_bid(_make_base85("00000"), "A").lifecycle_status
-        == LifecycleStatus.INSCRIBING
-    )
+    scenario = out.lookup_sub_bid(_make_base85("00000"), "A")
+    assert scenario is not None
+    assert scenario.lifecycle_status == LifecycleStatus.INSCRIBING
 
 
 def test_p5_appends_reversion_log_entry_to_correct_base_bid_entry():
