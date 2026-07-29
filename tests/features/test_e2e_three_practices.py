@@ -28,10 +28,12 @@ from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
     MappingArtifact,
+    ScenarioEntry,
 )
 from mage.artifacts.verdict import ReviewerVerdict
 from mage.orchestration.discipline.policy import begin_revision
-from mage.orchestration.events import EventsLog
+from mage.orchestration.discipline.stage import DisciplineStage
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.inscribe import InscribeStage
 from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
@@ -231,3 +233,100 @@ def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     # restart — it records history, not lifecycle state.
     assert len(target_entry.reversion_log) == 1
     assert target_entry.reversion_log[0].sub_bid == sub_bid
+
+
+def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
+    """Full supersession loop: SCENARIO_SUPERSESSION_REQUESTED → SCENARIO_LIVE.
+
+    Drives ``DisciplineStage._handle_event`` end-to-end so the test
+    exercises the same path the orchestrator uses at runtime:
+
+    1. Build a mapping with an old LIVE scenario and a new INSCRIBING
+       scenario that will supersede it.
+    2. Emit ``SCENARIO_SUPERSESSION_REQUESTED`` and verify the new
+       scenario records ``supersedes == old_sub_bid``.
+    3. Emit ``SCENARIO_LIVE`` for the new scenario and verify the old
+       scenario flipped to ``DEPRECATED`` with ``superseded_by == new_sub_bid``
+       and the entry's ``reversion_log`` carries the supersession entry.
+    """
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+
+    old = ScenarioEntry(
+        sub_bid="A",
+        scenario_text_hash="h_old",
+        lifecycle_status=LifecycleStatus.LIVE,
+    )
+    new = ScenarioEntry(
+        sub_bid="B",
+        scenario_text_hash="h_new",
+        lifecycle_status=LifecycleStatus.INSCRIBING,
+    )
+    mapping = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            BaseBIDEntry(
+                base_bid="00000",
+                behavior_name="b",
+                behavior_description="d",
+                scenarios=[old, new],
+            ),
+        ],
+    )
+
+    context = PipelineContext(
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+        plan_path=project_dir / "plan.md",
+    )
+
+    stage = DisciplineStage(events_log=log)
+
+    # Step 1: Emit SCENARIO_SUPERSESSION_REQUESTED through the stage.
+    request_event = Event(
+        timestamp=datetime.now(UTC),
+        event_type=EventType.SCENARIO_SUPERSESSION_REQUESTED,
+        payload={
+            "old_sub_bid": "A",
+            "new_sub_bid": "B",
+            "reason": "new spec",
+        },
+    )
+    stage._handle_event(context, request_event)
+
+    # Step 2: Verify the new scenario recorded the supersedes link.
+    entry = context.mapping.base_bids[0]
+    new_scenario = next(s for s in entry.scenarios if s.sub_bid == "B")
+    assert new_scenario.supersedes == "A"
+    # Old stays LIVE until the new one reaches live.
+    old_scenario = next(s for s in entry.scenarios if s.sub_bid == "A")
+    assert old_scenario.lifecycle_status == LifecycleStatus.LIVE
+    assert old_scenario.superseded_by is None
+
+    # Step 3: Emit SCENARIO_LIVE for the new scenario; DisciplineStage
+    # should detect the supersedes link and call complete_supersession.
+    live_event = Event(
+        timestamp=datetime.now(UTC),
+        event_type=EventType.SCENARIO_LIVE,
+        payload={"sub_bid": "B"},
+    )
+    stage._handle_event(context, live_event)
+
+    # Step 4: Verify old flipped to DEPRECATED with the supersedes link.
+    entry = context.mapping.base_bids[0]
+    old_scenario = next(s for s in entry.scenarios if s.sub_bid == "A")
+    new_scenario = next(s for s in entry.scenarios if s.sub_bid == "B")
+    assert old_scenario.lifecycle_status == LifecycleStatus.DEPRECATED
+    assert old_scenario.superseded_by == "B"
+    # complete_supersession appends a reversion log entry whose reason
+    # begins with "superseded by".
+    assert any(log.reason.startswith("superseded by") for log in entry.reversion_log)
+    # The DisciplineStage also emits a SCENARIO_DEPRECATED audit event.
+    deprecated_events = [
+        e for e in log.read_all() if e.event_type == EventType.SCENARIO_DEPRECATED
+    ]
+    assert len(deprecated_events) == 1
+    assert deprecated_events[0].payload["old_sub_bid"] == "A"
+    assert deprecated_events[0].payload["new_sub_bid"] == "B"
