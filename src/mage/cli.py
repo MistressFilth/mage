@@ -304,7 +304,7 @@ def cmd_settle_run(args):
     """Run SettleFeature for a feature. Interactive mode prompts for 4-option menu."""
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
-    from mage.orchestration.settle_feature import SettleFeatureStage
+    from mage.orchestration.settle_feature import SettleError, SettleFeatureStage
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
@@ -334,10 +334,10 @@ def cmd_settle_run(args):
     if disposition is None:
         # Interactive mode: 4-option menu.
         print("Choose a disposition:")
-        print("  1. merged")
-        print("  2. pr_opened")
-        print("  3. kept")
-        print("  4. discarded")
+        print("  1. Merge to the base branch locally")
+        print("  2. Push the branch and create a pull request")
+        print("  3. Keep the branch as-is")
+        print("  4. Discard the branch")
         choice = input("Enter choice (1-4): ")
         menu = {"1": "merged", "2": "pr_opened", "3": "kept", "4": "discarded"}
         if choice not in menu:
@@ -361,8 +361,15 @@ def cmd_settle_run(args):
             print("Discard cancelled", file=sys.stderr)
             sys.exit(2)
 
-    stage = SettleFeatureStage(log)
-    stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
+    stage = SettleFeatureStage(
+        log,
+        host_config=load_host_config(project_dir),
+    )
+    try:
+        stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
+    except SettleError as error:
+        print(f"mage settle run: error: {error}", file=sys.stderr)
+        return 1
     print(f"Settle complete for {args.feature_id}: {disposition}")
     return 0
 

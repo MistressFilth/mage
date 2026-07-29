@@ -145,3 +145,34 @@ class TestPlan4HostConfig:
         from mage.verification.host_overrides import HostConfig
         cfg = HostConfig(eof_max_iterations=5)
         assert cfg.eof_max_iterations == 5
+
+
+class TestPlan5SettleHostConfig:
+    def test_settle_defaults(self):
+        from mage.verification.host_overrides import HostConfig
+
+        config = HostConfig()
+
+        assert config.test_runner_command == ["uv", "run", "pytest", "-v"]
+        assert config.base_branch == "main"
+
+    def test_settle_overrides_load_from_yaml(self, tmp_path):
+        import yaml
+
+        from mage.verification.host_overrides import load_host_config
+
+        config_dir = tmp_path / ".haileris"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "test_runner_command": ["nox", "-s", "tests"],
+                    "base_branch": "trunk",
+                }
+            )
+        )
+
+        config = load_host_config(tmp_path)
+
+        assert config.test_runner_command == ["nox", "-s", "tests"]
+        assert config.base_branch == "trunk"

@@ -68,8 +68,24 @@ class TestE2EInspectSettle:
         )
         assert artifact.ready_to_merge is True
 
-        # Run SettleFeature
-        settle_stage = SettleFeatureStage(log)
+        # Run SettleFeature with deterministic host-command responses.
+        from subprocess import CompletedProcess
+
+        def command_runner(command, *, cwd):  # noqa: ARG001
+            outputs = {
+                ("git", "rev-parse", "--git-dir"): str(tmp_path / ".git"),
+                ("git", "rev-parse", "--git-common-dir"): str(tmp_path / ".git"),
+                ("git", "rev-parse", "--show-toplevel"): str(tmp_path),
+                ("git", "branch", "--show-current"): "feature/inspect-settle",
+            }
+            return CompletedProcess(
+                command,
+                0,
+                stdout=outputs.get(tuple(command), "") + "\n",
+                stderr="",
+            )
+
+        settle_stage = SettleFeatureStage(log, command_runner=command_runner)
         settle_stage.run_settle(ctx, feature_id="feat-1", disposition="kept")
 
         events = log.read_all()
