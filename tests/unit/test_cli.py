@@ -258,39 +258,11 @@ def test_review_show_prints_latest_aggregate(tmp_path, capsys):
     assert "approved" in captured.out
 
 
-def test_review_resume_requires_halt_event(tmp_path, capsys):
+def test_mage_review_resume_is_gone(tmp_path, capsys):
     from mage.cli import main
-
-    project_dir = tmp_path / "proj"
-    project_dir.mkdir()
-    # No halt event written
-    with pytest.raises(SystemExit) as exc_info:
-        main(["review", "resume", "--project-dir", str(project_dir)])
-    # Should exit non-zero (no halt to resume)
-    assert exc_info.value.code != 0
-    captured = capsys.readouterr()
-    assert "halt" in captured.err.lower()
-
-
-def test_review_resume_with_halt_event(tmp_path, capsys):
-    from mage.cli import main
-    from mage.orchestration.events import EventsLog, Event, EventType
-    from datetime import datetime, UTC
-
-    project_dir = tmp_path / "proj"
-    project_dir.mkdir()
-    log = EventsLog(project_dir / "events.jsonl")
-    log.append(Event(
-        timestamp=datetime.now(UTC),
-        event_type=EventType.REVIEW_HALT_PERSISTED,
-        payload={"base_bid": "00000", "iteration": 3},
-    ))
-
-    rc = main(["review", "resume", "--project-dir", str(project_dir)])
-    # Resume is currently a placeholder (Plan 6 wires the pipeline)
-    assert rc == 0
-    captured = capsys.readouterr()
-    assert "ready" in captured.out.lower() or "resume" in captured.out.lower()
+    with pytest.raises(SystemExit) as exc:
+        main(["review", "resume", "--project-dir", str(tmp_path)])
+    assert exc.value.code == 2
 
 
 class TestInspectShow:
