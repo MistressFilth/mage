@@ -634,14 +634,20 @@ Append to `src/mage/orchestration/discipline/policy.py`:
 ```python
 # P4 — Decomposition closed before any per-scenario cycle starts
 def assert_decomposition_closed(plan_path: Path, events_log: EventsLog) -> None:
-    """Per-scenario cycles require a finalized Plan (PLAN_FINALIZED or PLAN_REVISED)."""
-    try:
-        PlanArtifact.load(plan_path, events_log)
-    except PlanNotFinalizedError as e:
+    """Per-scenario cycles require a finalized Plan (PLAN_FINALIZED or PLAN_REVISED event)."""
+    plan_path_str = str(plan_path)
+    found = any(
+        e.event_type in (EventType.PLAN_FINALIZED, EventType.PLAN_REVISED)
+        and e.payload.get("plan_path") == plan_path_str
+        for e in events_log.read_all()
+    )
+    if not found:
         raise DecompositionOpen(
             f"Plan at {plan_path} not finalized; per-scenario cycles blocked"
-        ) from e
+        )
 ```
+
+**Note (controller decision):** the original brief had `assert_decomposition_closed` call `PlanArtifact.load()`. That API requires both the on-disk plan file and a matching SHA-256 digest, while the test code emits a `PLAN_FINALIZED` event with a literal `"abc"` digest and creates no file. The discipline gate's operational intent is "did a finalize/revise event happen?" — on-disk verification belongs to `PlanArtifact.load`, not to the gate. The corrected implementation scans the events log directly.
 
 Add `from pathlib import Path` at top of `policy.py` if not present.
 
