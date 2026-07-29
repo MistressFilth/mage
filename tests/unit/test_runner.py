@@ -168,3 +168,74 @@ def test_cosmetic_only_does_not_re_loop(tmp_path):
     runner.run(_ctx(tmp_path), [target])
 
     assert calls["n"] == 1
+
+
+def test_resume_skips_completed_scenarios(tmp_path):
+    """First scenario is already done; resume at the second."""
+    t1 = _target(sub_bid="00001-0001")
+    t2 = _target(sub_bid="00001-0002")
+
+    etch_calls: list[str] = []
+
+    class E:
+        def run_scenario(self, ctx, t):
+            etch_calls.append(t.sub_bid)
+            return [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
+
+    class R:
+        def run_increment(self, ctx, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
+    class I:
+        def inspect_increment(self, ctx, *, target, increment, result):
+            return None
+
+    runner = FeatureRunner(etch=E(), realize=R(), inspect_loop=I(), per_loop_max_iterations=8)  # type: ignore[arg-type]
+    cursor = AutomationCursor(sub_bid="00001-0002", increment_index=0, iteration=1)
+
+    outcomes = runner.run(_ctx(tmp_path), [t1, t2], cursor=cursor)
+
+    assert etch_calls == ["00001-0002"]
+    assert outcomes == [ScenarioOutcome(sub_bid="00001-0002", test_paths=["t.py"])]
+
+
+def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path):
+    """The cursor's iteration is the next attempt, not the completed one."""
+    t1 = _target(sub_bid="00001-0001")
+    inspect_iterations: list[int] = []
+
+    class E:
+        def run_scenario(self, ctx, t):
+            return [
+                Increment(index=0, step="s1", red_test_path="t.py", red_test_code=""),
+                Increment(index=1, step="s2", red_test_path="t.py", red_test_code=""),
+            ]
+
+    class R:
+        def run_increment(self, ctx, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
+    class I:
+        def inspect_increment(self, ctx, *, target, increment, result):
+            inspect_iterations.append(ctx.iteration)
+            return None
+
+    runner = FeatureRunner(etch=E(), realize=R(), inspect_loop=I(), per_loop_max_iterations=8)  # type: ignore[arg-type]
+    cursor = AutomationCursor(sub_bid="00001-0001", increment_index=1, iteration=3)
+
+    runner.run(_ctx(tmp_path), [t1], cursor=cursor)
+
+    # increment 0 was skipped (completed before halt); increment 1 starts at iter 3
+    assert [i for i in inspect_iterations] == [3]
+
+
+def test_cursor_cleared_after_clean_scenario(tmp_path):
+    t1 = _target()
+    runner = FeatureRunner(
+        etch=type("E", (), {"run_scenario": lambda self, c, t: [Increment(index=0, step="s", red_test_path="t.py", red_test_code="")]})(),
+        realize=type("R", (), {"run_increment": lambda self, c, *, target, increment, carry_forward=None: IncrementResult(files_changed=[], summary="", diff="")})(),
+        inspect_loop=type("I", (), {"inspect_increment": lambda self, c, *, target, increment, result: None})(),
+        per_loop_max_iterations=8,
+    )
+    runner.run(_ctx(tmp_path), [t1], cursor=AutomationCursor(sub_bid="00001-0001", increment_index=0, iteration=1))
+    assert runner.cursor is None

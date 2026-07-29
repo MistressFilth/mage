@@ -103,12 +103,28 @@ class FeatureRunner:
         self,
         context: "PipelineContext",
         targets: list[ScenarioTarget],
+        *,
+        cursor: AutomationCursor | None = None,
     ) -> list[ScenarioOutcome]:
         outcomes: list[ScenarioOutcome] = []
+        # Skip scenarios preceding the cursor.
+        if cursor is not None:
+            targets = [t for t in targets if t.sub_bid >= cursor.sub_bid]
         for target in targets:
             increments = self.etch.run_scenario(context, target)
-            for increment in increments:
-                iteration = 1
+            start_idx = 0
+            start_iter = 1
+            if cursor is not None and cursor.sub_bid == target.sub_bid:
+                start_idx = cursor.increment_index
+                start_iter = cursor.iteration
+                # The cursor's increment was the one that failed; resume at
+                # the same increment. If the cursor's increment was already
+                # complete (defensive: cursor could be stale), start at next.
+                cursor = None
+            for j, increment in enumerate(increments):
+                if j < start_idx:
+                    continue
+                iteration = start_iter if j == start_idx else 1
                 while True:
                     self.cursor = AutomationCursor(
                         sub_bid=target.sub_bid,
@@ -140,8 +156,6 @@ class FeatureRunner:
                                 f"per-loop budget exhausted for sub-bid {target.sub_bid!r}"
                             )
                         continue
-                    # "cosmetic" — InspectLoopStage already queues and returns
-                    # None, so this branch is unreachable in well-formed input.
                     break
             outcomes.append(
                 ScenarioOutcome(
