@@ -7,6 +7,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Routing for Inspect loop. Defined locally to avoid pulling
+# mage.orchestration.inspect_loop into the artifact layer (cycle) and to
+# keep the dependency direction: artifacts -> nothing internal.
+InspectRoute = Literal["spec", "code", "cosmetic"]
+
 
 class ReviewerFinding(BaseModel):
     """A single finding from a reviewer."""
@@ -20,6 +25,12 @@ class ReviewerFinding(BaseModel):
     rationale: str
     suggestion: str = ""
     citations: list[str] = Field(default_factory=list)
+    # Route is meaningful only for the per-loop Inspect reviewer
+    # (IncrementQualityReviewer). The default keeps the standard 7-reviewer
+    # Inscribe findings backward-compatible: findings carry the code route
+    # unless the reviewer explicitly sets spec/cosmetic. InspectLoopStage
+    # reads this field directly — no more suggestion-prefix parsing.
+    route: InspectRoute = "code"
 
     @field_validator("rationale")
     @classmethod
