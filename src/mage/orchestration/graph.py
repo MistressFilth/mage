@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from mage.artifacts.plan import PlanRevisionRequired
 from mage.orchestration.etch import ScenarioInspectHalted
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.inspect_feature import InspectFeatureHalted
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.persistence import FileStatePersistence
 
@@ -43,6 +44,27 @@ class PipelineGraph:
                 # Guard persistence: only save when project_dir exists so
                 # callers can construct a PipelineContext without a real
                 # project directory.
+                if context.project_dir is not None and context.project_dir.exists():
+                    context.mapping.save(context.project_dir / "mapping.yaml")
+            except InspectFeatureHalted as e:
+                # Plan 5: graph emits INSPECT_FEATURE_HALT_PERSISTED (unlike
+                # ScenarioInspectHalted, where InspectLoopStage is the sole
+                # owner). Update in-memory mapping so subsequent stages see
+                # 'halted'. Guard persistence against project_dir=None /
+                # missing so callers can construct a PipelineContext without
+                # a real project directory.
+                halt_event = Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.INSPECT_FEATURE_HALT_PERSISTED,
+                    payload={
+                        "feature_id": e.feature_id,
+                        "iteration": e.iteration,
+                    },
+                )
+                context.events_log.append(halt_event)
+                context.mapping = context.mapping.model_copy(
+                    update={"feature_status": "halted"}
+                )
                 if context.project_dir is not None and context.project_dir.exists():
                     context.mapping.save(context.project_dir / "mapping.yaml")
             except ReviewBudgetExhausted as e:
