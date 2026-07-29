@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from mage.verification.mechanical import (
     CrossBehaviorTagsValidCheck,
@@ -34,6 +34,12 @@ class HostConfig(BaseModel):
     # Plan 4 — Inner TDD loop iteration budgets
     per_loop_max_iterations: int = 8  # per scenario, shared by Realize + per-loop Inspect
     eof_max_iterations: int = 3  # per feature, end-of-feature Inspect fix-wave (Plan 5)
+
+    # Plan 5 — Settle finalization
+    test_runner_command: list[str] = Field(
+        default_factory=lambda: ["uv", "run", "pytest", "-v"]
+    )
+    base_branch: str = "main"
 
 
 def default_check_set(

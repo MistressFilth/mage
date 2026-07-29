@@ -265,7 +265,35 @@ class TestInspectShow:
 
 
 class TestSettleRun:
-    def test_settle_run_non_interactive(self, tmp_path, capsys):
+    @staticmethod
+    def _install_runner(monkeypatch, project, *, test_returncode=0):
+        from subprocess import CompletedProcess
+
+        def runner(command, *, cwd):
+            outputs = {
+                ("git", "rev-parse", "--git-dir"): str(project / ".git"),
+                ("git", "rev-parse", "--git-common-dir"): str(project / ".git"),
+                ("git", "rev-parse", "--show-toplevel"): str(project),
+                ("git", "branch", "--show-current"): "feature/settle",
+            }
+            returncode = (
+                test_returncode
+                if command == ["uv", "run", "pytest", "-v"]
+                else 0
+            )
+            return CompletedProcess(
+                command,
+                returncode,
+                stdout=outputs.get(tuple(command), "") + "\n",
+                stderr="tests failed" if returncode else "",
+            )
+
+        monkeypatch.setattr(
+            "mage.orchestration.settle_feature._default_command_runner",
+            runner,
+        )
+
+    def test_settle_run_non_interactive(self, tmp_path, capsys, monkeypatch):
         from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.cli import main
@@ -273,6 +301,7 @@ class TestSettleRun:
         project = tmp_path / "proj"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
+        self._install_runner(monkeypatch, project)
 
         # Build a ready-to-merge InspectArtifact
         inspect_dir = project / ".haileris" / "inspect" / "feat-1"
@@ -303,3 +332,48 @@ class TestSettleRun:
         assert "settle_feature_finalized" in types
         disposal_events = [e for e in events if e.event_type.value == "settle_feature_finalized"]
         assert disposal_events[0].payload["disposition"] == "kept"
+
+    def test_settle_run_returns_nonzero_when_tests_fail(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+        from mage.cli import main
+        from mage.orchestration.events import EventsLog
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        log = EventsLog(project / "events.jsonl")
+        self._install_runner(monkeypatch, project, test_returncode=1)
+        InspectArtifact.finalize(
+            project / ".haileris" / "inspect" / "feat-1" / "1.yaml",
+            InspectArtifactContent(
+                feature_id="feat-1",
+                inspected_at=datetime.now(UTC),
+                iteration=1,
+                eof_max_iterations=3,
+                ready_to_merge=True,
+            ),
+            log,
+        )
+
+        rc = main(
+            [
+                "settle",
+                "run",
+                "feat-1",
+                "--disposition",
+                "kept",
+                "--project-dir",
+                str(project),
+            ]
+        )
+
+        assert rc == 1
+        assert "tests failed" in capsys.readouterr().err.lower()
+        assert not any(
+            event.event_type.value == "settle_feature_finalized"
+            for event in log.read_all()
+        )
