@@ -16,6 +16,7 @@ from mage.artifacts.mapping import (
     ScenarioEntry,
 )
 from mage.artifacts.verdict import VerdictArtifact
+from mage.orchestration.discipline.policy import acquire_cycle_lock, release_cycle_lock
 from mage.orchestration.events import Event, EventType, EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
@@ -242,6 +243,7 @@ class InscribeStage(StageNode):
                         # Assign sub-BID
                         parent_bid = Base85BID(value=base_bid)
                         sub_bid = Base85BID.derive(parent_bid, scenario_idx)
+                        acquire_cycle_lock(context, sub_bid.value)
                         scenario_text_hash = hashlib.sha256(
                             scenario.gherkin_body.encode("utf-8")
                         ).hexdigest()
@@ -258,6 +260,7 @@ class InscribeStage(StageNode):
                         scenario_path = scenario_dir / f"{scenario.name}.feature"
                         scenario_path.write_text(scenario.gherkin_body, encoding="utf-8")
 
+                        release_cycle_lock(context)
                         self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
