@@ -16,6 +16,7 @@ from mage.verification.host_overrides import HostConfig
 
 CommandRunner = Callable[..., CompletedProcess[str]]
 _VALID_DISPOSITIONS = {"merged", "pr_opened", "kept", "discarded"}
+_MAX_CAPTURED_OUTPUT = 4096
 
 
 class SettleError(Exception):
@@ -148,6 +149,13 @@ class SettleFeatureStage(StageNode):
             )
         return result
 
+    @staticmethod
+    def _truncate(output: str) -> tuple[str, bool]:
+        """Keep the tail of a captured stream — failures live at the end."""
+        if len(output) <= _MAX_CAPTURED_OUTPUT:
+            return output, False
+        return output[-_MAX_CAPTURED_OUTPUT:], True
+
     def _run_tests(
         self,
         *,
@@ -159,6 +167,8 @@ class SettleFeatureStage(StageNode):
         result = self.command_runner(command, cwd=Path(cwd))
         if result.returncode == 0:
             return
+        stdout, stdout_truncated = self._truncate(result.stdout or "")
+        stderr, stderr_truncated = self._truncate(result.stderr or "")
         self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
@@ -168,8 +178,10 @@ class SettleFeatureStage(StageNode):
                     "phase": phase,
                     "command": command,
                     "returncode": result.returncode,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
+                    "stdout": stdout,
+                    "stdout_truncated": stdout_truncated,
+                    "stderr": stderr,
+                    "stderr_truncated": stderr_truncated,
                 },
             )
         )
@@ -243,6 +255,153 @@ class SettleFeatureStage(StageNode):
             )
         return environment.branch
 
+    def _current_branch(self, cwd: Path) -> str:
+        result = self._run_checked(["git", "branch", "--show-current"], cwd=cwd)
+        return result.stdout.strip()
+
+    def _confirm_branch_unmoved(self, environment: GitEnvironment, branch: str) -> None:
+        """Re-read HEAD immediately before a destructive action.
+
+        Detection ran earlier; a checkout in between would aim the delete at
+        whatever branch HEAD landed on.
+        """
+        observed = self._current_branch(environment.worktree_root)
+        if observed != branch:
+            raise SettleCommandFailed(
+                f"HEAD moved from {branch!r} to {observed or '(detached)'!r} "
+                "since environment detection; refusing destructive finalization"
+            )
+
+    def _record_skipped_cleanup(
+        self,
+        *,
+        feature_id: str,
+        branch: str,
+        environment: GitEnvironment,
+        reason: str,
+    ) -> None:
+        self.events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.SETTLE_CLEANUP_SKIPPED,
+                payload={
+                    "feature_id": feature_id,
+                    "branch": branch,
+                    "worktree": str(environment.worktree_root),
+                    "reason": reason,
+                },
+            )
+        )
+
+    def _merge(
+        self,
+        *,
+        feature_id: str,
+        branch: str,
+        environment: GitEnvironment,
+    ) -> None:
+        merge_root = (
+            environment.repo_root
+            if environment.is_worktree
+            else environment.worktree_root
+        )
+        self._run_checked(
+            ["git", "checkout", self.host_config.base_branch],
+            cwd=merge_root,
+        )
+        self._run_checked(["git", "pull"], cwd=merge_root)
+        base_sha = self._run_checked(
+            ["git", "rev-parse", "HEAD"],
+            cwd=merge_root,
+        ).stdout.strip()
+        self._run_checked(["git", "merge", branch], cwd=merge_root)
+        try:
+            self._run_tests(
+                feature_id=feature_id,
+                cwd=merge_root,
+                phase="post_merge",
+            )
+        except SettleTestsFailed:
+            # The merge already landed on the base branch. Put it back before
+            # surfacing the failure, or the next run starts from broken base.
+            self._run_checked(
+                ["git", "reset", "--hard", base_sha],
+                cwd=merge_root,
+            )
+            self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.SETTLE_MERGE_ROLLED_BACK,
+                    payload={
+                        "feature_id": feature_id,
+                        "branch": branch,
+                        "base_branch": self.host_config.base_branch,
+                        "base_sha": base_sha,
+                    },
+                )
+            )
+            raise
+
+        if not environment.is_worktree:
+            self._run_checked(["git", "branch", "-d", branch], cwd=merge_root)
+            return
+        if not self._safe_worktree_cleanup(environment):
+            self._record_skipped_cleanup(
+                feature_id=feature_id,
+                branch=branch,
+                environment=environment,
+                reason=(
+                    "worktree provenance is not .worktrees/; the host owns this "
+                    "workspace, so neither it nor the branch was removed"
+                ),
+            )
+            return
+        self._run_checked(
+            ["git", "worktree", "remove", str(environment.worktree_root)],
+            cwd=environment.repo_root,
+        )
+        self._run_checked(
+            ["git", "branch", "-d", branch],
+            cwd=environment.repo_root,
+        )
+
+    def _discard(
+        self,
+        *,
+        branch: str,
+        environment: GitEnvironment,
+    ) -> None:
+        if environment.is_worktree:
+            if not self._safe_worktree_cleanup(environment):
+                raise SettleUnsafeCleanupError(
+                    "worktree provenance is not .worktrees/; refusing discard cleanup"
+                )
+            self._confirm_branch_unmoved(environment, branch)
+            self._run_checked(
+                [
+                    "git",
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(environment.worktree_root),
+                ],
+                cwd=environment.repo_root,
+            )
+            self._run_checked(
+                ["git", "branch", "-D", branch],
+                cwd=environment.repo_root,
+            )
+            return
+        self._confirm_branch_unmoved(environment, branch)
+        self._run_checked(
+            ["git", "checkout", self.host_config.base_branch],
+            cwd=environment.worktree_root,
+        )
+        self._run_checked(
+            ["git", "branch", "-D", branch],
+            cwd=environment.worktree_root,
+        )
+
     def _execute_disposition(
         self,
         *,
@@ -275,67 +434,15 @@ class SettleFeatureStage(StageNode):
             return
 
         if disposition == "merged":
-            merge_root = (
-                environment.repo_root
-                if environment.is_worktree
-                else environment.worktree_root
-            )
-            self._run_checked(
-                ["git", "checkout", self.host_config.base_branch],
-                cwd=merge_root,
-            )
-            self._run_checked(["git", "pull"], cwd=merge_root)
-            self._run_checked(["git", "merge", branch], cwd=merge_root)
-            self._run_tests(
+            self._merge(
                 feature_id=feature_id,
-                cwd=merge_root,
-                phase="post_merge",
+                branch=branch,
+                environment=environment,
             )
-            if self._safe_worktree_cleanup(environment):
-                self._run_checked(
-                    ["git", "worktree", "remove", str(environment.worktree_root)],
-                    cwd=environment.repo_root,
-                )
-                self._run_checked(
-                    ["git", "branch", "-d", branch],
-                    cwd=environment.repo_root,
-                )
-            elif not environment.is_worktree:
-                self._run_checked(
-                    ["git", "branch", "-d", branch],
-                    cwd=merge_root,
-                )
             return
 
         if disposition == "discarded":
-            if environment.is_worktree:
-                if not self._safe_worktree_cleanup(environment):
-                    raise SettleUnsafeCleanupError(
-                        "worktree provenance is not .worktrees/; refusing discard cleanup"
-                    )
-                self._run_checked(
-                    [
-                        "git",
-                        "worktree",
-                        "remove",
-                        "--force",
-                        str(environment.worktree_root),
-                    ],
-                    cwd=environment.repo_root,
-                )
-                self._run_checked(
-                    ["git", "branch", "-D", branch],
-                    cwd=environment.repo_root,
-                )
-            else:
-                self._run_checked(
-                    ["git", "checkout", self.host_config.base_branch],
-                    cwd=environment.worktree_root,
-                )
-                self._run_checked(
-                    ["git", "branch", "-D", branch],
-                    cwd=environment.worktree_root,
-                )
+            self._discard(branch=branch, environment=environment)
 
     def run_settle(
         self,
@@ -390,10 +497,8 @@ class SettleFeatureStage(StageNode):
             environment=environment,
         )
 
-        context.mapping = context.mapping.model_copy(
-            update={"feature_status": "settled"}
-        )
-        context.mapping.save(context.project_dir / "mapping.yaml")
+        # Write the report before flipping the mapping: a failed write must not
+        # leave a persisted "settled" status with no record of what happened.
         report_path.write_text(
             self._render_report(
                 feature_id=feature_id,
@@ -403,6 +508,10 @@ class SettleFeatureStage(StageNode):
             ),
             encoding="utf-8",
         )
+        context.mapping = context.mapping.model_copy(
+            update={"feature_status": "settled"}
+        )
+        context.mapping.save(context.project_dir / "mapping.yaml")
         self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),

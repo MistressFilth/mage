@@ -90,6 +90,8 @@ class EventType(str, Enum):
     SETTLE_FEATURE_FINALIZED = "settle_feature_finalized"
     SETTLE_FEATURE_COMPLETED = "settle_feature_completed"
     SETTLE_BRANCH_DISCARDED = "settle_branch_discarded"
+    SETTLE_MERGE_ROLLED_BACK = "settle_merge_rolled_back"
+    SETTLE_CLEANUP_SKIPPED = "settle_cleanup_skipped"
 
 
 class Event(BaseModel):
