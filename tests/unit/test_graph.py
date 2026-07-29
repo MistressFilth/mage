@@ -286,7 +286,7 @@ class TestPlan4HaltCatching:
         (Critical 2 dedupe lives at the graph layer now).
         """
         from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict, ReviewerFinding
+        from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
         from mage.orchestration.etch import ScenarioInspectHalted
         from mage.orchestration.events import EventsLog
         from mage.orchestration.graph import PipelineGraph
