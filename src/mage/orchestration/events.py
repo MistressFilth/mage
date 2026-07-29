@@ -93,6 +93,12 @@ class EventType(str, Enum):
     SETTLE_MERGE_ROLLED_BACK = "settle_merge_rolled_back"
     SETTLE_CLEANUP_SKIPPED = "settle_cleanup_skipped"
 
+    # Plan 7 — Discipline enforcement
+    SCENARIO_REVERTED_TO_INSCRIBING = "scenario_reverted_to_inscribing"
+    SCENARIO_REVISION_REQUESTED = "scenario_revision_requested"
+    SCENARIO_SUPERSESSION_REQUESTED = "scenario_supersession_requested"
+    SCENARIO_DEPRECATED = "scenario_deprecated"
+
 
 class Event(BaseModel):
     """One event in the log."""
