@@ -176,3 +176,17 @@ class TestPlan5SettleHostConfig:
 
         assert config.test_runner_command == ["nox", "-s", "tests"]
         assert config.base_branch == "trunk"
+
+
+def test_host_config_model_defaults_to_none():
+    from mage.verification.host_overrides import HostConfig
+
+    cfg = HostConfig(test_runner_command=["pytest"])
+    assert cfg.model is None
+
+
+def test_host_config_model_accepts_string():
+    from mage.verification.host_overrides import HostConfig
+
+    cfg = HostConfig(test_runner_command=["pytest"], model="openai:gpt-4o")
+    assert cfg.model == "openai:gpt-4o"
