@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from mage.artifacts.mapping import LifecycleStatus, ScenarioEntry
+from mage.orchestration.discipline.policy import guard_automation_entry
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.runner import FeatureRunner, ScenarioTarget
@@ -32,6 +33,7 @@ class AutomationStage(StageNode):
             for scenario in entry.scenarios:
                 if scenario.lifecycle_status != LifecycleStatus.APPROVED:
                     continue
+                guard_automation_entry(scenario)
                 targets.append(
                     ScenarioTarget(
                         base_bid=entry.base_bid,
