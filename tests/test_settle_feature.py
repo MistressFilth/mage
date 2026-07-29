@@ -79,12 +79,17 @@ class RecordingRunner:
         branch: str = "feature/inspect-settle",
         test_returncodes: list[int] | None = None,
         fail_command: list[str] | None = None,
+        branch_after: str | None = None,
+        test_stdout: str | None = None,
     ) -> None:
         self.project = project
         self.worktree = worktree
         self.branch = branch
         self.test_returncodes = list(test_returncodes or [])
         self.fail_command = fail_command
+        self.branch_after = branch_after
+        self.test_stdout = test_stdout
+        self.branch_queries = 0
         self.calls: list[tuple[list[str], Path]] = []
         self.repo_root = (
             next(parent for parent in project.parents if parent.name == "repo")
@@ -103,10 +108,23 @@ class RecordingRunner:
             return CompletedProcess(
                 command,
                 returncode,
-                stdout="tests passed" if returncode == 0 else "",
+                stdout=(
+                    self.test_stdout
+                    if self.test_stdout is not None
+                    else ("tests passed" if returncode == 0 else "")
+                ),
                 stderr="" if returncode == 0 else "tests failed",
             )
-        outputs = {
+        if command == ["git", "branch", "--show-current"]:
+            self.branch_queries += 1
+            current = (
+                self.branch_after
+                if self.branch_after is not None and self.branch_queries > 1
+                else self.branch
+            )
+            return CompletedProcess(command, 0, stdout=current + "\n", stderr="")
+        outputs: dict[tuple[str, ...], str] = {
+            ("git", "rev-parse", "HEAD"): "basesha0000000",
             ("git", "rev-parse", "--git-dir"): (
                 str(self.repo_root / ".git" / "worktrees" / "feature")
                 if self.worktree
@@ -116,7 +134,6 @@ class RecordingRunner:
                 self.repo_root / ".git"
             ),
             ("git", "rev-parse", "--show-toplevel"): str(self.project),
-            ("git", "branch", "--show-current"): self.branch,
         }
         return CompletedProcess(
             command,
@@ -379,6 +396,120 @@ class TestSettleFinalization:
             command[:3] == ["git", "worktree", "remove"]
             for command, _cwd in runner.calls
         )
+
+    def test_post_merge_test_failure_rolls_the_base_branch_back(self, tmp_path):
+        project = tmp_path / "repo" / ".worktrees" / "feature"
+        context = make_context(project)
+        runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 1])
+
+        with pytest.raises(SettleTestsFailed, match="post_merge"):
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="merged")
+
+        repo_root = tmp_path / "repo"
+        assert (
+            ["git", "reset", "--hard", "basesha0000000"],
+            repo_root,
+        ) in runner.calls
+        assert not any(
+            command[:3] == ["git", "worktree", "remove"]
+            for command, _cwd in runner.calls
+        )
+        assert not any(
+            command[:2] == ["git", "branch"] and "-d" in command
+            for command, _cwd in runner.calls
+        )
+        assert context.mapping.feature_status != "settled"
+        assert any(
+            event.event_type.value == "settle_merge_rolled_back"
+            for event in context.events_log.read_all()
+        )
+
+    def test_merge_records_skipped_cleanup_for_harness_worktree(self, tmp_path):
+        project = tmp_path / "repo" / ".claude" / "worktrees" / "feature"
+        context = make_context(project)
+        runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 0])
+
+        SettleFeatureStage(
+            context.events_log,
+            command_runner=runner,
+        ).run_settle(context, feature_id="feat-1", disposition="merged")
+
+        assert not any(
+            command[:3] == ["git", "worktree", "remove"]
+            for command, _cwd in runner.calls
+        )
+        assert not any(
+            command[:2] == ["git", "branch"] and "-d" in command
+            for command, _cwd in runner.calls
+        )
+        skipped = [
+            event
+            for event in context.events_log.read_all()
+            if event.event_type.value == "settle_cleanup_skipped"
+        ]
+        assert len(skipped) == 1
+        assert skipped[0].payload["branch"] == "feature/inspect-settle"
+        assert "provenance" in skipped[0].payload["reason"]
+
+    def test_discard_aborts_when_head_moved_off_the_feature_branch(self, tmp_path):
+        project = tmp_path / "repo" / ".worktrees" / "feature"
+        context = make_context(project)
+        runner = RecordingRunner(project, worktree=True, branch_after="main")
+
+        with pytest.raises(SettleCommandFailed, match="moved"):
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="discarded")
+
+        assert not any(
+            command[:3] == ["git", "worktree", "remove"]
+            for command, _cwd in runner.calls
+        )
+        assert not any(
+            command[:2] == ["git", "branch"] and "-D" in command
+            for command, _cwd in runner.calls
+        )
+
+    def test_failed_test_event_truncates_captured_output(self, tmp_path):
+        context = make_context(tmp_path / "project")
+        runner = RecordingRunner(
+            context.project_dir,
+            test_returncodes=[1],
+            test_stdout="x" * 10_000,
+        )
+
+        with pytest.raises(SettleTestsFailed):
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="kept")
+
+        failed = next(
+            event
+            for event in context.events_log.read_all()
+            if event.event_type.value == "settle_tests_failed"
+        )
+        assert len(failed.payload["stdout"]) <= 4096
+        assert failed.payload["stdout"].endswith("x" * 64)
+        assert failed.payload["stdout_truncated"] is True
+
+    def test_report_write_failure_leaves_mapping_unsettled_on_disk(self, tmp_path):
+        context = make_context(tmp_path / "project")
+        runner = RecordingRunner(context.project_dir)
+        report_path = context.project_dir / ".haileris" / "settle" / "feat-1.md"
+        report_path.mkdir(parents=True)
+
+        with pytest.raises(IsADirectoryError):
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="kept")
+
+        assert not (context.project_dir / "mapping.yaml").exists()
 
     def test_run_delegates_to_configured_settle(self, tmp_path):
         context = make_context(tmp_path / "project")

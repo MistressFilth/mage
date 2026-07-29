@@ -377,3 +377,35 @@ class TestSettleRun:
             event.event_type.value == "settle_feature_finalized"
             for event in log.read_all()
         )
+
+    def test_settle_run_reports_value_errors_without_traceback(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        from mage.cli import main
+        from mage.orchestration.settle_feature import SettleFeatureStage
+
+        project = tmp_path / "proj"
+        project.mkdir()
+
+        def explode(self, context, *, feature_id, disposition):
+            raise ValueError("mapping artifact is missing base_bids")
+
+        monkeypatch.setattr(SettleFeatureStage, "run_settle", explode)
+
+        rc = main(
+            [
+                "settle",
+                "run",
+                "feat-1",
+                "--disposition",
+                "kept",
+                "--project-dir",
+                str(project),
+            ]
+        )
+
+        assert rc == 1
+        assert "base_bids" in capsys.readouterr().err

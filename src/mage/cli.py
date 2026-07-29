@@ -367,7 +367,7 @@ def cmd_settle_run(args):
     )
     try:
         stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
-    except SettleError as error:
+    except (SettleError, ValueError) as error:
         print(f"mage settle run: error: {error}", file=sys.stderr)
         return 1
     print(f"Settle complete for {args.feature_id}: {disposition}")
