@@ -50,7 +50,14 @@ class TestE2EInspectSettle:
         ]
 
         # Run InspectFeature
-        inspect_stage = InspectFeatureStage(log, reviewers=reviewers, host_config=HostConfig())
+        from mage.verification.mechanical import MechanicalVerifier
+
+        inspect_stage = InspectFeatureStage(
+            log,
+            reviewers=reviewers,
+            mechanical_verifier=MechanicalVerifier(checks=[]),
+            host_config=HostConfig(),
+        )
         artifact = inspect_stage.run_pass(
             ctx,
             feature_id="feat-1",
@@ -134,8 +141,13 @@ class TestE2EInspectFeatureHalt:
             ]],
         ]
 
+        from mage.verification.mechanical import MechanicalVerifier
+
         stage = InspectFeatureStage(
-            log, reviewers=reviewers, host_config=HostConfig(eof_max_iterations=3)
+            log,
+            reviewers=reviewers,
+            mechanical_verifier=MechanicalVerifier(checks=[]),
+            host_config=HostConfig(eof_max_iterations=3),
         )
 
         with pytest.raises(InspectFeatureHalted):
@@ -205,7 +217,14 @@ class TestE2ECosmeticQueueAccumulation:
             ]],
         ]
 
-        stage = InspectFeatureStage(log, reviewers=reviewers, host_config=HostConfig())
+        from mage.verification.mechanical import MechanicalVerifier
+
+        stage = InspectFeatureStage(
+            log,
+            reviewers=reviewers,
+            mechanical_verifier=MechanicalVerifier(checks=[]),
+            host_config=HostConfig(),
+        )
         artifact = stage.run_pass(
             ctx,
             feature_id="feat-1",
