@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- feat(discipline): add Plan 7 Three Practices enforcement for all six Approved
+  Gate Scope rules (P1-P6), revision flow, full supersession flow (v1 only),
+  and the cosmetic gate.
 - Etch and Realize stages driving the inner TDD loop, with carry-forward
   injection of prior-iteration findings into the next Realize prompt.
 - Per-loop Inspect: mechanical pre-check plus the `IncrementQuality` reviewer,
@@ -23,8 +26,16 @@ All notable changes to this project are documented here. The format follows
   `.pre-commit-config.yaml` to bring the repository in line with the shared
   repository standards.
 
+### Changed
+
+- feat(orchestrator): wire StageNodes to DisciplineStage event subscriptions,
+  enforce the P3 guard in AutomationStage, and acquire the cycle lock in
+  InscribeStage.
+
 ### Fixed
 
+- fix(discipline): make revision, supersession, and live-event handling
+  idempotent and correlate approval lock release with the approved scenario.
 - A failing post-merge test run no longer leaves the merge on the base branch:
   Settle records the pre-merge SHA and resets to it before re-raising.
 - Merging from a host-owned worktree no longer skips cleanup silently; it emits
