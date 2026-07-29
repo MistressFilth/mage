@@ -271,3 +271,38 @@ def test_supersession_complete_writes_reversion_log_entry():
     out = complete_supersession(m, "N", _now())
     old_entry = next(e for e in out.base_bids if any(s.sub_bid == "O" for s in e.scenarios))
     assert any(log.reason.startswith("superseded by") for log in old_entry.reversion_log)
+
+from mage.artifacts.inspect import CosmeticItem
+from mage.orchestration.discipline.policy import guard_cosmetic_application
+from mage.orchestration.exceptions import ModelCannotApplyCosmetic
+
+
+def _cosmetic() -> CosmeticItem:
+    return CosmeticItem(
+        sub_bid="A",
+        scenario_name="s",
+        location="text",
+        text="t",
+        proposed_by="cosmetic",
+    )
+
+
+def test_cosmetic_guard_rejects_model_source():
+    with pytest.raises(ModelCannotApplyCosmetic):
+        guard_cosmetic_application(source="model", item=_cosmetic(), human_approver=None)
+
+
+def test_cosmetic_guard_accepts_human_source():
+    out = guard_cosmetic_application(source="human", item=_cosmetic(), human_approver="alice")
+    assert out.sub_bid == "A"
+    assert out.human_approver == "alice"
+
+
+def test_cosmetic_guard_accepts_human_authorized_source():
+    out = guard_cosmetic_application(source="human-authorized", item=_cosmetic(), human_approver="ci-bot")
+    assert out.human_approver == "ci-bot"
+
+
+def test_cosmetic_guard_requires_human_approver_for_human_source():
+    with pytest.raises(ModelCannotApplyCosmetic):
+        guard_cosmetic_application(source="human", item=_cosmetic(), human_approver=None)
