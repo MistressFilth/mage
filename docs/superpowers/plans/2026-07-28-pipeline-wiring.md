@@ -1386,7 +1386,7 @@ def test_code_route_re_loops_until_clean():
     reviewer = _Reviewer(verdicts)
     inspect = type("I", (), {
         "inspect_increment": lambda self, ctx, *, target, increment, result: (
-            "code" if reviewer._verdicts and reviewer._verdicts[0].findings else None
+            "code" if reviewer.calls < len(reviewer._verdicts) else None
         )
     })()
     runner = FeatureRunner(etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8)  # type: ignore[arg-type]
@@ -1434,7 +1434,7 @@ def test_cosmetic_only_does_not_re_loop():
         calls["n"] += 1
         return None  # cosmetic-only path returns None
 
-    inspect = type("I", (), {"inspect_increment": staticmethod(inspect_increment)})()
+    inspect = type("I", (), {"inspect_increment": lambda self, ctx, *, target, increment, result: inspect_increment(ctx, target=target, increment=increment, result=result)})()
     runner = FeatureRunner(etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8)  # type: ignore[arg-type]
 
     runner.run(_ctx(), [target])
