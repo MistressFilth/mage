@@ -90,3 +90,13 @@ def acquire_cycle_lock(context: PipelineContext, sub_bid: str) -> None:
 def release_cycle_lock(context: PipelineContext) -> None:
     """Release the cycle lock. Safe to call when unset."""
     context.current_sub_bid = None
+
+
+# P3 — Approved before any Etch/Realize sub-phase
+def guard_automation_entry(scenario: ScenarioEntry) -> None:
+    """Automation sub-phases require scenario.lifecycle_status == APPROVED."""
+    if scenario.lifecycle_status != LifecycleStatus.APPROVED:
+        raise NotApprovedForAutomation(
+            f"scenario {scenario.sub_bid!r} has status "
+            f"{scenario.lifecycle_status.value!r}; must be APPROVED before Automation"
+        )
