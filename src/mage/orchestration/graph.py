@@ -47,26 +47,15 @@ class PipelineGraph:
                 if context.project_dir is not None and context.project_dir.exists():
                     context.mapping.save(context.project_dir / "mapping.yaml")
             except InspectFeatureHalted as e:
-                # Plan 5: graph emits INSPECT_FEATURE_HALT_PERSISTED (unlike
-                # ScenarioInspectHalted, where InspectLoopStage is the sole
-                # owner). Update in-memory mapping so subsequent stages see
-                # 'halted'. Guard persistence against project_dir=None /
-                # missing so callers can construct a PipelineContext without
-                # a real project directory.
-                halt_event = Event(
-                    timestamp=datetime.now(UTC),
-                    event_type=EventType.INSPECT_FEATURE_HALT_PERSISTED,
-                    payload={
-                        "feature_id": e.feature_id,
-                        "iteration": e.iteration,
-                    },
-                )
-                context.events_log.append(halt_event)
+                # InspectFeatureStage is the sole owner of the halt event. The
+                # graph persists the coarse lifecycle state and terminates so
+                # Settle or any later stage cannot run after a feature halt.
                 context.mapping = context.mapping.model_copy(
                     update={"feature_status": "halted"}
                 )
                 if context.project_dir is not None and context.project_dir.exists():
                     context.mapping.save(context.project_dir / "mapping.yaml")
+                raise SystemExit(0) from e
             except ReviewBudgetExhausted as e:
                 # I1: review-budget halts the same way as plan-revision halts.
                 # The InscribeStage already emitted REVIEW_HALT_PERSISTED and

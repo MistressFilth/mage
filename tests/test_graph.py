@@ -476,36 +476,58 @@ class TestPlan4HaltCatching:
 
 
 class TestPlan5HaltCatching:
-    def test_graph_catches_inspect_feature_halted(self, tmp_path):
+    def test_inspect_feature_halt_persists_once_and_terminates_graph(self, tmp_path):
         from mage.artifacts.mapping import MappingArtifact
-        from mage.orchestration.events import EventsLog
+        from mage.orchestration.events import Event, EventsLog, EventType
         from mage.orchestration.graph import PipelineGraph
         from mage.orchestration.inspect_feature import InspectFeatureHalted
         from mage.orchestration.nodes import PipelineContext, StageNode
 
         log = EventsLog(tmp_path / "events.jsonl")
+        later_stage_ran = []
 
         class HaltStage(StageNode):
             name = "halt-stage"
 
             def _run(self, context):
+                self.events_log.append(
+                    Event(
+                        timestamp=datetime.now(UTC),
+                        event_type=EventType.INSPECT_FEATURE_HALT_PERSISTED,
+                        payload={"feature_id": "feat-1", "iteration": 3},
+                    )
+                )
                 raise InspectFeatureHalted(feature_id="feat-1", iteration=3)
 
-        ctx = PipelineContext(
+        class LaterStage(StageNode):
+            name = "later-stage"
+
+            def _run(self, context):
+                later_stage_ran.append(True)
+                return context
+
+        context = PipelineContext(
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
             plan_path=tmp_path / "plan.md",
             iteration=0,
         )
-        graph = PipelineGraph(stages=[HaltStage(log)], events_log=log)
-        graph.run(ctx)
+        graph = PipelineGraph(
+            stages=[HaltStage(log), LaterStage(log)],
+            events_log=log,
+        )
 
-        events = log.read_all()
+        with pytest.raises(SystemExit) as exc_info:
+            graph.run(context)
+
+        assert exc_info.value.code == 0
+        assert later_stage_ran == []
+        assert context.mapping.feature_status == "halted"
+        assert MappingArtifact.load(tmp_path / "mapping.yaml").feature_status == "halted"
         halt_events = [
-            e for e in events
-            if e.event_type.value == "inspect_feature_halt_persisted"
+            event
+            for event in log.read_all()
+            if event.event_type.value == "inspect_feature_halt_persisted"
         ]
         assert len(halt_events) == 1
-        assert halt_events[0].payload["feature_id"] == "feat-1"
-        assert halt_events[0].payload["iteration"] == 3
