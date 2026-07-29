@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from mage.artifacts.inspect import InspectJournalEntry
+from mage.artifacts.inspect import CosmeticItem, InspectJournalEntry
 from mage.orchestration.events import Event, EventType, EventsLog
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
@@ -143,19 +143,14 @@ class InspectLoopStage:
             elif route == "code":
                 code_count += 1
             elif route == "cosmetic":
-                context.mapping = context.mapping.model_copy(
-                    update={
-                        "feature_cosmetic_queue": [
-                            *context.mapping.feature_cosmetic_queue,
-                            {
-                                "sub_bid": target.sub_bid,
-                                "scenario_name": target.scenario_name,
-                                "location": f.location,
-                                "text": f.suggestion,
-                                "proposed_by": "increment_quality",
-                            },
-                        ]
-                    }
+                context.mapping = context.mapping.append_cosmetic(
+                    CosmeticItem(
+                        sub_bid=target.sub_bid,
+                        scenario_name=target.scenario_name,
+                        location=f.location,
+                        text=f.suggestion,
+                        proposed_by="increment_quality",
+                    )
                 )
 
             self.events_log.append(
