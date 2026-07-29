@@ -33,19 +33,17 @@ class PipelineGraph:
         for stage in self.stages:
             try:
                 context = stage.run(context)
-            except ScenarioInspectHalted:
-                # CRITICAL 1: Update in-memory mapping so subsequent stages in
-                # this same graph run observe the inspect_pending status.
-                # CRITICAL 2: InspectLoopStage is the SOLE owner of the
-                # SCENARIO_HALT_PERSISTED event; we don't re-emit it here.
+            except ScenarioInspectHalted as e:
+                # All halts now share the persistence path. The graph stops
+                # cleanly so a feature halt (or any other halt) cannot leak
+                # into a later stage.
                 context.mapping = context.mapping.model_copy(
-                    update={"feature_status": "inspect_pending"}
+                    update={"feature_status": "halted"}
                 )
-                # Guard persistence: only save when project_dir exists so
-                # callers can construct a PipelineContext without a real
-                # project directory.
                 if context.project_dir is not None and context.project_dir.exists():
                     context.mapping.save(context.project_dir / "mapping.yaml")
+                self._persist_halt(context, e)
+                raise SystemExit(0) from e
             except InspectFeatureHalted as e:
                 # InspectFeatureStage is the sole owner of the halt event. The
                 # graph persists the coarse lifecycle state and terminates so
@@ -67,17 +65,28 @@ class PipelineGraph:
                 raise SystemExit(0) from e
         return context
 
-    def _persist_halt(
-        self, context: PipelineContext, halt: PlanRevisionRequired
-    ) -> None:
-        """Persist halt record (event + state)."""
+    def _persist_halt(self, context: PipelineContext, halt: BaseException) -> None:
+        """Persist halt record (event + state).
+
+        PlanRevisionRequired carries structured fields (reason,
+        originating_stage, affected_behaviors). ScenarioInspectHalted carries
+        only a message string. Use getattr with defaults so both flow
+        through the same persist path.
+        """
+        reason = getattr(halt, "reason", None)
+        if reason is None:
+            reason = str(halt) or halt.__class__.__name__
+        originating_stage = (
+            getattr(halt, "originating_stage", None) or "scenario_inspect"
+        )
+        affected_behaviors = getattr(halt, "affected_behaviors", None) or []
         halt_event = Event(
             timestamp=datetime.now(UTC),
             event_type=EventType.HALT_PERSISTED,
             payload={
-                "reason": halt.reason,
-                "originating_stage": halt.originating_stage,
-                "affected_behaviors": halt.affected_behaviors,
+                "reason": reason,
+                "originating_stage": originating_stage,
+                "affected_behaviors": affected_behaviors,
                 "context_snapshot": context.model_dump(mode="json"),
             },
         )
