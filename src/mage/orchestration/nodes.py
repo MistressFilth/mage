@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from mage.artifacts.mapping import MappingArtifact
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.runner import AutomationCursor
 from mage.verification.host_overrides import HostConfig
 
@@ -86,7 +86,7 @@ class StageNode(ABC):
     def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
         """Emit an event to the log."""
         event = Event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             event_type=event_type,
             payload={"stage": self.name, **(payload or {})},
         )
