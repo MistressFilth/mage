@@ -119,3 +119,25 @@ def test_automation_stage_emits_scenario_live(tmp_path):
     assert types.count("scenario_live") == 1
     assert "stage_started" in types
     assert "stage_completed" in types
+
+
+def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
+    """P3 enforcement is explicit at target-build time, not just implicit in the filter."""
+    from unittest.mock import patch
+
+    mapping = _make_mapping(
+        tmp_path,
+        [_scenario("00001-0001", LifecycleStatus.APPROVED)],
+    )
+    ctx = _ctx(tmp_path, mapping)
+
+    class _Runner:
+        def run(self, context, targets, *, cursor=None):
+            return [ScenarioOutcome(sub_bid=t.sub_bid, test_paths=["t.py"]) for t in targets]
+
+    with patch(
+        "mage.orchestration.automation.guard_automation_entry", autospec=True
+    ) as mock_guard:
+        stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
+        stage.run(ctx)
+        assert mock_guard.call_count == 1
