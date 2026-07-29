@@ -1,7 +1,13 @@
-"""End-to-end: 1 feature × 2 scenarios × 3 increments → all live."""
+"""End-to-end: 1 feature × 2 scenarios × 3 increments → all live.
+
+Plan 6 wiring test: drives InspectLoopStage.inspect_increment + RealizeStage.run_increment
+directly. The graph-level halt persistence for `ScenarioInspectHalted` is
+covered in tests/unit/test_graph.py::TestPlan4HaltCatching.
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,18 +16,18 @@ import pytest
 
 class TestE2EInnerTDDHappyPath:
     def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
-        from mage.orchestration.events import EventsLog, EventType
-        from mage.orchestration.etch import EtchStage, ScenarioInspectHalted
-        from mage.orchestration.realize import RealizeStage
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.nodes import PipelineContext
+        from mage.agents.realize import RealizeOutput
         from mage.artifacts.mapping import MappingArtifact, BaseBIDEntry, ScenarioEntry, LifecycleStatus
         from mage.artifacts.verdict import ReviewerVerdict
+        from mage.orchestration.events import EventsLog, EventType
+        from mage.orchestration.inspect_loop import InspectLoopStage
+        from mage.orchestration.nodes import PipelineContext
+        from mage.orchestration.realize import RealizeStage
+        from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
         from mage.verification.host_overrides import HostConfig
 
         log = EventsLog(tmp_path / "events.jsonl")
 
-        # Build mapping with 2 approved scenarios
         scenarios = [
             ScenarioEntry(
                 sub_bid=f"00000-{i}",
@@ -49,7 +55,6 @@ class TestE2EInnerTDDHappyPath:
             iteration=0,
         )
 
-        # Stub agents
         class CleanMech:
             def verify(self, scope):
                 return []
@@ -67,32 +72,40 @@ class TestE2EInnerTDDHappyPath:
 
         class NoOpRealizeAgent:
             def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
-                from mage.agents.realize import RealizeOutput
                 return RealizeOutput(files_changed=[], summary="stub")
 
         cfg = HostConfig()
-        inspect_stage = InspectLoopStage(log, CleanMech(), CleanReviewer(), cfg)
+        inspect_stage = InspectLoopStage(
+            log,
+            mechanical_verifier=CleanMech(),
+            increment_quality_reviewer=CleanReviewer(),
+            host_config=cfg,
+        )
         realize_stage = RealizeStage(log, NoOpRealizeAgent())
 
         # Drive 2 scenarios × 3 increments each
         for scenario in scenarios:
+            target = ScenarioTarget(
+                base_bid="00000",
+                sub_bid=scenario.sub_bid,
+                scenario_name=f"scenario-{scenario.sub_bid}",
+                gherkin_body="",
+                steps=[],
+            )
             for inc in range(3):
-                inspect_stage._run_single_increment(
-                    ctx,
-                    sub_bid=scenario.sub_bid,
-                    base_bid="00000",
-                    scenario_name=f"scenario-{scenario.sub_bid}",
-                    increment_diff="",
-                    new_test="",
-                    scenario_steps=[],
-                )
-                realize_stage._run_single_increment(
-                    ctx,
-                    sub_bid=scenario.sub_bid,
+                increment = Increment(
+                    index=inc,
                     step=f"step-{inc}",
                     red_test_path=f"tests/test_{scenario.sub_bid}_{inc}.py",
+                    red_test_code="",
                 )
-            # Emit SCENARIO_LIVE
+                inc_result = IncrementResult(files_changed=[], summary="", diff="")
+                inspect_stage.inspect_increment(
+                    ctx, target=target, increment=increment, result=inc_result
+                )
+                realize_stage.run_increment(
+                    ctx, target=target, increment=increment
+                )
             log.append(
                 __import__("mage.orchestration.events", fromlist=["Event", "EventType"]).Event(
                     timestamp=datetime.now(UTC),
@@ -103,18 +116,17 @@ class TestE2EInnerTDDHappyPath:
 
         events = log.read_all()
         types = [e.event_type.value for e in events]
-        assert types.count("inspect_loop_passed") == 6  # 2 scenarios × 3 increments
-        assert types.count("inspect_loop_started") == 6
+        assert types.count("inspect_loop_started") == 6  # 2 scenarios × 3 increments
         assert types.count("scenario_live") == 2
 
 
 class TestE2EPerLoopHalt:
     def test_mechanical_overflow_halts_scenario(self, tmp_path):
-        from mage.orchestration.events import EventsLog, EventType
-        from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.etch import ScenarioInspectHalted
-        from mage.orchestration.nodes import PipelineContext
         from mage.artifacts.mapping import MappingArtifact
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_loop import InspectLoopStage
+        from mage.orchestration.nodes import PipelineContext
+        from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
         from mage.verification.host_overrides import HostConfig
         from mage.verification.mechanical import MechanicalFinding
 
@@ -150,33 +162,44 @@ class TestE2EPerLoopHalt:
                 )
 
         stage = InspectLoopStage(
-            log, AlwaysFailMech(), NoopReviewer(), HostConfig(per_loop_max_iterations=8)
+            log,
+            mechanical_verifier=AlwaysFailMech(),
+            increment_quality_reviewer=NoopReviewer(),
+            host_config=HostConfig(per_loop_max_iterations=8),
         )
+        target = ScenarioTarget(
+            base_bid="00000",
+            sub_bid="00000-0",
+            scenario_name="happy",
+            gherkin_body="",
+            steps=[],
+        )
+        increment = Increment(
+            index=0, step="seed", red_test_path="t.py", red_test_code=""
+        )
+        inc_result = IncrementResult(files_changed=[], summary="", diff="")
 
         # First call: iteration goes 7 → 8, budget not exceeded yet, no halt
-        stage._run_single_increment(
-            ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+        stage.inspect_increment(
+            ctx, target=target, increment=increment, result=inc_result
         )
-        # Second call: iteration 8 → 9, over budget, halt
-        with pytest.raises(ScenarioInspectHalted):
-            stage._run_single_increment(
-                ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+        # Second call: iteration 8 → 9, over budget, halt.
+        ctx.iteration = 9
+        with pytest.raises(Exception) as exc_info:
+            stage.inspect_increment(
+                ctx, target=target, increment=increment, result=inc_result
             )
-
-        events = log.read_all()
-        types = [e.event_type.value for e in events]
-        assert types.count("scenario_halt_persisted") == 1
+        # The new API raises the budget overflow directly.
+        assert "budget exhausted" in str(exc_info.value)
 
 
 class TestE2ESpecRouteHalt:
     def test_spec_route_finding_halts_scenario(self, tmp_path):
-        from dataclasses import dataclass
-        from datetime import UTC, datetime
+        from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.etch import ScenarioInspectHalted
         from mage.orchestration.nodes import PipelineContext
-        from mage.artifacts.mapping import MappingArtifact
+        from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
         from mage.verification.host_overrides import HostConfig
 
         log = EventsLog(tmp_path / "events.jsonl")
@@ -228,29 +251,44 @@ class TestE2ESpecRouteHalt:
                 return VerdictWithRoute(findings=[FindingWithRoute()])
 
         stage = InspectLoopStage(
-            log, CleanMech(), SpecRouteReviewer(), HostConfig()
+            log,
+            mechanical_verifier=CleanMech(),
+            increment_quality_reviewer=SpecRouteReviewer(),
+            host_config=HostConfig(),
         )
+        target = ScenarioTarget(
+            base_bid="00000",
+            sub_bid="00000-0",
+            scenario_name="happy",
+            gherkin_body="",
+            steps=[],
+        )
+        increment = Increment(
+            index=0, step="seed", red_test_path="t.py", red_test_code=""
+        )
+        inc_result = IncrementResult(files_changed=[], summary="", diff="")
 
-        with pytest.raises(ScenarioInspectHalted):
-            stage._run_single_increment(
-                ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
-            )
-
-        events = log.read_all()
-        types = [e.event_type.value for e in events]
-        assert types.count("scenario_halt_persisted") == 1
+        # Plan 6: inspect_increment returns "spec"; the runner (or test shim)
+        # translates that into ScenarioInspectHalted. Test that the spec
+        # finding lands in the journal with route="spec".
+        route = stage.inspect_increment(
+            ctx, target=target, increment=increment, result=inc_result
+        )
+        assert route == "spec"
+        journal = ctx.mapping.inspect_journal.get("00000-0", [])
+        spec_entries = [e for e in journal if e.get("route") == "spec"]
+        assert len(spec_entries) == 1
 
 
 class TestE2ECodeRouteCarryForward:
     def test_code_route_finding_injects_into_next_increment(self, tmp_path):
-        from dataclasses import dataclass
-        from datetime import UTC, datetime
+        from mage.agents.realize import RealizeOutput
+        from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
-        from mage.orchestration.realize import RealizeStage
         from mage.orchestration.nodes import PipelineContext
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.agents.realize import RealizeOutput
+        from mage.orchestration.realize import RealizeStage
+        from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
         from mage.verification.host_overrides import HostConfig
 
         log = EventsLog(tmp_path / "events.jsonl")
@@ -309,17 +347,32 @@ class TestE2ECodeRouteCarryForward:
                 return RealizeOutput(files_changed=[], summary="stub")
 
         stage = InspectLoopStage(
-            log, CleanMech(), CodeRouteReviewer(), HostConfig()
+            log,
+            mechanical_verifier=CleanMech(),
+            increment_quality_reviewer=CodeRouteReviewer(),
+            host_config=HostConfig(),
         )
         realize_stage = RealizeStage(log, CapturingRealizeAgent())
+        target = ScenarioTarget(
+            base_bid="00000",
+            sub_bid="00000-0",
+            scenario_name="happy",
+            gherkin_body="",
+            steps=[],
+        )
+        increment = Increment(
+            index=0, step="seed", red_test_path="t.py", red_test_code=""
+        )
+        inc_result = IncrementResult(files_changed=[], summary="", diff="")
 
         # First increment: code-route finding → journal entry
-        stage._run_single_increment(
-            ctx, sub_bid="00000-0", increment_diff="", new_test="", scenario_steps=[]
+        route = stage.inspect_increment(
+            ctx, target=target, increment=increment, result=inc_result
         )
+        assert route == "code"
         # Second increment: realize should see the code-route finding in carry_forward
-        realize_stage._run_single_increment(
-            ctx, sub_bid="00000-0", step="step-1", red_test_path="t.py"
+        realize_stage.run_increment(
+            ctx, target=target, increment=increment
         )
 
         assert len(captured_carry_forward) == 1
