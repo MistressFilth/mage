@@ -293,6 +293,46 @@ class SettleFeatureStage(StageNode):
             )
         )
 
+    def _roll_back_merge(
+        self,
+        *,
+        feature_id: str,
+        branch: str,
+        merge_root: Path,
+        base_sha: str,
+        cause: SettleError,
+    ) -> None:
+        """Restore the base branch after a merge that must not stand.
+
+        Records the attempt either way: an operator who sees the failure needs
+        to know whether the base branch was actually restored.
+        """
+        rollback_error: SettleCommandFailed | None = None
+        try:
+            self._run_checked(
+                ["git", "reset", "--hard", base_sha],
+                cwd=merge_root,
+            )
+        except SettleCommandFailed as error:
+            rollback_error = error
+        self.events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.SETTLE_MERGE_ROLLED_BACK,
+                payload={
+                    "feature_id": feature_id,
+                    "branch": branch,
+                    "base_branch": self.host_config.base_branch,
+                    "base_sha": base_sha,
+                    "cause": str(cause),
+                    "rollback_succeeded": rollback_error is None,
+                },
+            )
+        )
+        if rollback_error is not None:
+            # Chain, so the failure that triggered the rollback survives.
+            raise rollback_error from cause
+
     def _merge(
         self,
         *,
@@ -314,31 +354,22 @@ class SettleFeatureStage(StageNode):
             ["git", "rev-parse", "HEAD"],
             cwd=merge_root,
         ).stdout.strip()
-        self._run_checked(["git", "merge", branch], cwd=merge_root)
         try:
+            # A conflicted merge leaves the base branch mid-merge, and a failing
+            # post-merge test run leaves it merged. Both must be undone.
+            self._run_checked(["git", "merge", branch], cwd=merge_root)
             self._run_tests(
                 feature_id=feature_id,
                 cwd=merge_root,
                 phase="post_merge",
             )
-        except SettleTestsFailed:
-            # The merge already landed on the base branch. Put it back before
-            # surfacing the failure, or the next run starts from broken base.
-            self._run_checked(
-                ["git", "reset", "--hard", base_sha],
-                cwd=merge_root,
-            )
-            self.events_log.append(
-                Event(
-                    timestamp=datetime.now(UTC),
-                    event_type=EventType.SETTLE_MERGE_ROLLED_BACK,
-                    payload={
-                        "feature_id": feature_id,
-                        "branch": branch,
-                        "base_branch": self.host_config.base_branch,
-                        "base_sha": base_sha,
-                    },
-                )
+        except SettleError as error:
+            self._roll_back_merge(
+                feature_id=feature_id,
+                branch=branch,
+                merge_root=merge_root,
+                base_sha=base_sha,
+                cause=error,
             )
             raise
 

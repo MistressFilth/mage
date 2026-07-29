@@ -79,6 +79,7 @@ class RecordingRunner:
         branch: str = "feature/inspect-settle",
         test_returncodes: list[int] | None = None,
         fail_command: list[str] | None = None,
+        fail_commands: list[list[str]] | None = None,
         branch_after: str | None = None,
         test_stdout: str | None = None,
     ) -> None:
@@ -86,7 +87,9 @@ class RecordingRunner:
         self.worktree = worktree
         self.branch = branch
         self.test_returncodes = list(test_returncodes or [])
-        self.fail_command = fail_command
+        self.fail_commands = list(fail_commands or [])
+        if fail_command is not None:
+            self.fail_commands.append(fail_command)
         self.branch_after = branch_after
         self.test_stdout = test_stdout
         self.branch_queries = 0
@@ -101,7 +104,7 @@ class RecordingRunner:
         command = list(command)
         cwd = Path(cwd)
         self.calls.append((command, cwd))
-        if self.fail_command == command:
+        if command in self.fail_commands:
             return CompletedProcess(command, 1, stdout="", stderr="command failed")
         if command == TEST_COMMAND:
             returncode = self.test_returncodes.pop(0) if self.test_returncodes else 0
@@ -468,6 +471,76 @@ class TestSettleFinalization:
         assert not any(
             command[:3] == ["git", "worktree", "remove"]
             for command, _cwd in runner.calls
+        )
+        assert not any(
+            command[:2] == ["git", "branch"] and "-D" in command
+            for command, _cwd in runner.calls
+        )
+
+    def test_conflicted_merge_rolls_the_base_branch_back(self, tmp_path):
+        project = tmp_path / "repo" / ".worktrees" / "feature"
+        context = make_context(project)
+        runner = RecordingRunner(
+            project,
+            worktree=True,
+            fail_command=["git", "merge", "feature/inspect-settle"],
+        )
+
+        with pytest.raises(SettleCommandFailed, match="git merge"):
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="merged")
+
+        repo_root = tmp_path / "repo"
+        assert (
+            ["git", "reset", "--hard", "basesha0000000"],
+            repo_root,
+        ) in runner.calls
+        rolled_back = next(
+            event
+            for event in context.events_log.read_all()
+            if event.event_type.value == "settle_merge_rolled_back"
+        )
+        assert rolled_back.payload["rollback_succeeded"] is True
+
+    def test_failed_rollback_preserves_the_triggering_failure(self, tmp_path):
+        project = tmp_path / "repo" / ".worktrees" / "feature"
+        context = make_context(project)
+        runner = RecordingRunner(
+            project,
+            worktree=True,
+            test_returncodes=[0, 1],
+            fail_command=["git", "reset", "--hard", "basesha0000000"],
+        )
+
+        with pytest.raises(SettleCommandFailed) as raised:
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="merged")
+
+        assert isinstance(raised.value.__cause__, SettleTestsFailed)
+        rolled_back = next(
+            event
+            for event in context.events_log.read_all()
+            if event.event_type.value == "settle_merge_rolled_back"
+        )
+        assert rolled_back.payload["rollback_succeeded"] is False
+        assert "post_merge" in rolled_back.payload["cause"]
+
+    def test_discard_outside_a_worktree_aborts_when_head_moved(self, tmp_path):
+        context = make_context(tmp_path / "project")
+        runner = RecordingRunner(context.project_dir, branch_after="main")
+
+        with pytest.raises(SettleCommandFailed, match="moved"):
+            SettleFeatureStage(
+                context.events_log,
+                command_runner=runner,
+            ).run_settle(context, feature_id="feat-1", disposition="discarded")
+
+        assert not any(
+            command[:2] == ["git", "checkout"] for command, _cwd in runner.calls
         )
         assert not any(
             command[:2] == ["git", "branch"] and "-D" in command
