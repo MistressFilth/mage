@@ -161,3 +161,50 @@ def test_p4_raises_when_no_finalized_event(tmp_path):
     log = _log(tmp_path)
     with pytest.raises(DecompositionOpen):
         assert_decomposition_closed(tmp_path / "plan.md", log)
+
+from mage.orchestration.discipline.policy import begin_revision
+
+
+def _now() -> datetime:
+    return datetime(2026, 7, 29, 12, 0, 0, tzinfo=UTC)
+
+
+def test_p5_flips_status_to_inscribing():
+    m = _mapping([_scenario("A", LifecycleStatus.APPROVED)])
+    out = begin_revision(m, "A", "spec ambiguity in step 2", "inspect_loop", _now())
+    assert out.lookup_sub_bid(_make_base85("00000"), "A").lifecycle_status == LifecycleStatus.INSCRIBING
+
+
+def test_p5_appends_reversion_log_entry_to_correct_base_bid_entry():
+    m = _mapping([_scenario("A", LifecycleStatus.APPROVED)])
+    out = begin_revision(m, "A", "reason", "inspect_loop", _now())
+    entry = out.base_bids[0]
+    assert len(entry.reversion_log) == 1
+    assert entry.reversion_log[0].sub_bid == "A"
+    assert entry.reversion_log[0].reason == "reason"
+    assert entry.reversion_log[0].originating_stage == "inspect_loop"
+
+
+def test_p5_preserves_earlier_reversions():
+    from mage.artifacts.mapping import ReversionLogEntry
+    earlier = ReversionLogEntry(sub_bid="A", timestamp=_now(), reason="r1", originating_stage="s1")
+    entry = BaseBIDEntry(base_bid="00000", behavior_name="b", behavior_description="d",
+                         scenarios=[_scenario("A", LifecycleStatus.APPROVED)],
+                         reversion_log=[earlier])
+    m = MappingArtifact(project_id="p", base_bids=[entry])
+    out = begin_revision(m, "A", "r2", "s2", _now())
+    assert len(out.base_bids[0].reversion_log) == 2
+
+
+def test_p5_raises_when_sub_bid_not_found():
+    m = _mapping([])
+    with pytest.raises(ForwardOrderViolation):
+        begin_revision(m, "MISSING", "r", "s", _now())
+
+
+# helper for first P5 test
+from mage.artifacts.bid import Base85BID
+
+
+def _make_base85(v: str) -> Base85BID:
+    return Base85BID(value=v)
