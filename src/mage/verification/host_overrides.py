@@ -40,6 +40,7 @@ class HostConfig(BaseModel):
         default_factory=lambda: ["uv", "run", "pytest", "-v"]
     )
     base_branch: str = "main"
+    model: str | None = None  # Plan 6: agent model identifier; None = pydantic-ai default
 
 
 def default_check_set(
