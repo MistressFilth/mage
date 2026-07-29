@@ -148,3 +148,69 @@ class TestE2EInspectFeatureHalt:
         events = log.read_all()
         types = [e.event_type.value for e in events]
         assert "inspect_feature_halt_persisted" in types
+
+
+class TestE2ECosmeticQueueAccumulation:
+    def test_minor_findings_flow_to_cosmetic_queue(self, tmp_path):
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_feature import InspectFeatureStage
+        from mage.orchestration.nodes import PipelineContext
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.verdict import ReviewerVerdict, ReviewerFinding
+        from mage.verification.host_overrides import HostConfig
+
+        log = EventsLog(tmp_path / "events.jsonl")
+        ctx = PipelineContext(
+            project_dir=tmp_path,
+            mapping=MappingArtifact(project_id="feat-1"),
+            events_log=log,
+            plan_path=tmp_path / "plan.md",
+            iteration=0,
+        )
+
+        def make_reviewer(dim, *, severity="pass"):
+            findings = []
+            if severity == "minor":
+                findings = [ReviewerFinding(
+                    id="m-1",
+                    severity="minor",
+                    location="00000-0",
+                    issue="Rephrase for clarity",
+                    rationale="Cosmetic",
+                    suggestion="Rephrase",
+                    citations=["00000-0"],
+                )]
+
+            class R:
+                dimension = dim
+
+                def run(self, **kwargs):  # noqa: ARG002
+                    return ReviewerVerdict(
+                        dimension=dim,
+                        outcome="pass" if severity == "pass" else "fail",
+                        draft_hash="",
+                        reviewed_at=datetime.now(UTC),
+                        reviewer_id=f"{dim}@v1",
+                        findings=findings,
+                    )
+
+            return R()
+
+        reviewers = [
+            make_reviewer("spec_compliance"),
+            make_reviewer("scenario_clarity", severity="minor"),
+            *[make_reviewer(d) for d in [
+                "step_grammar", "testability", "determinism", "naming_idiom",
+                "lifecycle_tags", "cross_scenario",
+            ]],
+        ]
+
+        stage = InspectFeatureStage(log, reviewers=reviewers, host_config=HostConfig())
+        artifact = stage.run_pass(
+            ctx,
+            feature_id="feat-1",
+            scenarios=[{"sub_bid": "00000-0", "scenario_name": "happy"}],
+        )
+
+        assert artifact.ready_to_merge is True
+        assert len(artifact.minor) == 1
