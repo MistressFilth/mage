@@ -591,7 +591,7 @@ def test_run_increment_returns_increment_result_with_diff(tmp_path):
     assert len(runner.calls) == 1
     command, cwd = runner.calls[0]
     assert command[:3] == ["git", "diff", "--unified=10"]
-    assert command[-2:] == ["--", "foo.py", "bar.py"]
+    assert command[-3:] == ["--", "foo.py", "bar.py"]
 
 
 def test_run_increment_uses_default_runner_when_none_provided(tmp_path, monkeypatch):
