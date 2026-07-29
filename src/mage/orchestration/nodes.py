@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.runner import AutomationCursor
+from mage.verification.host_overrides import HostConfig
 
 
 class PipelineContext(BaseModel):
@@ -24,6 +26,8 @@ class PipelineContext(BaseModel):
     current_sub_bid: str | None = None
     iteration: int = 0
     plan_path: Path | None = Field(default=None, validate_default=True)
+    automation_cursor: AutomationCursor | None = None
+    host_config: HostConfig | None = None
 
     @field_serializer("events_log")
     def _serialize_events_log(self, log: EventsLog) -> str:
