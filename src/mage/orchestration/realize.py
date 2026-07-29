@@ -1,84 +1,93 @@
-"""Realize stage: makes red tests green + refactors, with carry-forward injection."""
+"""RealizeStage: drives one increment of the inner TDD loop, with diff capture.
+
+Plan 6: this stage is no longer a StageNode. It no longer pulls
+carry-forward from the mapping itself (FeatureRunner passes it), and it now
+returns an `IncrementResult` so `InspectLoopStage.inspect_increment` can
+hand the diff to the reviewer without keyword-argument guesswork.
+"""
 
 from __future__ import annotations
 
+import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
+from subprocess import CompletedProcess
 
 from mage.agents.realize import RealizeAgent
-from mage.artifacts.inspect import InspectJournalEntry
 from mage.orchestration.events import Event, EventsLog, EventType
-from mage.orchestration.nodes import PipelineContext, StageNode
+from mage.orchestration.nodes import PipelineContext
+from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
+
+CommandRunner = Callable[..., CompletedProcess[str]]
 
 
-class RealizeStage(StageNode):
-    """Runs once per scenario during the inner TDD cycle. Carries the journal forward."""
+def _default_command_runner(command: list[str], *, cwd: Path) -> CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
-    name = "realize"
 
-    def __init__(self, events_log: EventsLog, agent: RealizeAgent) -> None:
-        super().__init__(events_log)
+class RealizeStage:
+    """One increment: ask the agent to make the red test pass, then diff."""
+
+    def __init__(
+        self,
+        events_log: EventsLog,
+        agent: RealizeAgent,
+        *,
+        command_runner: CommandRunner | None = None,
+    ) -> None:
+        self.events_log = events_log
         self.agent = agent
+        self.command_runner = command_runner or _default_command_runner
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
-        # Plan 4 stub: emit REALIZE_STARTED + REALIZE_COMPLETED only.
-        # The actual per-increment loop is in Task 12's InspectLoopStage;
-        # RealizeStage's task here is to provide the carry-forward injection
-        # API (see _run_single_increment).
-        self.events_log.append(
-            Event(
-                timestamp=datetime.now(UTC),
-                event_type=EventType.REALIZE_STARTED,
-                payload={"scenario_name": "stub"},
-            )
-        )
-        self.events_log.append(
-            Event(
-                timestamp=datetime.now(UTC),
-                event_type=EventType.REALIZE_COMPLETED,
-                payload={"scenario_name": "stub", "red_test_count": 0},
-            )
-        )
-        return context
-
-    def _run_single_increment(
+    def run_increment(
         self,
         context: PipelineContext,
         *,
-        sub_bid: str,
-        step: str,
-        red_test_path: str,
-        per_scenario_window: int = 5,
-        cross_scenario_window: int = 3,
-    ) -> None:
-        """One increment of Realize. Called by InspectLoopStage (Task 12).
+        target: ScenarioTarget,
+        increment: Increment,
+        carry_forward: list | None = None,
+    ) -> IncrementResult:
+        """Run the agent, compute the diff, return an IncrementResult.
 
-        Pulls carry-forward from mapping.inspect_journal[sub_bid] (last
-        per_scenario_window entries) and cross-scenario entries (last
-        cross_scenario_window entries from other sub_bids). Passes them
-        to the RealizeAgent.
+        `carry_forward` is unused on the runner side; the journal-windowing
+        logic that previously lived here moved to FeatureRunner so the runner
+        owns its carry-forward policy. The parameter is kept for a future
+        Plan 7/8 where the carry-forward may need override at the call site.
         """
-        mapping = context.mapping
-        my_journal = mapping.inspect_journal.get(sub_bid, [])
-        recent = [
-            InspectJournalEntry.model_validate(e) for e in my_journal[-per_scenario_window:]
-        ]
-        # Cross-scenario: take recent entries from each OTHER sub_bid
-        other_journals = []
-        for other_sb, entries in mapping.inspect_journal.items():
-            if other_sb == sub_bid:
-                continue
-            other_journals.extend(
-                InspectJournalEntry.model_validate(e)
-                for e in entries[-cross_scenario_window:]
+        output = self.agent.run(
+            step=increment.step,
+            scenario_context={"sub_bid": target.sub_bid},
+            red_test_path=increment.red_test_path,
+            carry_forward=carry_forward or [],
+            cross_scenario_observations=[],
+        )
+        diff = ""
+        if output.files_changed:
+            result = self.command_runner(
+                ["git", "diff", "--unified=10", "--", *output.files_changed],
+                cwd=context.project_dir,
             )
-        # Sort by timestamp descending, take last N
-        other_journals.sort(key=lambda e: e.timestamp, reverse=True)
-        cross_scenario = other_journals[:cross_scenario_window]
-
-        self.agent.run(
-            step=step,
-            scenario_context={"sub_bid": sub_bid},
-            red_test_path=red_test_path,
-            carry_forward=recent,
-            cross_scenario_observations=cross_scenario,
+            diff = result.stdout
+        self.events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.REALIZE_INCREMENT_DONE,
+                payload={
+                    "sub_bid": target.sub_bid,
+                    "step": increment.step,
+                    "files_changed": output.files_changed,
+                },
+            )
+        )
+        return IncrementResult(
+            files_changed=list(output.files_changed),
+            summary=output.summary,
+            diff=diff,
         )
