@@ -67,10 +67,11 @@ def test_stage_calls_begin_revision_on_revision_requested(tmp_path):
             },
         ),
     )
-    new_status = ctx.mapping.lookup_sub_bid(
-        ctx.mapping.highest_base_bid(), "A"
-    ).lifecycle_status
-    assert new_status == LifecycleStatus.INSCRIBING
+    base_bid = ctx.mapping.highest_base_bid()
+    assert base_bid is not None
+    scenario = ctx.mapping.lookup_sub_bid(base_bid, "A")
+    assert scenario is not None
+    assert scenario.lifecycle_status == LifecycleStatus.INSCRIBING
 
 
 def test_stage_calls_begin_supersession_on_supersession_requested(tmp_path):
