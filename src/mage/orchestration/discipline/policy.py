@@ -7,7 +7,7 @@ models via model_copy.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from mage.artifacts.mapping import (
@@ -28,11 +28,13 @@ from mage.orchestration.exceptions import (
 )
 
 # Statuses that satisfy "predecessor finished" for build-order enforcement.
-_PREDECESSOR_DONE_STATUSES = frozenset({
-    LifecycleStatus.LIVE,
-    LifecycleStatus.DEPRECATED,
-    LifecycleStatus.RETIRED,
-})
+_PREDECESSOR_DONE_STATUSES = frozenset(
+    {
+        LifecycleStatus.LIVE,
+        LifecycleStatus.DEPRECATED,
+        LifecycleStatus.RETIRED,
+    }
+)
 
 
 def _all_scenarios(mapping: MappingArtifact) -> list[ScenarioEntry]:
@@ -71,6 +73,7 @@ def assert_independent_gates(mapping: MappingArtifact, sub_bid: str) -> None:
                 f"{earlier.sub_bid!r} has status {earlier.lifecycle_status.value!r}; "
                 f"expected one of {sorted(s.value for s in _PREDECESSOR_DONE_STATUSES)}"
             )
+
 
 from mage.orchestration.nodes import PipelineContext
 
@@ -135,7 +138,9 @@ def begin_revision(
             if scenario.sub_bid == sub_bid:
                 scenario_found = True
                 new_scenarios.append(
-                    scenario.model_copy(update={"lifecycle_status": LifecycleStatus.INSCRIBING})
+                    scenario.model_copy(
+                        update={"lifecycle_status": LifecycleStatus.INSCRIBING}
+                    )
                 )
             else:
                 new_scenarios.append(scenario)
@@ -150,11 +155,17 @@ def begin_revision(
                     originating_stage=originating_stage,
                 ),
             ]
-            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios, "reversion_log": new_log}))
+            new_entries.append(
+                entry.model_copy(
+                    update={"scenarios": new_scenarios, "reversion_log": new_log}
+                )
+            )
         else:
             new_entries.append(entry)
     if not matched:
-        raise ForwardOrderViolation(f"sub_bid {sub_bid!r} not found in mapping; cannot revise")
+        raise ForwardOrderViolation(
+            f"sub_bid {sub_bid!r} not found in mapping; cannot revise"
+        )
     return mapping.model_copy(update={"base_bids": new_entries})
 
 
@@ -170,7 +181,11 @@ def begin_supersession(
     new_entries: list[BaseBIDEntry] = []
     for entry in mapping.base_bids:
         new_scenarios = [
-            (s.model_copy(update={"supersedes": old_sub_bid}) if s.sub_bid == new_sub_bid else s)
+            (
+                s.model_copy(update={"supersedes": old_sub_bid})
+                if s.sub_bid == new_sub_bid
+                else s
+            )
             for s in entry.scenarios
         ]
         if any(s.sub_bid == old_sub_bid for s in entry.scenarios):
@@ -183,7 +198,11 @@ def begin_supersession(
                     originating_stage="supersession",
                 ),
             ]
-            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios, "reversion_log": new_log}))
+            new_entries.append(
+                entry.model_copy(
+                    update={"scenarios": new_scenarios, "reversion_log": new_log}
+                )
+            )
         else:
             new_entries.append(entry.model_copy(update={"scenarios": new_scenarios}))
     return mapping.model_copy(update={"base_bids": new_entries})
@@ -205,7 +224,9 @@ def complete_supersession(
         if target_old:
             break
     if target_old is None:
-        raise ForwardOrderViolation(f"new sub_bid {new_sub_bid!r} has no supersedes link")
+        raise ForwardOrderViolation(
+            f"new sub_bid {new_sub_bid!r} has no supersedes link"
+        )
 
     new_entries: list[BaseBIDEntry] = []
     for entry in mapping.base_bids:
@@ -213,10 +234,12 @@ def complete_supersession(
         for s in entry.scenarios:
             if s.sub_bid == target_old:
                 new_scenarios.append(
-                    s.model_copy(update={
-                        "lifecycle_status": LifecycleStatus.DEPRECATED,
-                        "superseded_by": new_sub_bid,
-                    })
+                    s.model_copy(
+                        update={
+                            "lifecycle_status": LifecycleStatus.DEPRECATED,
+                            "superseded_by": new_sub_bid,
+                        }
+                    )
                 )
             else:
                 new_scenarios.append(s)
@@ -230,7 +253,11 @@ def complete_supersession(
                     originating_stage="supersession_complete",
                 ),
             ]
-            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios, "reversion_log": new_log}))
+            new_entries.append(
+                entry.model_copy(
+                    update={"scenarios": new_scenarios, "reversion_log": new_log}
+                )
+            )
         else:
             new_entries.append(entry.model_copy(update={"scenarios": new_scenarios}))
     return mapping.model_copy(update={"base_bids": new_entries})
@@ -251,10 +278,11 @@ def guard_cosmetic_application(
             f"cosmetic application source={source!r} with approver={human_approver!r} "
             f"rejected; live-scenario text changes require human authorization"
         )
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     return PostLiveRevisionEntry(
         sub_bid=item.sub_bid,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         human_approver=human_approver,
         before_hash="",
         after_hash="",

@@ -133,7 +133,9 @@ def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
 
     class _Runner:
         def run(self, context, targets, *, cursor=None):
-            return [ScenarioOutcome(sub_bid=t.sub_bid, test_paths=["t.py"]) for t in targets]
+            return [
+                ScenarioOutcome(sub_bid=t.sub_bid, test_paths=["t.py"]) for t in targets
+            ]
 
     with patch(
         "mage.orchestration.automation.guard_automation_entry", autospec=True

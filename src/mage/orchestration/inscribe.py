@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -12,12 +12,11 @@ from mage.agents.inscribe import InscribeAgent
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import (
     LifecycleStatus,
-    MappingArtifact,
     ScenarioEntry,
 )
 from mage.artifacts.verdict import VerdictArtifact
 from mage.orchestration.discipline.policy import acquire_cycle_lock, release_cycle_lock
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
 from mage.verification.mechanical import MechanicalVerifier, ScenarioDraft
@@ -115,7 +114,9 @@ class InscribeStage(StageNode):
                 iteration += 1
                 # Draft scenarios
                 output = self.agent.run(
-                    behavior=entry, existing_scenarios=existing_scenarios, mapping=mapping
+                    behavior=entry,
+                    existing_scenarios=existing_scenarios,
+                    mapping=mapping,
                 )
 
                 # For each scenario, run mechanical pre-check, then 7 reviewers + aggregate
@@ -140,7 +141,10 @@ class InscribeStage(StageNode):
                     # SubBidAssignedCheck still validates Base85 alphabet,
                     # but the pre-check is best-effort at draft time.
                     draft_for_precheck = ScenarioDraft(
-                        feature_path=project_dir / "scenarios" / base_bid / f"{scenario.name}.feature",
+                        feature_path=project_dir
+                        / "scenarios"
+                        / base_bid
+                        / f"{scenario.name}.feature",
                         scenario_name=scenario.name,
                         gherkin_text=scenario.gherkin_body,
                         tags=list(scenario.tags),
@@ -151,7 +155,9 @@ class InscribeStage(StageNode):
                     precheck_results = self.mechanical_verifier.verify(
                         draft_for_precheck, mapping
                     )
-                    precheck_passed = self.mechanical_verifier.all_passed(precheck_results)
+                    precheck_passed = self.mechanical_verifier.all_passed(
+                        precheck_results
+                    )
                     if precheck_passed:
                         self.events_log.append(
                             Event(
@@ -233,7 +239,9 @@ class InscribeStage(StageNode):
 
                     # Aggregate (registry builds reviewer_verdict_ref as
                     # `.haileris/verdicts/{draft_hash}/{dimension}.yaml`).
-                    aggregate = aggregate_verdicts(per_dimension_verdicts, iteration=iteration)
+                    aggregate = aggregate_verdicts(
+                        per_dimension_verdicts, iteration=iteration
+                    )
                     aggregate_path = verdicts_dir / "aggregate.yaml"
                     # C4: VerdictArtifact.finalize already emits REVIEW_AGGREGATE_RECORDED;
                     # do NOT manually re-emit it here.
@@ -258,7 +266,9 @@ class InscribeStage(StageNode):
                         scenario_dir = project_dir / "scenarios" / base_bid
                         scenario_dir.mkdir(parents=True, exist_ok=True)
                         scenario_path = scenario_dir / f"{scenario.name}.feature"
-                        scenario_path.write_text(scenario.gherkin_body, encoding="utf-8")
+                        scenario_path.write_text(
+                            scenario.gherkin_body, encoding="utf-8"
+                        )
 
                         release_cycle_lock(context)
                         self.events_log.append(
@@ -279,7 +289,10 @@ class InscribeStage(StageNode):
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
-                                payload={"base_bid": base_bid, "scenario_name": scenario.name},
+                                payload={
+                                    "base_bid": base_bid,
+                                    "scenario_name": scenario.name,
+                                },
                             )
                         )
 
@@ -325,9 +338,7 @@ class InscribeStage(StageNode):
                 event_type=EventType.INSCRIBE_COMPLETED,
                 payload={
                     "feature_id": "unknown",
-                    "scenario_count": sum(
-                        len(e.scenarios) for e in mapping.base_bids
-                    ),
+                    "scenario_count": sum(len(e.scenarios) for e in mapping.base_bids),
                     "iteration": iteration,
                 },
             )
