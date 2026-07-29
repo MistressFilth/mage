@@ -65,10 +65,6 @@ def build_parser() -> argparse.ArgumentParser:
     review_subparsers = review_parser.add_subparsers(dest="review_command", required=True)
     review_subparsers.add_parser("show", help="Display latest aggregate verdict")
 
-    # mage review resume
-    resume_parser = review_subparsers.add_parser("resume", help="Resume after review halt")
-    resume_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
-
     # mage inspect <subcommand>
     inspect_parser = subparsers.add_parser("inspect", help="Inspect operations")
     inspect_subparsers = inspect_parser.add_subparsers(dest="inspect_command", required=True)
@@ -439,22 +435,6 @@ def cmd_inspect_show(args):
     return 0
 
 
-def cmd_review_resume(args):
-    """Verify a review halt and print resume readiness."""
-    from mage.orchestration.events import EventsLog
-
-    project_dir: Path = args.project_dir
-    log = EventsLog(project_dir / "events.jsonl")
-    events = log.read_all()
-    halt_events = [e for e in events if e.event_type.value == "review_halt_persisted"]
-    if not halt_events:
-        print(f"mage review resume: error: no REVIEW_HALT_PERSISTED event found in {project_dir}", file=sys.stderr)
-        sys.exit(2)
-
-    print(f"Review halt found. Pipeline resume is ready (full wiring deferred to Plan 6).")
-    print(f"Run: mage run --project-dir {project_dir}")
-
-
 def cmd_settle_run(args):
     """Run SettleFeature for a feature. Interactive mode prompts for 4-option menu."""
     from mage.orchestration.events import EventsLog
@@ -578,9 +558,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "inspect" and args.inspect_command == "show":
         return cmd_inspect_show(args)
-    if args.command == "review" and args.review_command == "resume":
-        cmd_review_resume(args)
-        return 0
     if args.command == "settle" and args.settle_command == "run":
         return cmd_settle_run(args)
     parser.print_help()
