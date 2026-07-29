@@ -32,6 +32,35 @@ def default_reviewer_registry() -> dict[str, type[ReviewerAgent]]:
     }
 
 
+def feature_reviewer_registry() -> list[ReviewerAgent]:
+    """Return the end-of-feature Inspect reviewers (7 from Plan 3 + cross_scenario).
+
+    Distinct from default_reviewer_registry (which is the Inscribe 7-reviewer set).
+    Both share dimension names for the 7 original; cross_scenario is added here.
+    """
+    if not getattr(feature_reviewer_registry, "_cache", None):
+        from pydantic_ai.models.test import TestModel
+
+        from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+
+        # Use a TestModel placeholder — InspectFeatureStage will inject real models
+        # based on host config in production. Tests pass canned TestModels.
+        # (A bare MagicMock would fail pydantic_ai's model-name validation.)
+        model = TestModel()
+
+        feature_reviewer_registry._cache = [
+            SpecComplianceReviewer(model=model),
+            ScenarioClarityReviewer(model=model),
+            StepGrammarReviewer(model=model),
+            TestabilityReviewer(model=model),
+            DeterminismReviewer(model=model),
+            NamingIdiomReviewer(model=model),
+            LifecycleTagsReviewer(model=model),
+            CrossScenarioReviewer(model=model),
+        ]
+    return list(feature_reviewer_registry._cache)
+
+
 def aggregate_verdicts(
     per_dimension_verdicts: dict[str, ReviewerVerdict],
     iteration: int,

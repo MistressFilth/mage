@@ -13,6 +13,7 @@ from mage.artifacts.verdict import (
 from mage.verification.reviewers.registry import (
     aggregate_verdicts,
     default_reviewer_registry,
+    feature_reviewer_registry,
 )
 
 
@@ -89,3 +90,19 @@ def test_aggregate_stores_findings_count():
     agg = aggregate_verdicts(verdicts, iteration=1)
     assert all(s.findings_count == 2 for s in agg.per_dimension.values())
     assert agg.decision == "needs_refactor"
+
+
+class TestFeatureReviewerRegistry:
+    def test_feature_reviewer_registry_has_eight_dimensions(self):
+        registry = feature_reviewer_registry()
+        dims = sorted(r.dimension for r in registry)
+        assert dims == sorted([
+            "cross_scenario",
+            "determinism",
+            "lifecycle_tags",
+            "naming_idiom",
+            "scenario_clarity",
+            "spec_compliance",
+            "step_grammar",
+            "testability",
+        ])
