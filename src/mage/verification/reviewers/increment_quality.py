@@ -19,7 +19,9 @@ class IncrementQualityReviewer(ReviewerAgent):
     """Per-loop-only reviewer for increment-level quality.
 
     Different from Plan 3's 7 reviewers: prompts are about the diff under
-    review, not the scenario text. Findings carry 3-route tagging (R20).
+    review, not the scenario text. Findings carry 3-route tagging (R20)
+    via the structured `route` field on ReviewerFinding — InspectLoopStage
+    reads it directly. No more string-prefix parsing of `suggestion`.
     """
 
     dimension: ClassVar[str] = "increment_quality"
@@ -46,18 +48,11 @@ class IncrementQualityReviewer(ReviewerAgent):
             "needs to be aware of (carry-forward).\n"
             "  - 'cosmetic': natural-language text only; doesn't affect "
             "executable behavior. Queued for the human-review cosmetic queue.\n\n"
-            "ENCODING REQUIREMENT (Important 4 fix):\n"
-            "Every finding MUST set its `suggestion` field to a string that "
-            "BEGINS with one of these prefixes:\n"
-            "  - 'spec:...'     if the finding is route=spec\n"
-            "  - 'cosmetic:...' if the finding is route=cosmetic\n"
-            "  - 'code:...'     if the finding is route=code\n\n"
-            "The routing decision in InspectLoopStage is parsed from this "
-            "prefix — without it, the finding defaults to 'code' and the "
-            "spec/cosmetic routing is impossible. Keep the part after the "
-            "colon short and human-readable (e.g. 'spec:Halt scenario — "
-            "spec describes the wrong thing', 'cosmetic:rephrase error "
-            "message', 'code:cover empty-input branch').\n\n"
+            "Set the `route` field on each finding to one of those three "
+            "values. The `suggestion` field is the actual text of the "
+            "suggestion — do NOT embed a route prefix in it; the route "
+            "lives on the structured field. InspectLoopStage reads "
+            "`route` directly.\n\n"
             "Be specific. Cite file paths and line numbers. Findings without "
             "rationale are rejected."
         )

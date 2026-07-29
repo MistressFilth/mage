@@ -42,44 +42,49 @@ class TestIncrementQualityReviewer:
         # system_prompt_only flag means we don't run the agent
         assert reviewer.dimension == "increment_quality"
 
-    def test_system_prompt_requires_route_prefix_encoding(self):
-        """Important 4 fix: the reviewer prompt must require the model to
-        emit `suggestion="spec:..."` / `cosmetic:..." / `code:..." prefixes
-        so InspectLoopStage can parse the route. Without an explicit
-        encoding requirement, LLM-produced findings default to code route.
+    def test_system_prompt_requires_route_field(self):
+        """Important 4 fix (revised): the reviewer prompt must require the
+        model to set the structured `route` field on each finding — NOT to
+        encode the route as a `spec:`/`cosmetic:`/`code:` prefix in the
+        suggestion. InspectLoopStage reads `f.route` directly.
         """
         from mage.verification.reviewers.increment_quality import (
             IncrementQualityReviewer,
         )
         prompt = IncrementQualityReviewer(system_prompt_only=True)._system_prompt()
-        # Encoding instruction present.
-        assert "spec:" in prompt, "prompt must require 'spec:' prefix"
-        assert "cosmetic:" in prompt, "prompt must require 'cosmetic:' prefix"
-        assert "code:" in prompt, "prompt must require 'code:' prefix"
-        # The prompt explicitly tells the model the suggestion field carries
-        # the route — this is the contract InspectLoopStage parses against.
-        assert "suggestion" in prompt, (
-            "prompt must reference the `suggestion` field as the encoding "
-            "channel"
+        # The prompt names the `route` field as the encoding channel.
+        assert "route" in prompt, "prompt must reference the `route` field"
+        # The prompt names each of the three valid route values.
+        assert "'spec'" in prompt, "prompt must list the 'spec' route"
+        assert "'cosmetic'" in prompt, "prompt must list the 'cosmetic' route"
+        assert "'code'" in prompt, "prompt must list the 'code' route"
+        # The prompt tells the model NOT to embed route prefixes in suggestion.
+        assert "spec:" not in prompt, (
+            "prompt must not require 'spec:' prefix encoding"
+        )
+        assert "cosmetic:" not in prompt, (
+            "prompt must not require 'cosmetic:' prefix encoding"
+        )
+        assert "code:" not in prompt, (
+            "prompt must not require 'code:' prefix encoding"
         )
 
-    def test_findings_with_route_prefix_route_correctly(self):
-        """Important 4 regression: spec-route finding with `suggestion` starting
-        with 'spec:' must route as spec; cosmetic-route via 'cosmetic:'; code
-        defaults to code. Validate the encoding by inspecting InspectLoopStage's
-        routing logic end-to-end with all three shapes.
-        """
+    def test_findings_with_route_field_route_correctly(self):
+        """Important 4 regression: the schema must carry route on the finding
+        (not as a suggestion prefix). InspectLoopStage reads `f.route` to
+        decide re-loop vs. halt vs. cosmetic. Validate all three shapes."""
         # Build three ReviewerFinding instances — each with the proper
-        # suggestion prefix — and confirm they would route correctly in
-        # InspectLoopStage (which uses: route_breakdown.get("spec"),
-        # get("cosmetic"), default "code").
+        # `route` field — and confirm they would route correctly in
+        # InspectLoopStage (route==spec halts; route==code re-loops;
+        # route==cosmetic queues).
         spec_finding = ReviewerFinding(
             id="f-spec",
             severity="major",
             location="src/foo.py",
             issue="Spec describes the wrong thing",
             rationale="Scenario text doesn't match this implementation",
-            suggestion="spec:Halt scenario — spec describes the wrong behavior",
+            suggestion="Halt scenario — spec describes the wrong behavior",
+            route="spec",
         )
         cosmetic_finding = ReviewerFinding(
             id="f-cosmetic",
@@ -87,7 +92,8 @@ class TestIncrementQualityReviewer:
             location="src/foo.py:42",
             issue="Comment is unclear",
             rationale="Doc string would benefit from a clarification",
-            suggestion="cosmetic:rephrase comment for clarity",
+            suggestion="rephrase comment for clarity",
+            route="cosmetic",
         )
         code_finding = ReviewerFinding(
             id="f-code",
@@ -95,16 +101,51 @@ class TestIncrementQualityReviewer:
             location="src/foo.py:55",
             issue="Missing empty-input branch",
             rationale="Edge case not covered",
-            suggestion="code:cover the empty-input branch in the next increment",
+            suggestion="cover the empty-input branch in the next increment",
+            route="code",
         )
-        # All three should pass Pydantic validation (suggestion field allows
-        # arbitrary string).
+        # All three should pass Pydantic validation (route is a Literal).
         for f in (spec_finding, cosmetic_finding, code_finding):
-            assert isinstance(f.suggestion, str) and f.suggestion, (
-                f"finding {f.id!r} suggestion must be non-empty"
+            assert f.route in ("spec", "code", "cosmetic"), (
+                f"finding {f.id!r} route must be one of spec/code/cosmetic, "
+                f"got {f.route!r}"
             )
-        # Confirm the prefixes match what InspectLoopStage parses.
-        for prefix, finding in (("spec:", spec_finding), ("cosmetic:", cosmetic_finding), ("code:", code_finding)):
-            assert finding.suggestion.startswith(prefix), (
-                f"{finding.id!r} suggestion {finding.suggestion!r} must start with {prefix!r}"
-            )
+        # Confirm each route is what we set — the test of the structured field.
+        assert spec_finding.route == "spec"
+        assert cosmetic_finding.route == "cosmetic"
+        assert code_finding.route == "code"
+
+    def test_increment_quality_finding_has_route_field_not_prefix(self):
+        """Pin the new contract: a spec-route finding sets `route="spec"` on
+        the finding — NOT a `"spec:"` prefix on `suggestion`. InspectLoopStage
+        reads `route` directly, so prefix parsing is no longer needed (Task 6).
+        """
+        finding = ReviewerFinding(
+            id="f-spec-contract",
+            severity="major",
+            location="src/foo.py",
+            issue="Spec describes the wrong thing",
+            rationale="Scenario text doesn't match this implementation",
+            suggestion="Halt scenario — spec describes the wrong behavior",
+            route="spec",
+        )
+        assert finding.route == "spec"
+        # Prefixed-suggestion is the OLD encoding; the new contract forbids
+        # it. A correctly authored finding has plain suggestion text.
+        assert "spec:" not in finding.suggestion, (
+            "spec-route finding must not embed a 'spec:' prefix in "
+            "suggestion; route lives on the structured field"
+        )
+
+    def test_reviewer_finding_default_route_is_code(self):
+        """Findings with no route set default to 'code' so legacy callers
+        that don't populate route still get a safe default. Per-loop reviewers
+        (IncrementQualityReviewer) override this with spec/cosmetic/code."""
+        finding = ReviewerFinding(
+            id="f-default",
+            severity="minor",
+            location="x",
+            issue="x",
+            rationale="r",
+        )
+        assert finding.route == "code"
