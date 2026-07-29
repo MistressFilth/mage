@@ -1,4 +1,10 @@
-"""Etch stage: orchestrates red-test generation for the inner TDD loop."""
+"""EtchStage: produces red tests for a scenario, one per step.
+
+Plan 6: this stage is no longer a StageNode. It no longer owns the loop
+variable (`sub_bid`, `scenario_name`) — those arrive in a `ScenarioTarget`
+built by `AutomationStage`. It emits its own domain events; `AutomationStage`
+emits the coarse STAGE_STARTED / STAGE_COMPLETED around it.
+"""
 
 from __future__ import annotations
 
@@ -6,83 +12,69 @@ from datetime import UTC, datetime
 
 from mage.agents.etch import EtchAgent
 from mage.orchestration.events import Event, EventType, EventsLog
-from mage.orchestration.nodes import PipelineContext, StageNode
+from mage.orchestration.nodes import PipelineContext
+from mage.orchestration.runner import Increment, ScenarioTarget
 
 
 class ScenarioInspectHalted(Exception):
-    """Raised when per-loop iteration budget is exhausted OR a spec-route finding halts.
-
-    Feature continues with other scenarios; halted scenario's state is on disk
-    via inspect_journal and MappingArtifact.feature_status.
-    """
-
-    def __init__(
-        self, base_bid: str, scenario_name: str, sub_bid: str, iteration: int
-    ) -> None:
-        self.base_bid = base_bid
-        self.scenario_name = scenario_name
-        self.sub_bid = sub_bid
-        self.iteration = iteration
-        super().__init__(
-            f"Scenario {scenario_name!r} (sub_bid={sub_bid!r}) halted at "
-            f"iteration {iteration} (budget exhausted or spec-route halt)"
-        )
+    """Raised when InspectLoop routes a finding to spec/halts the run."""
 
 
-class EtchStage(StageNode):
-    """Runs once per scenario during the inner TDD cycle. Generates red tests for each step."""
-
-    name = "etch"
+class EtchStage:
+    """One pass through the steps of a scenario, producing one Increment per step."""
 
     def __init__(self, events_log: EventsLog, agent: EtchAgent) -> None:
-        super().__init__(events_log)
+        self.events_log = events_log
         self.agent = agent
 
-    def _run(self, context: PipelineContext) -> PipelineContext:  # noqa: ARG002
-        # Plan 4 stub: emits ETCH_STARTED + ETCH_COMPLETED + ETCH_RED_CONFIRMED per step.
-        # Real scenario iteration happens via the RealizeStage loop (Task 11/12).
-        # Test harness injects a StubAgent that returns RedTestSpec instances.
+    def run_scenario(
+        self, context: PipelineContext, target: ScenarioTarget
+    ) -> list[Increment]:
+        """Generate a red test for each step. Returns increments in step order."""
         self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.ETCH_STARTED,
-                payload={"scenario_name": "stub", "increment_index": 0},
+                payload={
+                    "scenario_name": target.scenario_name,
+                    "sub_bid": target.sub_bid,
+                },
             )
         )
-        # Two-step stub loop (test fixture only — see test_etch_stage.py)
-        for step_idx in range(2):
-            try:
-                spec = self.agent.run(
-                    step=f"step-{step_idx}",
-                    scenario_context={"scenario_name": "stub"},
-                )
-            except NotImplementedError:
-                # No real agent wired; emit completion event only. Real agent in
-                # follow-up. Tests use StubAgent that bypasses NotImplementedError.
-                self.events_log.append(
-                    Event(
-                        timestamp=datetime.now(UTC),
-                        event_type=EventType.ETCH_COMPLETED,
-                        payload={"scenario_name": "stub", "red_test_count": 0},
-                    )
-                )
-                return context
+        increments: list[Increment] = []
+        for index, step in enumerate(target.steps):
+            spec = self.agent.run(
+                step=step,
+                scenario_context={"sub_bid": target.sub_bid},
+            )
             self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.ETCH_RED_CONFIRMED,
                     payload={
+                        "scenario_name": target.scenario_name,
                         "step_name": spec.step_name,
-                        "test_path": spec.test_path,
-                        "increment_id": f"stub-{step_idx}",
+                        "red_test_path": spec.test_path,
                     },
                 )
             )
-        self.events_log.append(
-            Event(
-                timestamp=datetime.now(UTC),
-                event_type=EventType.ETCH_COMPLETED,
-                payload={"scenario_name": "stub", "red_test_count": 2},
+            increments.append(
+                Increment(
+                    index=index,
+                    step=spec.step_name,
+                    red_test_path=spec.test_path,
+                    red_test_code=spec.test_code,
+                )
             )
-        )
-        return context
+            self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.ETCH_COMPLETED,
+                    payload={
+                        "scenario_name": target.scenario_name,
+                        "step_name": spec.step_name,
+                        "red_test_count": index + 1,
+                    },
+                )
+            )
+        return increments
