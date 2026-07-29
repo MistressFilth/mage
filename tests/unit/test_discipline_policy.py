@@ -65,7 +65,6 @@ def test_p1_respects_base_bid_ordering():
     with pytest.raises(ForwardOrderViolation):
         assert_independent_gates(m, "B")
 
-import tempfile
 from pathlib import Path
 
 from mage.orchestration.discipline.policy import (
