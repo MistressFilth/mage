@@ -148,14 +148,80 @@ def test_plan_revise_missing_plan(tmp_path, capsys):
     assert exc_info.value.code != 0
 
 
-def test_mage_run_raises_not_implemented(tmp_path, capsys):
+def test_mage_run_raises_without_dry_run(tmp_path, capsys):
+    """Without --dry-run, mage run errors out (real-agent wiring is Plan 9)."""
     from mage.cli import main
     import sys
 
     test_argv = ["mage", "--project-dir", str(tmp_path), "run"]
     with patch.object(sys, "argv", test_argv):
-        with pytest.raises(NotImplementedError, match="deferred to Plan 6"):
+        with pytest.raises(NotImplementedError, match="requires LLM agent wiring"):
             main()
+
+
+def test_mage_run_dry_run_completes_on_empty_project(tmp_path):
+    """Empty project: no behaviors, no approved scenarios. Pipeline should
+    no-op cleanly and exit 0."""
+    from mage.cli import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "mapping.yaml").write_text(
+        "schema_version: 1\nproject_id: p\nbase_bids: []\n"
+    )
+    rc = main(["run", "--dry-run", "--project-dir", str(project)])
+    assert rc == 0
+
+
+def test_mage_run_dry_run_does_not_raise_systemexit(tmp_path):
+    """Empty project does not emit a halt; mage run returns 0, not SystemExit."""
+    from mage.cli import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "mapping.yaml").write_text(
+        "schema_version: 1\nproject_id: p\nbase_bids: []\n"
+    )
+    # The halt scenario is covered in Task 14. This test pins the
+    # no-op contract: empty project with --dry-run returns cleanly.
+    rc = main(["run", "--dry-run", "--project-dir", str(project)])
+    assert rc == 0
+
+
+def test_mage_run_model_flag_overrides_host_config(tmp_path, monkeypatch):
+    """--model on the command line overrides HostConfig.model."""
+    from mage.cli import main
+    from mage.verification.host_overrides import HostConfig
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "mapping.yaml").write_text(
+        "schema_version: 1\nproject_id: p\nbase_bids: []\n"
+    )
+
+    captured: dict = {}
+
+    real_model_copy = HostConfig.model_copy
+
+    def spy_model_copy(self, **kwargs):
+        result = real_model_copy(self, **kwargs)
+        captured["model"] = result.model
+        return result
+
+    monkeypatch.setattr(HostConfig, "model_copy", spy_model_copy)
+
+    rc = main(
+        [
+            "run",
+            "--dry-run",
+            "--model",
+            "openai:gpt-4o",
+            "--project-dir",
+            str(project),
+        ]
+    )
+    assert rc == 0
+    assert captured["model"] == "openai:gpt-4o"
 
 
 def test_review_show_prints_latest_aggregate(tmp_path, capsys):
