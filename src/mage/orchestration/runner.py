@@ -62,3 +62,93 @@ class AutomationCursor(BaseModel):
     sub_bid: str
     increment_index: int
     iteration: int
+
+
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from mage.orchestration.nodes import PipelineContext
+
+
+class _EtchLike(Protocol):
+    def run_scenario(self, context, target: ScenarioTarget) -> list[Increment]: ...
+
+
+class _RealizeLike(Protocol):
+    def run_increment(self, context, *, target, increment, carry_forward=None) -> IncrementResult: ...
+
+
+class _InspectLike(Protocol):
+    def inspect_increment(self, context, *, target, increment, result) -> "InspectRoute | None": ...
+
+
+class FeatureRunner:
+    """Owns the automation loops. No I/O, no events, no artifact writes."""
+
+    def __init__(
+        self,
+        *,
+        etch: _EtchLike,
+        realize: _RealizeLike,
+        inspect_loop: _InspectLike,
+        per_loop_max_iterations: int,
+    ) -> None:
+        self.etch = etch
+        self.realize = realize
+        self.inspect_loop = inspect_loop
+        self.per_loop_max_iterations = per_loop_max_iterations
+        self.cursor: AutomationCursor | None = None
+
+    def run(
+        self,
+        context: "PipelineContext",
+        targets: list[ScenarioTarget],
+    ) -> list[ScenarioOutcome]:
+        outcomes: list[ScenarioOutcome] = []
+        for target in targets:
+            increments = self.etch.run_scenario(context, target)
+            for increment in increments:
+                iteration = 1
+                while True:
+                    self.cursor = AutomationCursor(
+                        sub_bid=target.sub_bid,
+                        increment_index=increment.index,
+                        iteration=iteration,
+                    )
+                    context.automation_cursor = self.cursor
+                    context.iteration = iteration
+                    result = self.realize.run_increment(
+                        context, target=target, increment=increment
+                    )
+                    route = self.inspect_loop.inspect_increment(
+                        context, target=target, increment=increment, result=result
+                    )
+                    if route is None:
+                        break
+                    if route == "spec":
+                        from mage.orchestration.etch import ScenarioInspectHalted
+
+                        raise ScenarioInspectHalted(
+                            f"spec-route finding for sub-bid {target.sub_bid!r} at iteration {iteration}"
+                        )
+                    if route == "code":
+                        iteration += 1
+                        if iteration > self.per_loop_max_iterations:
+                            from mage.orchestration.etch import ScenarioInspectHalted
+
+                            raise ScenarioInspectHalted(
+                                f"per-loop budget exhausted for sub-bid {target.sub_bid!r}"
+                            )
+                        continue
+                    # "cosmetic" — InspectLoopStage already queues and returns
+                    # None, so this branch is unreachable in well-formed input.
+                    break
+            outcomes.append(
+                ScenarioOutcome(
+                    sub_bid=target.sub_bid,
+                    test_paths=[inc.red_test_path for inc in increments],
+                )
+            )
+            self.cursor = None
+            context.automation_cursor = None
+        return outcomes
