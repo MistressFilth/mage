@@ -7,23 +7,19 @@ models via model_copy.
 
 from __future__ import annotations
 
-from datetime import datetime
+from pathlib import Path
 
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
     MappingArtifact,
-    PostLiveRevisionEntry,
-    ReversionLogEntry,
     ScenarioEntry,
 )
-from mage.artifacts.plan import PlanArtifact, PlanNotFinalizedError
-from mage.orchestration.events import EventsLog
+from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.exceptions import (
     CycleAlreadyInProgress,
     DecompositionOpen,
     ForwardOrderViolation,
-    ModelCannotApplyCosmetic,
     NotApprovedForAutomation,
 )
 
@@ -99,4 +95,19 @@ def guard_automation_entry(scenario: ScenarioEntry) -> None:
         raise NotApprovedForAutomation(
             f"scenario {scenario.sub_bid!r} has status "
             f"{scenario.lifecycle_status.value!r}; must be APPROVED before Automation"
+        )
+
+
+# P4 — Decomposition closed before any per-scenario cycle starts
+def assert_decomposition_closed(plan_path: Path, events_log: EventsLog) -> None:
+    """Per-scenario cycles require a finalized Plan (PLAN_FINALIZED or PLAN_REVISED event)."""
+    plan_path_str = str(plan_path)
+    found = any(
+        e.event_type in (EventType.PLAN_FINALIZED, EventType.PLAN_REVISED)
+        and e.payload.get("plan_path") == plan_path_str
+        for e in events_log.read_all()
+    )
+    if not found:
+        raise DecompositionOpen(
+            f"Plan at {plan_path} not finalized; per-scenario cycles blocked"
         )

@@ -129,3 +129,35 @@ def test_p3_raises_when_live():
     s = _scenario("A", LifecycleStatus.LIVE)
     with pytest.raises(NotApprovedForAutomation):
         guard_automation_entry(s)
+
+from datetime import UTC, datetime
+
+from mage.orchestration.discipline.policy import assert_decomposition_closed
+from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.exceptions import DecompositionOpen
+
+
+def _log(tmp_path: Path) -> EventsLog:
+    return EventsLog(tmp_path / "events.jsonl")
+
+
+def _emit(log: EventsLog, event_type: EventType, payload: dict) -> None:
+    log.append(Event(timestamp=datetime.now(UTC), event_type=event_type, payload=payload))
+
+
+def test_p4_passes_when_plan_finalized_event_present(tmp_path):
+    log = _log(tmp_path)
+    _emit(log, EventType.PLAN_FINALIZED, {"plan_path": str(tmp_path / "plan.md"), "plan_sha256": "abc"})
+    assert_decomposition_closed(tmp_path / "plan.md", log)  # no raise
+
+
+def test_p4_passes_when_plan_revised_event_present(tmp_path):
+    log = _log(tmp_path)
+    _emit(log, EventType.PLAN_REVISED, {"plan_path": str(tmp_path / "plan.md"), "plan_sha256": "abc"})
+    assert_decomposition_closed(tmp_path / "plan.md", log)
+
+
+def test_p4_raises_when_no_finalized_event(tmp_path):
+    log = _log(tmp_path)
+    with pytest.raises(DecompositionOpen):
+        assert_decomposition_closed(tmp_path / "plan.md", log)
