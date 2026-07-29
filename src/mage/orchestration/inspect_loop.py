@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from mage.artifacts.inspect import CosmeticItem, InspectJournalEntry
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
 from mage.verification.host_overrides import HostConfig

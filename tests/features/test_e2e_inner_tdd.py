@@ -17,7 +17,12 @@ import pytest
 class TestE2EInnerTDDHappyPath:
     def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
         from mage.agents.realize import RealizeOutput
-        from mage.artifacts.mapping import MappingArtifact, BaseBIDEntry, ScenarioEntry, LifecycleStatus
+        from mage.artifacts.mapping import (
+            BaseBIDEntry,
+            LifecycleStatus,
+            MappingArtifact,
+            ScenarioEntry,
+        )
         from mage.artifacts.verdict import ReviewerVerdict
         from mage.orchestration.events import EventsLog, EventType
         from mage.orchestration.inspect_loop import InspectLoopStage
