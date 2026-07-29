@@ -24,6 +24,7 @@ from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
 from mage.agents.inscribe import InscribeAgent, InscribeOutput, ScenarioSpec
+from mage.artifacts.inspect import CosmeticItem
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
@@ -31,9 +32,19 @@ from mage.artifacts.mapping import (
     ScenarioEntry,
 )
 from mage.artifacts.verdict import ReviewerVerdict
-from mage.orchestration.discipline.policy import begin_revision
+from mage.orchestration.discipline.policy import (
+    assert_decomposition_closed,
+    assert_independent_gates,
+    begin_revision,
+    guard_cosmetic_application,
+)
 from mage.orchestration.discipline.stage import DisciplineStage
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.exceptions import (
+    DecompositionOpen,
+    ForwardOrderViolation,
+    ModelCannotApplyCosmetic,
+)
 from mage.orchestration.inscribe import InscribeStage
 from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
@@ -330,3 +341,75 @@ def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
     assert len(deprecated_events) == 1
     assert deprecated_events[0].payload["old_sub_bid"] == "A"
     assert deprecated_events[0].payload["new_sub_bid"] == "B"
+
+
+def test_e2e_cosmetic_model_blocked() -> None:
+    """Cosmetic gate rejects a model source with no human approver.
+
+    Plan 7, Task 17. The cosmetic gate (parent v2 design line 327) only
+    admits ``source in {"human", "human-authorized"}`` with a non-empty
+    ``human_approver``. Anything else — including a model attempting to
+    apply a live-scenario text change — must raise
+    ``ModelCannotApplyCosmetic``.
+    """
+    item = CosmeticItem(
+        sub_bid="A",
+        scenario_name="login succeeds",
+        location="scenarios/00000/login succeeds.feature:5",
+        text="rename 'user' to 'account holder'",
+        proposed_by="increment_quality",
+    )
+
+    with pytest.raises(ModelCannotApplyCosmetic):
+        guard_cosmetic_application(source="model", item=item, human_approver=None)
+
+
+def test_e2e_plan_order_violation() -> None:
+    """Per-scenario independence rejects out-of-order starts.
+
+    Plan 7, Task 17. P1 requires every earlier scenario to be in
+    LIVE/DEPRECATED/RETIRED before a later scenario may start. Here
+    the first scenario is INSCRIBING (still in progress), so starting
+    the second must raise ``ForwardOrderViolation``.
+    """
+    older = ScenarioEntry(
+        sub_bid="A",
+        scenario_text_hash="h_a",
+        lifecycle_status=LifecycleStatus.INSCRIBING,
+    )
+    newer = ScenarioEntry(
+        sub_bid="B",
+        scenario_text_hash="h_b",
+        lifecycle_status=LifecycleStatus.INSCRIBING,
+    )
+    mapping = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            BaseBIDEntry(
+                base_bid="00000",
+                behavior_name="b",
+                behavior_description="d",
+                scenarios=[older, newer],
+            ),
+        ],
+    )
+
+    with pytest.raises(ForwardOrderViolation):
+        assert_independent_gates(mapping, "B")
+
+
+def test_e2e_decomposition_open_blocks_pipeline_start(tmp_path: Path) -> None:
+    """Decomposition must be closed before per-scenario cycles start.
+
+    Plan 7, Task 17. P4 requires a finalized Plan (PLAN_FINALIZED or
+    PLAN_REVISED event keyed to the plan path) before any per-scenario
+    cycle begins. With an empty events log and a non-existent plan
+    path, ``assert_decomposition_closed`` must raise ``DecompositionOpen``.
+    """
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+    plan_path = project_dir / "plan.md"  # not finalized, no events logged
+
+    with pytest.raises(DecompositionOpen):
+        assert_decomposition_closed(plan_path, log)
