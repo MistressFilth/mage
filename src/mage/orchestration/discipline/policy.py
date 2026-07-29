@@ -17,15 +17,15 @@ from mage.artifacts.mapping import (
     ReversionLogEntry,
     ScenarioEntry,
 )
+from mage.artifacts.plan import PlanArtifact, PlanNotFinalizedError
+from mage.orchestration.events import EventsLog
 from mage.orchestration.exceptions import (
+    CycleAlreadyInProgress,
     DecompositionOpen,
     ForwardOrderViolation,
     ModelCannotApplyCosmetic,
     NotApprovedForAutomation,
 )
-from mage.orchestration.events import EventsLog
-from mage.artifacts.plan import PlanArtifact, PlanNotFinalizedError
-
 
 # Statuses that satisfy "predecessor finished" for build-order enforcement.
 _PREDECESSOR_DONE_STATUSES = frozenset({
@@ -71,3 +71,22 @@ def assert_independent_gates(mapping: MappingArtifact, sub_bid: str) -> None:
                 f"{earlier.sub_bid!r} has status {earlier.lifecycle_status.value!r}; "
                 f"expected one of {sorted(s.value for s in _PREDECESSOR_DONE_STATUSES)}"
             )
+
+from mage.orchestration.nodes import PipelineContext
+
+
+# P2 — Sequential per-scenario cycles
+def acquire_cycle_lock(context: PipelineContext, sub_bid: str) -> None:
+    """Acquire the cycle lock for `sub_bid`. Reacquire by same sub_bid is allowed."""
+    if context.current_sub_bid is not None and context.current_sub_bid != sub_bid:
+        raise CycleAlreadyInProgress(
+            f"cycle lock held by sub_bid {context.current_sub_bid!r}; "
+            f"cannot start {sub_bid!r}"
+        )
+    # PipelineContext is mutable; direct assignment is the existing pattern.
+    context.current_sub_bid = sub_bid
+
+
+def release_cycle_lock(context: PipelineContext) -> None:
+    """Release the cycle lock. Safe to call when unset."""
+    context.current_sub_bid = None
