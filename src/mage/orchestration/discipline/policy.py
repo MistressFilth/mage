@@ -7,12 +7,14 @@ models via model_copy.
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
     MappingArtifact,
+    ReversionLogEntry,
     ScenarioEntry,
 )
 from mage.orchestration.events import EventsLog, EventType
@@ -111,3 +113,44 @@ def assert_decomposition_closed(plan_path: Path, events_log: EventsLog) -> None:
         raise DecompositionOpen(
             f"Plan at {plan_path} not finalized; per-scenario cycles blocked"
         )
+
+
+# P5 — Revision re-applies the gate
+def begin_revision(
+    mapping: MappingArtifact,
+    sub_bid: str,
+    reason: str,
+    originating_stage: str,
+    timestamp: datetime,
+) -> MappingArtifact:
+    """Revert scenario to inscribing; append ReversionLogEntry."""
+    new_entries: list[BaseBIDEntry] = []
+    matched = False
+    for entry in mapping.base_bids:
+        new_scenarios: list[ScenarioEntry] = []
+        scenario_found = False
+        for scenario in entry.scenarios:
+            if scenario.sub_bid == sub_bid:
+                scenario_found = True
+                new_scenarios.append(
+                    scenario.model_copy(update={"lifecycle_status": LifecycleStatus.INSCRIBING})
+                )
+            else:
+                new_scenarios.append(scenario)
+        if scenario_found:
+            matched = True
+            new_log = [
+                *entry.reversion_log,
+                ReversionLogEntry(
+                    sub_bid=sub_bid,
+                    timestamp=timestamp,
+                    reason=reason,
+                    originating_stage=originating_stage,
+                ),
+            ]
+            new_entries.append(entry.model_copy(update={"scenarios": new_scenarios, "reversion_log": new_log}))
+        else:
+            new_entries.append(entry)
+    if not matched:
+        raise ForwardOrderViolation(f"sub_bid {sub_bid!r} not found in mapping; cannot revise")
+    return mapping.model_copy(update={"base_bids": new_entries})
