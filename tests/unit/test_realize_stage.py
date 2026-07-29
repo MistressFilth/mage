@@ -1,87 +1,120 @@
-"""Tests for RealizeStage."""
+"""Tests for RealizeStage.run_increment."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from pathlib import Path
+from subprocess import CompletedProcess
+
+from mage.agents.realize import RealizeOutput
+from mage.artifacts.mapping import MappingArtifact
+from mage.orchestration.events import EventsLog
+from mage.orchestration.nodes import PipelineContext
+from mage.orchestration.realize import RealizeStage
+from mage.orchestration.runner import Increment, ScenarioTarget
 
 
-class TestCarryForwardInjection:
-    def test_realize_pulls_carry_forward_from_mapping(self, tmp_path):
-        from mage.agents.realize import RealizeOutput
-        from mage.artifacts.inspect import InspectJournalEntry
-        from mage.artifacts.mapping import (
-            BaseBIDEntry,
-            LifecycleStatus,
-            MappingArtifact,
-            ScenarioEntry,
-        )
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.nodes import PipelineContext
-        from mage.orchestration.realize import RealizeStage
+def _context(tmp_path: Path) -> PipelineContext:
+    return PipelineContext(
+        project_dir=tmp_path,
+        mapping=MappingArtifact(project_id="p"),
+        events_log=EventsLog(tmp_path / "events.jsonl"),
+        plan_path=tmp_path / "plan.md",
+        iteration=0,
+    )
 
-        log = EventsLog(tmp_path / "events.jsonl")
-        # Build a mapping with one scenario that has a journal entry
-        scenario = ScenarioEntry(
-            sub_bid="00000-0",
-            scenario_text_hash="abc",
-            lifecycle_status=LifecycleStatus.APPROVED,
-        )
-        mapping = MappingArtifact(
-            project_id="p1",
-            base_bids=[
-                BaseBIDEntry(
-                    base_bid="00000",
-                    behavior_name="happy",
-                    behavior_description="x",
-                    scenarios=[scenario],
-                )
-            ],
-        )
-        entry = InspectJournalEntry(
-            timestamp=datetime.now(UTC),
-            iteration=1,
-            dimension="increment_quality",
-            severity="major",
-            route="code",
-            finding_id="f-1",
-            location="src/foo.py:42",
-            issue="Missing edge case",
-            rationale="Test does not cover empty input",
-        )
-        mapping = mapping.append_inspect_journal("00000-0", entry)
 
-        ctx = PipelineContext(
-            project_dir=tmp_path,
-            mapping=mapping,
-            events_log=log,
-            plan_path=tmp_path / "plan.md",
-            iteration=0,
-        )
+class _StubAgent:
+    def __init__(self, output: RealizeOutput) -> None:
+        self._output = output
 
-        # Capture the prompt RealizeAgent.run was called with
-        captured_prompts = []
+    def run(self, **kwargs) -> RealizeOutput:
+        return self._output
 
-        class StubAgent:
-            def run(
-                self,
-                *,
-                step,
-                scenario_context,
-                red_test_path,
-                carry_forward,
-                cross_scenario_observations,
-            ):
-                captured_prompts.append(carry_forward)
-                return RealizeOutput(files_changed=[], summary="stub")
 
-        stage = RealizeStage(log, agent=StubAgent())
-        stage._run_single_increment(
-            ctx,
-            sub_bid="00000-0",
-            step="compute_total",
-            red_test_path="tests/test_x.py",
-        )
+class _RecordingRunner:
+    def __init__(self, stdout: str = "diff --git a/foo.py\n+new line\n") -> None:
+        self.stdout = stdout
+        self.calls: list[tuple[list[str], Path]] = []
 
-        assert len(captured_prompts) == 1
-        assert len(captured_prompts[0]) == 1
-        assert captured_prompts[0][0].finding_id == "f-1"
+    def __call__(self, command: list[str], *, cwd: Path) -> CompletedProcess[str]:
+        self.calls.append((list(command), Path(cwd)))
+        return CompletedProcess(command, 0, stdout=self.stdout, stderr="")
+
+
+def test_run_increment_returns_increment_result_with_diff(tmp_path):
+    ctx = _context(tmp_path)
+    target = ScenarioTarget(
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["seed"],
+    )
+    increment = Increment(
+        index=0, step="seed", red_test_path="t.py", red_test_code="..."
+    )
+    agent = _StubAgent(
+        RealizeOutput(files_changed=["foo.py", "bar.py"], summary="ok")
+    )
+    runner = _RecordingRunner(stdout="diff payload")
+    stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
+
+    result = stage.run_increment(ctx, target=target, increment=increment)
+
+    assert result.files_changed == ["foo.py", "bar.py"]
+    assert result.summary == "ok"
+    assert result.diff == "diff payload"
+    assert len(runner.calls) == 1
+    command, _cwd = runner.calls[0]
+    assert command[:3] == ["git", "diff", "--unified=10"]
+    assert command[-3:] == ["--", "foo.py", "bar.py"]
+
+
+def test_run_increment_uses_default_runner_when_none_provided(tmp_path, monkeypatch):
+    """The default runner must exist and be callable; tests don't hit real git."""
+    ctx = _context(tmp_path)
+    target = ScenarioTarget(
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["seed"],
+    )
+    increment = Increment(
+        index=0, step="seed", red_test_path="t.py", red_test_code="..."
+    )
+    agent = _StubAgent(RealizeOutput(files_changed=[], summary="nothing"))
+
+    def fake_run(command, *, cwd):
+        return CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "mage.orchestration.realize._default_command_runner", fake_run
+    )
+    stage = RealizeStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
+
+    result = stage.run_increment(ctx, target=target, increment=increment)
+
+    assert result.diff == ""
+
+
+def test_run_increment_emits_realize_increment_done(tmp_path):
+    ctx = _context(tmp_path)
+    target = ScenarioTarget(
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["seed"],
+    )
+    increment = Increment(
+        index=0, step="seed", red_test_path="t.py", red_test_code="..."
+    )
+    agent = _StubAgent(RealizeOutput(files_changed=["x.py"], summary=""))
+    runner = _RecordingRunner(stdout="")
+    stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
+
+    stage.run_increment(ctx, target=target, increment=increment)
+
+    types = [e.event_type.value for e in ctx.events_log.read_all()]
+    assert "realize_increment_done" in types
