@@ -1,4 +1,6 @@
 # tests/unit/test_discipline_policy.py — P1 section
+import pytest
+
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
@@ -7,7 +9,6 @@ from mage.artifacts.mapping import (
 )
 from mage.orchestration.discipline.policy import assert_independent_gates
 from mage.orchestration.exceptions import ForwardOrderViolation
-import pytest
 
 
 def _scenario(sub_bid: str, status: LifecycleStatus) -> ScenarioEntry:
@@ -63,3 +64,49 @@ def test_p1_respects_base_bid_ordering():
     )
     with pytest.raises(ForwardOrderViolation):
         assert_independent_gates(m, "B")
+
+import tempfile
+from pathlib import Path
+
+from mage.orchestration.discipline.policy import (
+    acquire_cycle_lock,
+    release_cycle_lock,
+)
+from mage.orchestration.exceptions import CycleAlreadyInProgress
+from mage.orchestration.nodes import PipelineContext
+
+
+def _context(tmp_path: Path) -> PipelineContext:
+    return PipelineContext(
+        project_dir=tmp_path,
+        mapping=_mapping([]),
+        events_log=__import__("mage.orchestration.events", fromlist=["EventsLog"]).EventsLog(tmp_path / "events.jsonl"),
+    )
+
+
+def test_p2_acquire_succeeds_when_unset(tmp_path):
+    ctx = _context(tmp_path)
+    acquire_cycle_lock(ctx, "A")
+    assert ctx.current_sub_bid == "A"
+
+
+def test_p2_acquire_raises_when_held_by_other(tmp_path):
+    ctx = _context(tmp_path)
+    acquire_cycle_lock(ctx, "A")
+    with pytest.raises(CycleAlreadyInProgress):
+        acquire_cycle_lock(ctx, "B")
+
+
+def test_p2_acquire_allows_same_sub_bid_reacquire(tmp_path):
+    ctx = _context(tmp_path)
+    acquire_cycle_lock(ctx, "A")
+    acquire_cycle_lock(ctx, "A")  # no raise
+    assert ctx.current_sub_bid == "A"
+
+
+def test_p2_release_clears_lock(tmp_path):
+    ctx = _context(tmp_path)
+    acquire_cycle_lock(ctx, "A")
+    release_cycle_lock(ctx)
+    assert ctx.current_sub_bid is None
+    acquire_cycle_lock(ctx, "B")  # no raise
