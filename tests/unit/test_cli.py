@@ -219,13 +219,13 @@ def test_mage_run_without_dry_run_does_not_raise_not_implemented(tmp_path):
     test_argv = ["mage", "--project-dir", str(tmp_path), "run"]
     try:
         import asyncio as _aio
+
         _aio.run(_main(test_argv))
     except SystemExit:
         pass  # argparse exit codes from missing args are fine
     except NotImplementedError as exc:
         pytest.fail(
-            "cmd_run still raises NotImplementedError after Plan 9 unlock: "
-            f"{exc}"
+            f"cmd_run still raises NotImplementedError after Plan 9 unlock: {exc}"
         )
     except Exception:
         pass  # other failures are OK; we only check the gate is gone
@@ -465,10 +465,12 @@ class TestCosmeticApply:
 
         def fake_run(cmd, **kwargs):
             recorded.append((cmd, kwargs))
+
             class R:
                 returncode = 0
                 stdout = ""
                 stderr = ""
+
             return R()
 
         monkeypatch.setattr("mage.cli.subprocess.run", fake_run)
@@ -486,15 +488,13 @@ class TestCosmeticApply:
         )
         assert recorded == [], f"dry-run must not invoke git, got {recorded!r}"
         # Event was logged though.
-        events = list(
-            (project_dir / "events.jsonl").read_text().splitlines()
-        )
+        events = list((project_dir / "events.jsonl").read_text().splitlines())
         assert any("cosmetic_item_skipped" in line for line in events), (
             f"dry-run must emit COSMETIC_ITEM_SKIPPED, got: {events!r}"
         )
-        assert all(
-            "cosmetic_item_applied" not in line for line in events
-        ), "dry-run must not emit COSMETIC_ITEM_APPLIED"
+        assert all("cosmetic_item_applied" not in line for line in events), (
+            "dry-run must not emit COSMETIC_ITEM_APPLIED"
+        )
         assert all("cosmetic_refiner_fallback" not in line for line in events)
 
 
