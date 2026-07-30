@@ -20,8 +20,9 @@ class RedTestSpec(BaseModel):
 class EtchAgent:
     """Stub agent interface. Pydantic-AI wiring is parallel to Plan 3's InscribeAgent.
 
-    Plan 4 ships the interface; full LLM wiring is a follow-up (Plan 9).
-    Stage consumes the interface via dependency injection.
+    Plan 9 ships `PydanticEtchAgent` (concrete subclass below); the abstract
+    base remains for test stubs and `--dry-run` mode. Stage consumes the
+    interface via dependency injection.
     """
 
     def __init__(self, model=None) -> None:

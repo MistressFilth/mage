@@ -358,9 +358,8 @@ class TestCosmeticShow:
         from mage.artifacts.cosmetic import CosmeticItem
 
         project_dir = tmp_path
-        config_dir = project_dir / ".haileris"
-        config_dir.mkdir()
-        mapping_path = config_dir / "mapping.yaml"
+        mapping_path = project_dir / "mapping.yaml"
+        mapping_path.parent.mkdir(parents=True, exist_ok=True)
         mapping_path.write_text(
             yaml.safe_dump(
                 {
@@ -422,13 +421,11 @@ class TestCosmeticApply:
         from mage.artifacts.cosmetic import CosmeticItem
 
         project_dir = tmp_path
-        config_dir = project_dir / ".haileris"
-        config_dir.mkdir()
         target_file = project_dir / "src" / "example.py"
         target_file.parent.mkdir(parents=True, exist_ok=True)
         target_file.write_text("line1\nline2\nline3\nline4\nline5\n")
 
-        (config_dir / "mapping.yaml").write_text(
+        (project_dir / "mapping.yaml").write_text(
             yaml.safe_dump(
                 {
                     "project_id": "p",
@@ -490,9 +487,14 @@ class TestCosmeticApply:
         assert recorded == [], f"dry-run must not invoke git, got {recorded!r}"
         # Event was logged though.
         events = list(
-            (project_dir / ".haileris" / "events.jsonl").read_text().splitlines()
+            (project_dir / "events.jsonl").read_text().splitlines()
         )
-        assert any("cosmetic_item_applied" in line for line in events)
+        assert any("cosmetic_item_skipped" in line for line in events), (
+            f"dry-run must emit COSMETIC_ITEM_SKIPPED, got: {events!r}"
+        )
+        assert all(
+            "cosmetic_item_applied" not in line for line in events
+        ), "dry-run must not emit COSMETIC_ITEM_APPLIED"
         assert all("cosmetic_refiner_fallback" not in line for line in events)
 
 

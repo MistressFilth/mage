@@ -39,7 +39,7 @@ class CosmeticRefiner:
 
     async def refine(
         self, raw: dict, *, semaphore: asyncio.Semaphore
-    ) -> "Any":  # returns CosmeticItem; Any here to avoid runtime cycle
+    ) -> Any:  # returns CosmeticItem; Any here to avoid runtime cycle
         """Refine one raw queue entry into a CosmeticItem.
 
         Acquires the semaphore first (caller controls fan-out cap). On LLM
@@ -65,12 +65,15 @@ class CosmeticRefiner:
                     rationale=data.get("rationale", raw.get("text", "")),
                     proposed_by=raw.get("proposed_by", "unknown"),
                 )
-            except Exception:  # noqa: BLE001 — fallback path for any LLM failure
+            except Exception as exc:  # noqa: BLE001 — fallback path for any LLM failure
                 return CosmeticItem(
                     sub_bid=raw["sub_bid"],
                     file_path=None,  # type: ignore[arg-type]
                     line_range=(0, 0),
                     replacement_text="",
-                    rationale=raw.get("text", ""),
+                    rationale=(
+                        f"{raw.get('text', '')} "
+                        f"[refiner-error: {type(exc).__name__}]"
+                    ),
                     proposed_by=raw.get("proposed_by", "unknown"),
                 )

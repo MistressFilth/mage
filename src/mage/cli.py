@@ -399,8 +399,9 @@ async def cmd_run(args):
 
     # Plan 9: stages are the same wiring for both --dry-run and real mode.
     # The agent substitution (stub vs Pydantic-AI) is driven by whether
-    # host_config.model is set. --dry-run paths leave host_config.model
-    # unset; real mode sets it (or the user passes --model).
+    # host_config.model is set. `--dry-run` on `mage run` is a no-op kept
+    # for backward compatibility; the same flag still controls whether
+    # `mage cosmetic apply` writes files / commits.
     stages = _make_dry_run_stages(log, host_config)
 
     graph = PipelineGraph(stages=stages, events_log=log)
@@ -578,14 +579,15 @@ async def cmd_cosmetic_show(args) -> int:
     from mage.artifacts.mapping import MappingArtifact
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / ".haileris" / "mapping.yaml"
+    mapping_path = project_dir / "mapping.yaml"
     if not mapping_path.exists():
         print(
             f"mage cosmetic show: no mapping found at {mapping_path}", file=sys.stderr
         )
         return 1
     mapping = MappingArtifact.load(mapping_path)
-    refiner = CosmeticRefiner()
+    host_config = load_host_config(project_dir)
+    refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
     refined = await asyncio.gather(
         *[refiner.refine(q, semaphore=semaphore) for q in mapping.feature_cosmetic_queue]
@@ -606,8 +608,8 @@ async def cmd_cosmetic_apply(args) -> int:
     from mage.orchestration.events import Event, EventType, EventsLog
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / ".haileris" / "mapping.yaml"
-    log = EventsLog(project_dir / ".haileris" / "events.jsonl")
+    mapping_path = project_dir / "mapping.yaml"
+    log = EventsLog(project_dir / "events.jsonl")
     if not mapping_path.exists():
         print(
             f"mage cosmetic apply: no mapping found at {mapping_path}",
@@ -615,7 +617,8 @@ async def cmd_cosmetic_apply(args) -> int:
         )
         return 1
     mapping = MappingArtifact.load(mapping_path)
-    refiner = CosmeticRefiner()
+    host_config = load_host_config(project_dir)
+    refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
     refined = await asyncio.gather(
         *[refiner.refine(q, semaphore=semaphore) for q in mapping.feature_cosmetic_queue]
@@ -629,15 +632,6 @@ async def cmd_cosmetic_apply(args) -> int:
                     timestamp=now,
                     event_type=EventType.COSMETIC_REFINER_FALLBACK,
                     payload={"sub_bid": item.sub_bid, "rationale": item.rationale},
-                )
-            )
-            continue
-        if item.applied_at is not None and item.content_hash:
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_SKIPPED,
-                    payload={"sub_bid": item.sub_bid, "reason": "already-applied"},
                 )
             )
             continue
@@ -658,31 +652,39 @@ async def cmd_cosmetic_apply(args) -> int:
                 + item.replacement_text.splitlines()
                 + lines[item.line_range[1] :]
             )
-            if not args.dry_run:
+            applied = not args.dry_run
+            if applied:
                 target.write_text("\n".join(new_lines) + "\n")
-                subprocess.run(  # noqa: S603 — CLI-level commit, not a stage
+                await asyncio.to_thread(
+                    subprocess.run,
                     [
                         "git",
                         "commit",
                         "-am",
                         f"cosmetic({item.sub_bid}): {item.rationale}",
                     ],
-                    cwd=project_dir,
+                    cwd=str(project_dir),
                     check=True,
+                    timeout=30,
                 )
             await log.append(
                 Event(
                     timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_APPLIED,
+                    event_type=EventType.COSMETIC_ITEM_APPLIED if applied
+                    else EventType.COSMETIC_ITEM_SKIPPED,
                     payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
                 )
             )
-        except Exception as e:  # noqa: BLE001 — surface any failure as event
+        except Exception as e:  # surface any failure as an audit event
             await log.append(
                 Event(
                     timestamp=now,
                     event_type=EventType.COSMETIC_APPLY_FAILED,
-                    payload={"sub_bid": item.sub_bid, "reason": str(e)},
+                    payload={
+                        "sub_bid": item.sub_bid,
+                        "reason": str(e),
+                        "error_type": type(e).__name__,
+                    },
                 )
             )
     return 0
