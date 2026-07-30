@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +52,20 @@ class PipelineContext(BaseModel):
             if project_dir is not None:
                 return project_dir / "plan.md"
         return value
+
+    def __init__(self, **data: object) -> None:
+        super().__init__(**data)
+        self._cycle_lock: asyncio.Lock | None = None  # lazy; requires running loop
+
+    def _get_cycle_lock(self) -> asyncio.Lock:
+        """Return the per-context asyncio.Lock, creating it lazily.
+
+        Mirrors `EventsLog._get_lock` and `MappingArtifact._get_save_lock`.
+        Lazy because `asyncio.Lock()` requires a running event loop.
+        """
+        if self._cycle_lock is None:
+            self._cycle_lock = asyncio.Lock()
+        return self._cycle_lock
 
 
 class StageNode(ABC):
