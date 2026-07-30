@@ -30,12 +30,13 @@ def test_dimension_is_scenario_clarity():
     assert ScenarioClarityReviewer.dimension == "scenario_clarity"
 
 
-def test_run_emits_reviewerverdict(tmp_path, scenario_clarity_reviewer):
+@pytest.mark.asyncio
+async def test_run_emits_reviewerverdict(tmp_path, scenario_clarity_reviewer):
     log = EventsLog(tmp_path / "events.jsonl")
     mapping = MappingArtifact(project_id="p", base_bids=[])
     draft = ScenarioSpec(name="login", gherkin_body="Given ...")
 
-    verdict = scenario_clarity_reviewer.run(
+    verdict = await scenario_clarity_reviewer.run(
         draft=draft,
         spec_context={"behavior_name": "auth"},
         mapping=mapping,

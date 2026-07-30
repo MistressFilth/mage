@@ -30,12 +30,13 @@ def test_dimension_is_step_grammar():
     assert StepGrammarReviewer.dimension == "step_grammar"
 
 
-def test_run_emits_reviewerverdict(tmp_path, step_grammar_reviewer):
+@pytest.mark.asyncio
+async def test_run_emits_reviewerverdict(tmp_path, step_grammar_reviewer):
     log = EventsLog(tmp_path / "events.jsonl")
     mapping = MappingArtifact(project_id="p", base_bids=[])
     draft = ScenarioSpec(name="x", gherkin_body="Given y")
 
-    verdict = step_grammar_reviewer.run(
+    verdict = await step_grammar_reviewer.run(
         draft=draft,
         spec_context={},
         mapping=mapping,

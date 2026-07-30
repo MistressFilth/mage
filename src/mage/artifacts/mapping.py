@@ -104,7 +104,7 @@ class MappingArtifact(BaseModel):
         return self._save_lock
 
     @model_validator(mode="after")
-    def _validate_plan4_fields(self) -> "MappingArtifact":
+    def _validate_plan4_fields(self) -> MappingArtifact:
         """Defensive validation for Plan 4 fields whose types are kept loose
         (dict / list[dict]) to avoid circular imports.
 
@@ -176,7 +176,7 @@ class MappingArtifact(BaseModel):
                         return scenario
         return None
 
-    def append_scenario(self, base_bid: str, scenario: "ScenarioEntry") -> "MappingArtifact":
+    def append_scenario(self, base_bid: str, scenario: ScenarioEntry) -> MappingArtifact:
         """Return a new MappingArtifact with `scenario` appended to the matching BaseBIDEntry.scenarios.
 
         Raises BaseBIDNotFoundError if no entry matches.
@@ -198,8 +198,8 @@ class MappingArtifact(BaseModel):
         return self.model_copy(update={"base_bids": new_entries})
 
     def append_inspect_journal(
-        self, sub_bid: str, entry: "InspectJournalEntry"
-    ) -> "MappingArtifact":
+        self, sub_bid: str, entry: InspectJournalEntry
+    ) -> MappingArtifact:
         """Return a new MappingArtifact with `entry` appended to inspect_journal[sub_bid].
 
         Creates the sub_bid key if absent. Parallel to append_scenario.
@@ -211,11 +211,11 @@ class MappingArtifact(BaseModel):
         new_journal[sub_bid] = [*existing, entry.model_dump(mode="json")]
         return self.model_copy(update={"inspect_journal": new_journal})
 
-    def attach_feature_inspect(self, ref: "InspectArtifactRef") -> "MappingArtifact":
+    def attach_feature_inspect(self, ref: InspectArtifactRef) -> MappingArtifact:
         """Return a new MappingArtifact with feature_inspect set to ref."""
         return self.model_copy(update={"feature_inspect": ref.model_dump(mode="json")})
 
-    def append_cosmetic(self, item: "CosmeticItem") -> "MappingArtifact":
+    def append_cosmetic(self, item: CosmeticItem) -> MappingArtifact:
         """Return a new MappingArtifact with item appended to feature_cosmetic_queue."""
         return self.model_copy(
             update={"feature_cosmetic_queue": [*self.feature_cosmetic_queue, item.model_dump(mode="json")]}
@@ -235,12 +235,15 @@ class MappingArtifact(BaseModel):
             "cosmetic_queue_size": len(self.feature_cosmetic_queue),
         }
 
-    def save(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        tmp_path.write_text(yaml.safe_dump(self.model_dump(mode="json"), sort_keys=False))
-        tmp_path.replace(path)
+    async def save(self, path: Path) -> None:
+        async with self._get_save_lock():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = path.with_suffix(path.suffix + ".tmp")
+            tmp_path.write_text(
+                yaml.safe_dump(self.model_dump(mode="json"), sort_keys=False)
+            )
+            tmp_path.replace(path)
 
     @classmethod
-    def load(cls, path: Path) -> "MappingArtifact":
+    def load(cls, path: Path) -> MappingArtifact:
         return cls.model_validate(yaml.safe_load(path.read_text()))

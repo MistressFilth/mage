@@ -106,7 +106,8 @@ def _write_behaviors_yaml(project_dir: Path, feature_id: str = "feat-1") -> Path
     return path
 
 
-def test_inscribe_stage_runs_end_to_end_with_test_model(
+@pytest.mark.asyncio
+async def test_inscribe_stage_runs_end_to_end_with_test_model(
     tmp_path, all_seven_reviewers, canned_inscribe_output
 ):
     project_dir = tmp_path / "proj"
@@ -129,7 +130,7 @@ def test_inscribe_stage_runs_end_to_end_with_test_model(
             "cross_behavior_links": [],
         }],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir, mapping=mapping, events_log=log,
@@ -148,7 +149,7 @@ def test_inscribe_stage_runs_end_to_end_with_test_model(
         reviewers=all_seven_reviewers,
     )
 
-    new_context = stage.run(context)
+    new_context = await stage.run(context)
     assert new_context is not None
     # At least the Inscribe events should be in the log
     events = log.read_all()
@@ -158,7 +159,8 @@ def test_inscribe_stage_runs_end_to_end_with_test_model(
     assert "scenario_approved" in event_types
 
 
-def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
     """When iteration >= max_iterations and aggregate says needs_refactor,
     emit REVIEW_HALT_PERSISTED and raise ReviewBudgetExhausted."""
     from mage.orchestration.inscribe import InscribeStage, ReviewBudgetExhausted
@@ -187,7 +189,7 @@ def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
             "post_live_revisions": [], "cross_behavior_links": [],
         }],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir, mapping=mapping, events_log=log,
@@ -204,14 +206,14 @@ def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
     from datetime import datetime, UTC
 
     class AlwaysFailReviewer(SpecComplianceReviewer):
-        def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
+        async def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
             v = ReviewerVerdict(
                 dimension=self.dimension, outcome="fail", draft_hash="x",
                 reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
             from mage.artifacts.verdict import VerdictArtifact
-            VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(verdict_path, v, events_log)
             return v
 
     failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
@@ -223,7 +225,7 @@ def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
     )
 
     with pytest.raises(ReviewBudgetExhausted):
-        stage.run(context)
+        await stage.run(context)
 
     # Halt event was emitted
     events = log.read_all()

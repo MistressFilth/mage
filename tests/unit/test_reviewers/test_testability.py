@@ -30,12 +30,13 @@ def test_dimension_is_testability():
     assert TestabilityReviewer.dimension == "testability"
 
 
-def test_run_returns_verdict(tmp_path, fake_reviewer):
+@pytest.mark.asyncio
+async def test_run_returns_verdict(tmp_path, fake_reviewer):
     log = EventsLog(tmp_path / "events.jsonl")
     mapping = MappingArtifact(project_id="p", base_bids=[])
     draft = ScenarioSpec(name="x", gherkin_body="Given y")
 
-    verdict = fake_reviewer.run(
+    verdict = await fake_reviewer.run(
         draft=draft,
         spec_context={},
         mapping=mapping,

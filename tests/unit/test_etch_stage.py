@@ -19,7 +19,7 @@ class _StubAgent:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
 
-    def run(self, *, step: str, scenario_context: dict) -> RedTestSpec:
+    async def run(self, *, step: str, scenario_context: dict) -> RedTestSpec:
         self.calls.append((step, scenario_context))
         return RedTestSpec(
             step_name=step,
@@ -41,7 +41,8 @@ def _context(tmp_path):
     )
 
 
-def test_run_scenario_emits_one_increment_per_step(tmp_path):
+@pytest.mark.asyncio
+async def test_run_scenario_emits_one_increment_per_step(tmp_path):
     ctx = _context(tmp_path)
     agent = _StubAgent()
     stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
@@ -53,7 +54,7 @@ def test_run_scenario_emits_one_increment_per_step(tmp_path):
         steps=["seed", "grow", "harvest"],
     )
 
-    increments = stage.run_scenario(ctx, target)
+    increments = await stage.run_scenario(ctx, target)
 
     assert [inc.index for inc in increments] == [0, 1, 2]
     assert [inc.step for inc in increments] == ["seed", "grow", "harvest"]
@@ -68,7 +69,8 @@ def test_run_scenario_emits_one_increment_per_step(tmp_path):
     assert types.count("etch_completed") == 3
 
 
-def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
+@pytest.mark.asyncio
+async def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
     ctx = _context(tmp_path)
     agent = _StubAgent()
     stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
@@ -80,6 +82,6 @@ def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
         steps=["only"],
     )
 
-    stage.run_scenario(ctx, target)
+    await stage.run_scenario(ctx, target)
 
     assert agent.calls == [("only", {"sub_bid": "00001-0001"})]

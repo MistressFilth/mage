@@ -41,7 +41,7 @@ from mage.orchestration.events import EventsLog
 _STATE_DIR = Path(".haileris") / "state"
 
 
-def _plant_fixture(
+async def _plant_fixture(
     project_dir: Path,
     *,
     approved_sub_bid: str = "00001-0001",
@@ -87,7 +87,7 @@ def _plant_fixture(
             ),
         ],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     # Empty placeholders. The pipeline needs both files to exist on disk.
     (project_dir / "plan.md").touch()
@@ -100,7 +100,7 @@ def _plant_fixture(
 
     plan_path = project_dir / "plan.md"
     log = EventsLog(project_dir / "events.jsonl")
-    PlanArtifact.finalize(plan_path, "# e2e fixture plan\n", log)
+    await PlanArtifact.finalize(plan_path, "# e2e fixture plan\n", log)
 
     return project_dir
 
@@ -147,14 +147,14 @@ def _patch_settle_stub_to_settle(monkeypatch: pytest.MonkeyPatch) -> None:
 
     original_run = _StubStageNode._run
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         if self.name == "settle_feature":
             context.mapping = context.mapping.model_copy(
                 update={"feature_status": "settled"}
             )
-            context.mapping.save(context.project_dir / "mapping.yaml")
+            await context.mapping.save(context.project_dir / "mapping.yaml")
             return context
-        return original_run(self, context)
+        return await original_run(self, context)
 
     monkeypatch.setattr(_StubStageNode, "_run", _run)
 
@@ -173,7 +173,7 @@ def _make_halting_runner(fail_sub_bid: str) -> Callable:
 
     def _factory(log, host_config):
         class _RaisingRunner:
-            def run(self, context, targets, *, cursor=None):
+            async def run(self, context, targets, *, cursor=None):
                 # Set the cursor first so the persist path captures it.
                 target = targets[0]
                 sub_bid = target.sub_bid
@@ -199,7 +199,8 @@ def _make_halting_runner(fail_sub_bid: str) -> Callable:
 # ---------------------------------------------------------------------------
 
 
-def test_mage_run_dry_run_completes_a_feature(
+@pytest.mark.asyncio
+async def test_mage_run_dry_run_completes_a_feature(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A project with one APPROVED scenario runs the full pipeline.
@@ -214,13 +215,28 @@ def test_mage_run_dry_run_completes_a_feature(
     from mage.artifacts.mapping import MappingArtifact
     from mage.cli import main
 
-    project_dir = _plant_fixture(tmp_path, approved_sub_bid="00001-0001")
+    project_dir = await _plant_fixture(tmp_path, approved_sub_bid="00001-0001")
 
     # Use the real dry-run runner (no patching).
     _install_runner(monkeypatch, None)
     _patch_settle_stub_to_settle(monkeypatch)
 
-    rc = main(["run", "--dry-run", "--project-dir", str(project_dir)])
+    import threading
+    rc_box: list[int] = []
+    err_box: list[BaseException] = []
+
+    def _thread_main() -> None:
+        try:
+            rc_box.append(main(["run", "--dry-run", "--project-dir", str(project_dir)]))
+        except BaseException as exc:  # noqa: BLE001
+            err_box.append(exc)
+
+    thread = threading.Thread(target=_thread_main)
+    thread.start()
+    thread.join()
+    if err_box:
+        raise err_box[0]
+    rc = rc_box[0] if rc_box else 1
     assert rc == 0
 
     saved = MappingArtifact.load(project_dir / "mapping.yaml")
@@ -241,7 +257,8 @@ def test_mage_run_dry_run_completes_a_feature(
     assert event_types[-1] == "stage_completed"
 
 
-def test_mage_run_resumes_from_persisted_cursor(
+@pytest.mark.asyncio
+async def test_mage_run_resumes_from_persisted_cursor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Halt on the first run; resume from the persisted cursor on the second.
@@ -258,7 +275,7 @@ def test_mage_run_resumes_from_persisted_cursor(
     from mage.orchestration.nodes import PipelineContext
     from mage.orchestration.persistence import FileStatePersistence
 
-    project_dir = _plant_fixture(tmp_path, approved_sub_bid="00001-0001")
+    project_dir = await _plant_fixture(tmp_path, approved_sub_bid="00001-0001")
 
     # First run: install a runner that halts on the first scenario.
     from mage.cli import main
@@ -266,7 +283,18 @@ def test_mage_run_resumes_from_persisted_cursor(
     _install_runner(monkeypatch, _make_halting_runner(fail_sub_bid="00001-0001"))
 
     with pytest.raises(SystemExit) as exc_info:
-        main(["run", "--dry-run", "--project-dir", str(project_dir)])
+        import threading
+        exc_box: list[BaseException] = []
+        def _thread_main() -> None:
+            try:
+                main(["run", "--dry-run", "--project-dir", str(project_dir)])
+            except BaseException as exc:  # noqa: BLE001
+                exc_box.append(exc)
+        thread = threading.Thread(target=_thread_main)
+        thread.start()
+        thread.join()
+        if exc_box:
+            raise exc_box[0]
     # The graph exits cleanly on halt with rc 0.
     assert exc_info.value.code == 0
 
@@ -292,5 +320,20 @@ def test_mage_run_resumes_from_persisted_cursor(
     _install_runner(monkeypatch, None)
     _patch_settle_stub_to_settle(monkeypatch)
 
-    rc = main(["run", "--dry-run", "--project-dir", str(project_dir)])
+    import threading
+    rc_box: list[int] = []
+    err_box: list[BaseException] = []
+
+    def _thread_main() -> None:
+        try:
+            rc_box.append(main(["run", "--dry-run", "--project-dir", str(project_dir)]))
+        except BaseException as exc:  # noqa: BLE001
+            err_box.append(exc)
+
+    thread = threading.Thread(target=_thread_main)
+    thread.start()
+    thread.join()
+    if err_box:
+        raise err_box[0]
+    rc = rc_box[0] if rc_box else 1
     assert rc == 0

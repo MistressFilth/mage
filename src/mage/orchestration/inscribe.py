@@ -56,11 +56,11 @@ class InscribeStage(StageNode):
         self.reviewers = reviewers
         self.mechanical_verifier = mechanical_verifier or MechanicalVerifier(checks=[])
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         project_dir: Path = context.project_dir
 
         # Emit INSCRIBE_STARTED
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_STARTED,
@@ -85,7 +85,7 @@ class InscribeStage(StageNode):
         for beh in behavior_specs:
             base_bid = beh["id"]
             behavior_name = beh["name"]
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.BEHAVIOR_INSCRIBE_STARTED,
@@ -113,7 +113,7 @@ class InscribeStage(StageNode):
             while iteration < self.host_config.max_iterations and not approved:
                 iteration += 1
                 # Draft scenarios
-                output = self.agent.run(
+                output = await self.agent.run(
                     behavior=entry,
                     existing_scenarios=existing_scenarios,
                     mapping=mapping,
@@ -122,7 +122,7 @@ class InscribeStage(StageNode):
                 # For each scenario, run mechanical pre-check, then 7 reviewers + aggregate
                 approved = True  # assume all approved; revise if any fail
                 for scenario_idx, scenario in enumerate(output.scenarios):
-                    self.events_log.append(
+                    await self.events_log.append(
                         Event(
                             timestamp=datetime.now(UTC),
                             event_type=EventType.SCENARIO_DRAFTED,
@@ -159,7 +159,7 @@ class InscribeStage(StageNode):
                         precheck_results
                     )
                     if precheck_passed:
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.MECHANICAL_PRECHECK_PASSED,
@@ -173,7 +173,7 @@ class InscribeStage(StageNode):
                         )
                     else:
                         failed = [r for r in precheck_results if r.outcome == "fail"]
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.MECHANICAL_PRECHECK_FAILED,
@@ -188,7 +188,7 @@ class InscribeStage(StageNode):
                         )
                         # Pre-check failure → treat as needs_refactor.
                         approved = False
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -228,7 +228,7 @@ class InscribeStage(StageNode):
                     per_dimension_verdicts = {}
                     for reviewer in reviewers_to_run:
                         verdict_path = verdicts_dir / f"{reviewer.dimension}.yaml"
-                        verdict = reviewer.run(
+                        verdict = await reviewer.run(
                             draft=scenario,
                             spec_context=spec_context,
                             mapping=mapping,
@@ -245,13 +245,15 @@ class InscribeStage(StageNode):
                     aggregate_path = verdicts_dir / "aggregate.yaml"
                     # C4: VerdictArtifact.finalize already emits REVIEW_AGGREGATE_RECORDED;
                     # do NOT manually re-emit it here.
-                    VerdictArtifact.finalize(aggregate_path, aggregate, self.events_log)
+                    await VerdictArtifact.finalize(
+                        aggregate_path, aggregate, self.events_log
+                    )
 
                     if aggregate.decision == "approved":
                         # Assign sub-BID
                         parent_bid = Base85BID(value=base_bid)
                         sub_bid = Base85BID.derive(parent_bid, scenario_idx)
-                        acquire_cycle_lock(context, sub_bid.value)
+                        await acquire_cycle_lock(context, sub_bid.value)
                         scenario_text_hash = hashlib.sha256(
                             scenario.gherkin_body.encode("utf-8")
                         ).hexdigest()
@@ -270,8 +272,8 @@ class InscribeStage(StageNode):
                             scenario.gherkin_body, encoding="utf-8"
                         )
 
-                        release_cycle_lock(context)
-                        self.events_log.append(
+                        await release_cycle_lock(context)
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_APPROVED,
@@ -285,7 +287,7 @@ class InscribeStage(StageNode):
                     else:
                         # needs_refactor: loop
                         approved = False
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -298,7 +300,7 @@ class InscribeStage(StageNode):
 
             if not approved:
                 # Budget exhausted: emit halt event and raise.
-                self.events_log.append(
+                await self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.REVIEW_HALT_PERSISTED,
@@ -320,7 +322,7 @@ class InscribeStage(StageNode):
                     iteration=iteration,
                 )
 
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.BEHAVIOR_INSCRIBE_COMPLETED,
@@ -329,10 +331,10 @@ class InscribeStage(StageNode):
             )
 
         # Persist updated mapping
-        mapping.save(project_dir / "mapping.yaml")
+        await mapping.save(project_dir / "mapping.yaml")
 
         # Emit INSCRIBE_COMPLETED
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_COMPLETED,

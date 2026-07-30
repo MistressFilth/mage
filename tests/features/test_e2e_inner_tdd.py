@@ -15,7 +15,8 @@ import pytest
 
 
 class TestE2EInnerTDDHappyPath:
-    def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
+    @pytest.mark.asyncio
+    async def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
         from mage.agents.realize import RealizeOutput
         from mage.artifacts.mapping import (
             BaseBIDEntry,
@@ -65,7 +66,7 @@ class TestE2EInnerTDDHappyPath:
                 return []
 
         class CleanReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
                 return ReviewerVerdict(
                     dimension="increment_quality",
                     outcome="pass",
@@ -76,7 +77,7 @@ class TestE2EInnerTDDHappyPath:
                 )
 
         class NoOpRealizeAgent:
-            def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
+            async def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
                 return RealizeOutput(files_changed=[], summary="stub")
 
         cfg = HostConfig()
@@ -105,13 +106,13 @@ class TestE2EInnerTDDHappyPath:
                     red_test_code="",
                 )
                 inc_result = IncrementResult(files_changed=[], summary="", diff="")
-                inspect_stage.inspect_increment(
+                await inspect_stage.inspect_increment(
                     ctx, target=target, increment=increment, result=inc_result
                 )
-                realize_stage.run_increment(
+                await realize_stage.run_increment(
                     ctx, target=target, increment=increment
                 )
-            log.append(
+            await log.append(
                 __import__("mage.orchestration.events", fromlist=["Event", "EventType"]).Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.SCENARIO_LIVE,
@@ -126,7 +127,8 @@ class TestE2EInnerTDDHappyPath:
 
 
 class TestE2EPerLoopHalt:
-    def test_mechanical_overflow_halts_scenario(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_mechanical_overflow_halts_scenario(self, tmp_path):
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
@@ -155,7 +157,7 @@ class TestE2EPerLoopHalt:
                 )]
 
         class NoopReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
                 from mage.artifacts.verdict import ReviewerVerdict
                 return ReviewerVerdict(
                     dimension="increment_quality",
@@ -185,13 +187,13 @@ class TestE2EPerLoopHalt:
         inc_result = IncrementResult(files_changed=[], summary="", diff="")
 
         # First call: iteration goes 7 → 8, budget not exceeded yet, no halt
-        stage.inspect_increment(
+        await stage.inspect_increment(
             ctx, target=target, increment=increment, result=inc_result
         )
         # Second call: iteration 8 → 9, over budget, halt.
         ctx.iteration = 9
         with pytest.raises(Exception) as exc_info:
-            stage.inspect_increment(
+            await stage.inspect_increment(
                 ctx, target=target, increment=increment, result=inc_result
             )
         # The new API raises the budget overflow directly.
@@ -199,7 +201,8 @@ class TestE2EPerLoopHalt:
 
 
 class TestE2ESpecRouteHalt:
-    def test_spec_route_finding_halts_scenario(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_spec_route_finding_halts_scenario(self, tmp_path):
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
@@ -252,7 +255,7 @@ class TestE2ESpecRouteHalt:
                     self.findings = []
 
         class SpecRouteReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
                 return VerdictWithRoute(findings=[FindingWithRoute()])
 
         stage = InspectLoopStage(
@@ -276,7 +279,7 @@ class TestE2ESpecRouteHalt:
         # Plan 6: inspect_increment returns "spec"; the runner (or test shim)
         # translates that into ScenarioInspectHalted. Test that the spec
         # finding lands in the journal with route="spec".
-        route = stage.inspect_increment(
+        route = await stage.inspect_increment(
             ctx, target=target, increment=increment, result=inc_result
         )
         assert route == "spec"
@@ -286,7 +289,8 @@ class TestE2ESpecRouteHalt:
 
 
 class TestE2ECodeRouteCarryForward:
-    def test_code_route_finding_injects_into_next_increment(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_code_route_finding_injects_into_next_increment(self, tmp_path):
         from mage.agents.realize import RealizeOutput
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
@@ -341,13 +345,13 @@ class TestE2ECodeRouteCarryForward:
                     self.findings = []
 
         class CodeRouteReviewer:
-            def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
                 return VerdictWithRoute(findings=[FindingWithRoute()])
 
         captured_carry_forward = []
 
         class CapturingRealizeAgent:
-            def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
+            async def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
                 captured_carry_forward.append(list(carry_forward))
                 return RealizeOutput(files_changed=[], summary="stub")
 
@@ -371,12 +375,12 @@ class TestE2ECodeRouteCarryForward:
         inc_result = IncrementResult(files_changed=[], summary="", diff="")
 
         # First increment: code-route finding → journal entry
-        route = stage.inspect_increment(
+        route = await stage.inspect_increment(
             ctx, target=target, increment=increment, result=inc_result
         )
         assert route == "code"
         # Second increment: realize should see the code-route finding in carry_forward
-        realize_stage.run_increment(
+        await realize_stage.run_increment(
             ctx, target=target, increment=increment
         )
 

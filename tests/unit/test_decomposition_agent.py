@@ -32,9 +32,10 @@ def _ascertain() -> AscertainOutput:
     )
 
 
-def test_decomposition_agent_returns_architecture_and_behaviors():
+@pytest.mark.asyncio
+async def test_decomposition_agent_returns_architecture_and_behaviors():
     agent = DecompositionAgent(model=TestModel())
-    output = agent.run(ascertain=_ascertain(), existing_mapping=None)
+    output = await agent.run(ascertain=_ascertain(), existing_mapping=None)
     assert output.architecture is not None
     assert isinstance(output.behaviors, list)
     assert len(output.behaviors) >= 1
@@ -43,12 +44,13 @@ def test_decomposition_agent_returns_architecture_and_behaviors():
         assert not hasattr(behavior, "id")
 
 
-def test_decomposition_agent_receives_existing_mapping_context():
+@pytest.mark.asyncio
+async def test_decomposition_agent_receives_existing_mapping_context():
     from mage.artifacts.mapping import MappingArtifact, BaseBIDEntry
     agent = DecompositionAgent(model=TestModel())
     mapping = MappingArtifact(
         project_id="p",
         base_bids=[BaseBIDEntry(base_bid="00005", behavior_name="existing", behavior_description="existing")],
     )
-    output = agent.run(ascertain=_ascertain(), existing_mapping=mapping)
+    output = await agent.run(ascertain=_ascertain(), existing_mapping=mapping)
     assert output is not None

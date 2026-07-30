@@ -1,31 +1,47 @@
-"""Tests for the MappingArtifact asyncio lock infrastructure."""
+"""Tests for serialized async MappingArtifact saves."""
 
 from __future__ import annotations
 
-import threading
+import asyncio
+from pathlib import Path
 
-from mage.artifacts.mapping import MappingArtifact
+import pytest
 
-
-def test_get_save_lock_returns_same_instance():
-    m = MappingArtifact(project_id="p", base_bids=[])
-    a = m._get_save_lock()
-    b = m._get_save_lock()
-    assert a is b
+from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
 
 
-def test_get_save_lock_threadsafe_init():
-    """Concurrent first-touch must yield exactly one lock instance."""
-    m = MappingArtifact(project_id="p", base_bids=[])
-    locks = []
+def _mapping(project_id: str = "p") -> MappingArtifact:
+    return MappingArtifact(
+        project_id=project_id,
+        base_bids=[
+            BaseBIDEntry(
+                base_bid="00000",
+                behavior_name="behavior",
+                behavior_description="description",
+            )
+        ],
+    )
 
-    def grab():
-        locks.append(m._get_save_lock())
 
-    threads = [threading.Thread(target=grab) for _ in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+@pytest.mark.asyncio
+async def test_concurrent_saves_serialize(tmp_path: Path):
+    mapping = _mapping()
+    paths = [tmp_path / f"mapping-{index}.yaml" for index in range(5)]
 
-    assert len({id(l) for l in locks}) == 1
+    coroutines = [mapping.save(path) for path in paths]
+    await asyncio.gather(*coroutines)
+
+    assert all(MappingArtifact.load(path).project_id == "p" for path in paths)
+    assert mapping._get_save_lock() is mapping._get_save_lock()
+
+
+@pytest.mark.asyncio
+async def test_save_remains_atomic_for_readers(tmp_path: Path):
+    path = tmp_path / "mapping.yaml"
+    first = _mapping("first")
+    second = _mapping("second")
+
+    await first.save(path)
+    assert MappingArtifact.load(path).project_id == "first"
+    await second.save(path)
+    assert MappingArtifact.load(path).project_id == "second"

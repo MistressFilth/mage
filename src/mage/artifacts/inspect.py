@@ -14,8 +14,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from mage.orchestration.events import Event, EventType, EventsLog
-
+from mage.orchestration.events import Event, EventsLog, EventType
 
 # Per-loop / end-of-feature Inspect findings-journal entry.
 InspectRoute = Literal["spec", "code", "cosmetic"]
@@ -124,7 +123,7 @@ class InspectArtifact:
         return max(candidates, key=lambda e: e.timestamp)
 
     @classmethod
-    def finalize(
+    async def finalize(
         cls, path: Path, content: InspectArtifactContent, events_log: EventsLog
     ) -> str:
         """Write Inspect YAML atomically, compute SHA256, emit INSPECT_FEATURE_FINALIZED.
@@ -143,7 +142,7 @@ class InspectArtifact:
         )
         tmp_path.replace(path)
 
-        events_log.append(
+        await events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_FEATURE_FINALIZED,
@@ -159,7 +158,7 @@ class InspectArtifact:
         return digest
 
     @classmethod
-    def load(cls, path: Path, events_log: EventsLog) -> InspectArtifactContent:
+    async def load(cls, path: Path, events_log: EventsLog) -> InspectArtifactContent:
         """Read InspectArtifact with digest verification."""
         event = cls._latest_event_for_path(
             events_log, path, (EventType.INSPECT_FEATURE_FINALIZED,)
@@ -180,7 +179,7 @@ class InspectArtifact:
         computed = cls._compute_digest(content)
 
         if computed != recorded_digest:
-            events_log.append(
+            await events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,  # reuse existing event type

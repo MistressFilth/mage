@@ -111,7 +111,8 @@ def _canned_inscribe_output() -> InscribeOutput:
     )
 
 
-def test_e2e_revision_full_loop(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     """Full revision loop: APPROVED → begin_revision → INSCRIBING → APPROVED.
 
     Mirrors what the Inspect-loop spec-route finding would trigger, but
@@ -160,7 +161,7 @@ def test_e2e_revision_full_loop(tmp_path: Path) -> None:
             ),
         ],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir,
@@ -183,7 +184,7 @@ def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     )
 
     # Step 1: Run Inscribe to APPROVED.
-    new_context = stage.run(context)
+    new_context = await stage.run(context)
 
     updated = MappingArtifact.load(project_dir / "mapping.yaml")
     target_entry = next(e for e in updated.base_bids if e.base_bid == "00000")
@@ -222,7 +223,7 @@ def test_e2e_revision_full_loop(tmp_path: Path) -> None:
         cleaned_entry if e.base_bid == "00000" else e for e in revised.base_bids
     ]
     cleaned = revised.model_copy(update={"base_bids": cleaned_base_bids})
-    cleaned.save(project_dir / "mapping.yaml")
+    await cleaned.save(project_dir / "mapping.yaml")
 
     # Also drop the on-disk scenario file from the previous run so the
     # re-run is a clean fresh start.
@@ -233,7 +234,7 @@ def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     new_context = new_context.model_copy(update={"mapping": cleaned})
 
     # Step 5: Re-run Inscribe to re-approve.
-    stage.run(new_context)
+    await stage.run(new_context)
 
     # Step 6: Verify scenario reaches APPROVED again.
     final = MappingArtifact.load(project_dir / "mapping.yaml")
@@ -246,7 +247,8 @@ def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     assert target_entry.reversion_log[0].sub_bid == sub_bid
 
 
-def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
     """Full supersession loop: SCENARIO_SUPERSESSION_REQUESTED → SCENARIO_LIVE.
 
     Drives ``DisciplineStage._handle_event`` end-to-end so the test
@@ -305,7 +307,7 @@ def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
             "reason": "new spec",
         },
     )
-    stage._handle_event(context, request_event)
+    await stage._handle_event(context, request_event)
 
     # Step 2: Verify the new scenario recorded the supersedes link.
     entry = context.mapping.base_bids[0]
@@ -323,7 +325,7 @@ def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
         event_type=EventType.SCENARIO_LIVE,
         payload={"sub_bid": "B"},
     )
-    stage._handle_event(context, live_event)
+    await stage._handle_event(context, live_event)
 
     # Step 4: Verify old flipped to DEPRECATED with the supersedes link.
     entry = context.mapping.base_bids[0]

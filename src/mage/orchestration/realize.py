@@ -92,7 +92,7 @@ class RealizeStage:
         other.sort(key=lambda e: e.timestamp, reverse=True)
         return other[: self.cross_scenario_window]
 
-    def run_increment(
+    async def run_increment(
         self,
         context: PipelineContext,
         *,
@@ -112,7 +112,7 @@ class RealizeStage:
             context, target.sub_bid
         )
 
-        output = self.agent.run(
+        output = await self.agent.run(
             step=increment.step,
             scenario_context={"sub_bid": target.sub_bid},
             red_test_path=increment.red_test_path,
@@ -126,7 +126,7 @@ class RealizeStage:
                 cwd=context.project_dir,
             )
             diff = result.stdout
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.REALIZE_INCREMENT_DONE,

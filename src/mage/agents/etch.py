@@ -23,9 +23,9 @@ class EtchAgent:
     """
 
     def __init__(self, model=None) -> None:
-        self._model = model  # noqa: F841 — interface placeholder
+        self._model = model
 
-    def run(self, *, step: str, scenario_context: dict) -> RedTestSpec:
+    async def run(self, *, step: str, scenario_context: dict) -> RedTestSpec:
         """Produce a red test for `step`. Concrete impl comes from subclass or stub."""
         raise NotImplementedError(
             "EtchAgent.run() must be replaced with a concrete implementation "

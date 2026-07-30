@@ -45,9 +45,11 @@ class AutomationStage(StageNode):
                 )
         return targets
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         targets = self._build_targets(context)
-        outcomes = self.runner.run(context, targets, cursor=context.automation_cursor)
+        outcomes = await self.runner.run(
+            context, targets, cursor=context.automation_cursor
+        )
         # Build a sub-bid -> outcome map for the write-back.
         outcomes_by_sub = {o.sub_bid: o for o in outcomes}
 
@@ -69,7 +71,7 @@ class AutomationStage(StageNode):
                     )
                 )
                 entry_changed = True
-                self.events_log.append(
+                await self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.SCENARIO_LIVE,
@@ -91,6 +93,6 @@ class AutomationStage(StageNode):
 
         mapping_path = context.project_dir / "mapping.yaml"
         if context.project_dir is not None and Path(context.project_dir).exists():
-            new_mapping.save(mapping_path)
+            await new_mapping.save(mapping_path)
         context.automation_cursor = None
         return context

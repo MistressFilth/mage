@@ -40,12 +40,13 @@ def test_reviewer_agent_has_dimension_attribute():
     assert FakeReviewer.dimension == "fake_dimension"
 
 
-def test_reviewer_agent_run_returns_reviewerverdict(tmp_path, fake_reviewer):
+@pytest.mark.asyncio
+async def test_reviewer_agent_run_returns_reviewerverdict(tmp_path, fake_reviewer):
     log = EventsLog(tmp_path / "events.jsonl")
     mapping = MappingArtifact(project_id="p", base_bids=[])
     draft = ScenarioSpec(name="x", gherkin_body="Given y")
 
-    verdict = fake_reviewer.run(
+    verdict = await fake_reviewer.run(
         draft=draft,
         spec_context={"behavior_name": "auth", "behavior_description": "log in"},
         mapping=mapping,
@@ -58,13 +59,14 @@ def test_reviewer_agent_run_returns_reviewerverdict(tmp_path, fake_reviewer):
     assert verdict.reviewer_id == "fake_dimension@v1"
 
 
-def test_reviewer_agent_run_persists_verdict(tmp_path, fake_reviewer):
+@pytest.mark.asyncio
+async def test_reviewer_agent_run_persists_verdict(tmp_path, fake_reviewer):
     log = EventsLog(tmp_path / "events.jsonl")
     mapping = MappingArtifact(project_id="p", base_bids=[])
     draft = ScenarioSpec(name="x", gherkin_body="Given y")
     path = tmp_path / "v.yaml"
 
-    fake_reviewer.run(draft=draft, spec_context={}, mapping=mapping, events_log=log, verdict_path=path)
+    await fake_reviewer.run(draft=draft, spec_context={}, mapping=mapping, events_log=log, verdict_path=path)
     assert path.exists()
     events = log.read_all()
     assert any(e.event_type.value == "reviewer_verdict_recorded" for e in events)

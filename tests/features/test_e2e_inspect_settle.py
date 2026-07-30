@@ -8,7 +8,8 @@ import pytest
 
 
 class TestE2EInspectSettle:
-    def test_full_feature_through_settle(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_full_feature_through_settle(self, tmp_path):
         from mage.orchestration.events import EventsLog
         from mage.orchestration.settle_feature import SettleFeatureStage
         from mage.orchestration.inspect_feature import InspectFeatureStage
@@ -30,7 +31,7 @@ class TestE2EInspectSettle:
             class R:
                 dimension = dim
 
-                def run(self, **kwargs):  # noqa: ARG002
+                async def run(self, **kwargs):  # noqa: ARG002
                     return ReviewerVerdict(
                         dimension=dim,
                         outcome="pass",
@@ -58,7 +59,7 @@ class TestE2EInspectSettle:
             mechanical_verifier=MechanicalVerifier(checks=[]),
             host_config=HostConfig(),
         )
-        artifact = inspect_stage.run_pass(
+        artifact = await inspect_stage.run_pass(
             ctx,
             feature_id="feat-1",
             scenarios=[
@@ -86,7 +87,7 @@ class TestE2EInspectSettle:
             )
 
         settle_stage = SettleFeatureStage(log, command_runner=command_runner)
-        settle_stage.run_settle(ctx, feature_id="feat-1", disposition="kept")
+        await settle_stage.run_settle(ctx, feature_id="feat-1", disposition="kept")
 
         events = log.read_all()
         types = [e.event_type.value for e in events]
@@ -101,7 +102,8 @@ class TestE2EInspectSettle:
 
 
 class TestE2EInspectFeatureHalt:
-    def test_eof_budget_overflow_raises_halt(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_eof_budget_overflow_raises_halt(self, tmp_path):
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_feature import InspectFeatureStage, InspectFeatureHalted
         from mage.orchestration.nodes import PipelineContext
@@ -121,7 +123,7 @@ class TestE2EInspectFeatureHalt:
         def make_reviewer(dim, severity="pass"):
             class R:
                 dimension = dim
-                def run(self, **kwargs):
+                async def run(self, **kwargs):
                     if severity == "pass":
                         return ReviewerVerdict(
                             dimension=dim,
@@ -167,7 +169,7 @@ class TestE2EInspectFeatureHalt:
         )
 
         with pytest.raises(InspectFeatureHalted):
-            stage.run_pass(
+            await stage.run_pass(
                 ctx,
                 feature_id="feat-1",
                 scenarios=[{"sub_bid": "00000-0", "scenario_name": "happy"}],
@@ -179,7 +181,8 @@ class TestE2EInspectFeatureHalt:
 
 
 class TestE2ECosmeticQueueAccumulation:
-    def test_minor_findings_flow_to_cosmetic_queue(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_minor_findings_flow_to_cosmetic_queue(self, tmp_path):
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_feature import InspectFeatureStage
         from mage.orchestration.nodes import PipelineContext
@@ -212,7 +215,7 @@ class TestE2ECosmeticQueueAccumulation:
             class R:
                 dimension = dim
 
-                def run(self, **kwargs):  # noqa: ARG002
+                async def run(self, **kwargs):  # noqa: ARG002
                     return ReviewerVerdict(
                         dimension=dim,
                         outcome="pass" if severity == "pass" else "fail",
@@ -241,7 +244,7 @@ class TestE2ECosmeticQueueAccumulation:
             mechanical_verifier=MechanicalVerifier(checks=[]),
             host_config=HostConfig(),
         )
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             ctx,
             feature_id="feat-1",
             scenarios=[{"sub_bid": "00000-0", "scenario_name": "happy"}],

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Callable
 
 from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
 
@@ -85,13 +85,13 @@ class SettleFeatureStage(StageNode):
         self.feature_id = feature_id
         self.disposition = disposition
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         if self.feature_id is None or self.disposition is None:
             raise ValueError(
                 "SettleFeatureStage graph execution requires feature_id and "
                 "disposition constructor arguments"
             )
-        self.run_settle(
+        await self.run_settle(
             context,
             feature_id=self.feature_id,
             disposition=self.disposition,
@@ -117,13 +117,13 @@ class SettleFeatureStage(StageNode):
             )
         return max(candidates, key=lambda item: item[0])[1]
 
-    def _load_ready_inspect(
+    async def _load_ready_inspect(
         self,
         context: PipelineContext,
         feature_id: str,
     ) -> InspectArtifactContent:
         path = self._latest_inspect_path(context.project_dir, feature_id)
-        content = InspectArtifact.load(path, context.events_log)
+        content = await InspectArtifact.load(path, context.events_log)
         if content.feature_id != feature_id:
             raise SettleNotReadyError(
                 f"InspectArtifact feature_id {content.feature_id!r} does not match "
@@ -156,7 +156,7 @@ class SettleFeatureStage(StageNode):
             return output, False
         return output[-_MAX_CAPTURED_OUTPUT:], True
 
-    def _run_tests(
+    async def _run_tests(
         self,
         *,
         feature_id: str,
@@ -169,7 +169,7 @@ class SettleFeatureStage(StageNode):
             return
         stdout, stdout_truncated = self._truncate(result.stdout or "")
         stderr, stderr_truncated = self._truncate(result.stderr or "")
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_TESTS_FAILED,
@@ -272,7 +272,7 @@ class SettleFeatureStage(StageNode):
                 "since environment detection; refusing destructive finalization"
             )
 
-    def _record_skipped_cleanup(
+    async def _record_skipped_cleanup(
         self,
         *,
         feature_id: str,
@@ -280,7 +280,7 @@ class SettleFeatureStage(StageNode):
         environment: GitEnvironment,
         reason: str,
     ) -> None:
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_CLEANUP_SKIPPED,
@@ -293,7 +293,7 @@ class SettleFeatureStage(StageNode):
             )
         )
 
-    def _roll_back_merge(
+    async def _roll_back_merge(
         self,
         *,
         feature_id: str,
@@ -315,7 +315,7 @@ class SettleFeatureStage(StageNode):
             )
         except SettleCommandFailed as error:
             rollback_error = error
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_MERGE_ROLLED_BACK,
@@ -333,7 +333,7 @@ class SettleFeatureStage(StageNode):
             # Chain, so the failure that triggered the rollback survives.
             raise rollback_error from cause
 
-    def _merge(
+    async def _merge(
         self,
         *,
         feature_id: str,
@@ -358,13 +358,13 @@ class SettleFeatureStage(StageNode):
             # A conflicted merge leaves the base branch mid-merge, and a failing
             # post-merge test run leaves it merged. Both must be undone.
             self._run_checked(["git", "merge", branch], cwd=merge_root)
-            self._run_tests(
+            await self._run_tests(
                 feature_id=feature_id,
                 cwd=merge_root,
                 phase="post_merge",
             )
         except SettleError as error:
-            self._roll_back_merge(
+            await self._roll_back_merge(
                 feature_id=feature_id,
                 branch=branch,
                 merge_root=merge_root,
@@ -377,7 +377,7 @@ class SettleFeatureStage(StageNode):
             self._run_checked(["git", "branch", "-d", branch], cwd=merge_root)
             return
         if not self._safe_worktree_cleanup(environment):
-            self._record_skipped_cleanup(
+            await self._record_skipped_cleanup(
                 feature_id=feature_id,
                 branch=branch,
                 environment=environment,
@@ -433,7 +433,7 @@ class SettleFeatureStage(StageNode):
             cwd=environment.worktree_root,
         )
 
-    def _execute_disposition(
+    async def _execute_disposition(
         self,
         *,
         feature_id: str,
@@ -465,7 +465,7 @@ class SettleFeatureStage(StageNode):
             return
 
         if disposition == "merged":
-            self._merge(
+            await self._merge(
                 feature_id=feature_id,
                 branch=branch,
                 environment=environment,
@@ -475,7 +475,7 @@ class SettleFeatureStage(StageNode):
         if disposition == "discarded":
             self._discard(branch=branch, environment=environment)
 
-    def run_settle(
+    async def run_settle(
         self,
         context: PipelineContext,
         *,
@@ -501,10 +501,10 @@ class SettleFeatureStage(StageNode):
             context.project_dir / ".haileris" / "settle" / f"{feature_id}.md"
         )
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        self._load_ready_inspect(context, feature_id)
+        await self._load_ready_inspect(context, feature_id)
 
         queue = context.mapping.feature_cosmetic_queue
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_FEATURE_STARTED,
@@ -516,7 +516,7 @@ class SettleFeatureStage(StageNode):
         )
         cosmetic_path = report_path.with_name(f"{feature_id}-cosmetic.md")
         cosmetic_path.write_text(self._render_cosmetic_md(queue), encoding="utf-8")
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_COSMETIC_QUEUED,
@@ -524,13 +524,13 @@ class SettleFeatureStage(StageNode):
             )
         )
 
-        self._run_tests(
+        await self._run_tests(
             feature_id=feature_id,
             cwd=context.project_dir,
             phase="pre_finalize",
         )
         environment = self._detect_environment(context.project_dir)
-        self._execute_disposition(
+        await self._execute_disposition(
             feature_id=feature_id,
             disposition=disposition,
             environment=environment,
@@ -550,8 +550,8 @@ class SettleFeatureStage(StageNode):
         context.mapping = context.mapping.model_copy(
             update={"feature_status": "settled"}
         )
-        context.mapping.save(context.project_dir / "mapping.yaml")
-        self.events_log.append(
+        await context.mapping.save(context.project_dir / "mapping.yaml")
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_FEATURE_FINALIZED,
@@ -564,14 +564,14 @@ class SettleFeatureStage(StageNode):
             )
         )
         if disposition == "discarded":
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.SETTLE_BRANCH_DISCARDED,
                     payload={"feature_id": feature_id},
                 )
             )
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_FEATURE_COMPLETED,

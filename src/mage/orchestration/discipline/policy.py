@@ -79,20 +79,22 @@ from mage.orchestration.nodes import PipelineContext
 
 
 # P2 — Sequential per-scenario cycles
-def acquire_cycle_lock(context: PipelineContext, sub_bid: str) -> None:
+async def acquire_cycle_lock(context: PipelineContext, sub_bid: str) -> None:
     """Acquire the cycle lock for `sub_bid`. Reacquire by same sub_bid is allowed."""
-    if context.current_sub_bid is not None and context.current_sub_bid != sub_bid:
-        raise CycleAlreadyInProgress(
-            f"cycle lock held by sub_bid {context.current_sub_bid!r}; "
-            f"cannot start {sub_bid!r}"
-        )
-    # PipelineContext is mutable; direct assignment is the existing pattern.
-    context.current_sub_bid = sub_bid
+    async with context._get_cycle_lock():
+        if context.current_sub_bid is not None and context.current_sub_bid != sub_bid:
+            raise CycleAlreadyInProgress(
+                f"cycle lock held by sub_bid {context.current_sub_bid!r}; "
+                f"cannot start {sub_bid!r}"
+            )
+        # PipelineContext is mutable; direct assignment is the existing pattern.
+        context.current_sub_bid = sub_bid
 
 
-def release_cycle_lock(context: PipelineContext) -> None:
+async def release_cycle_lock(context: PipelineContext) -> None:
     """Release the cycle lock. Safe to call when unset."""
-    context.current_sub_bid = None
+    async with context._get_cycle_lock():
+        context.current_sub_bid = None
 
 
 # P3 — Approved before any Etch/Realize sub-phase

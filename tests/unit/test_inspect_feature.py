@@ -59,7 +59,7 @@ def make_reviewer(
     outcome: str | None = None,
 ):
     class Reviewer:
-        def run(self, **kwargs):  # noqa: ARG002
+        async def run(self, **kwargs):  # noqa: ARG002
             reviewer_findings = findings or []
             return ReviewerVerdict(
                 dimension=dimension,
@@ -75,7 +75,8 @@ def make_reviewer(
 
 
 class TestInspectFeatureStage:
-    def test_passes_when_all_reviewers_clean_and_attaches_artifact(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_passes_when_all_reviewers_clean_and_attaches_artifact(self, tmp_path):
         context = make_context(tmp_path)
         reviewers = [
             make_reviewer(dimension)
@@ -97,7 +98,7 @@ class TestInspectFeatureStage:
             host_config=HostConfig(),
         )
 
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             context,
             feature_id="feat-1",
             scenarios=[make_scenario()],
@@ -114,7 +115,8 @@ class TestInspectFeatureStage:
         assert "inspect_feature_finalized" in event_types
         assert "inspect_feature_passed" in event_types
 
-    def test_critical_finding_marks_feature_pending(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_critical_finding_marks_feature_pending(self, tmp_path):
         finding = ReviewerFinding(
             id="f-1",
             severity="critical",
@@ -132,7 +134,7 @@ class TestInspectFeatureStage:
             host_config=HostConfig(),
         )
 
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             context,
             feature_id="feat-1",
             scenarios=[make_scenario()],
@@ -142,11 +144,12 @@ class TestInspectFeatureStage:
         assert len(artifact.critical) == 1
         assert context.mapping.feature_status == "inspect_pending"
 
-    def test_reviewer_errors_fail_closed(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_reviewer_errors_fail_closed(self, tmp_path):
         class BrokenReviewer:
             dimension = "spec_compliance"
 
-            def run(self, **kwargs):  # noqa: ARG002
+            async def run(self, **kwargs):  # noqa: ARG002
                 raise RuntimeError("review backend unavailable")
 
         context = make_context(tmp_path)
@@ -158,7 +161,7 @@ class TestInspectFeatureStage:
         )
 
         with pytest.raises(RuntimeError, match="review backend unavailable"):
-            stage.run_pass(
+            await stage.run_pass(
                 context,
                 feature_id="feat-1",
                 scenarios=[make_scenario()],
@@ -169,7 +172,8 @@ class TestInspectFeatureStage:
             for event in context.events_log.read_all()
         )
 
-    def test_real_registry_runs_through_stage_with_injected_model(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_real_registry_runs_through_stage_with_injected_model(self, tmp_path):
         from pydantic_ai.models.test import TestModel
 
         from mage.verification.reviewers.registry import feature_reviewer_registry
@@ -193,7 +197,7 @@ class TestInspectFeatureStage:
             host_config=HostConfig(),
         )
 
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             context,
             feature_id="feat-1",
             scenarios=[make_scenario()],
@@ -212,7 +216,8 @@ class TestInspectFeatureStage:
             "cross_scenario",
         }
 
-    def test_full_default_mechanical_precheck_blocks_llm_reviewers(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_full_default_mechanical_precheck_blocks_llm_reviewers(self, tmp_path):
         feature_path = tmp_path / "happy.feature"
         feature_path.write_text(
             "@status-live\nScenario: happy\n"
@@ -241,9 +246,9 @@ class TestInspectFeatureStage:
         class RecordingReviewer:
             dimension = "spec_compliance"
 
-            def run(self, **kwargs):  # noqa: ARG002
+            async def run(self, **kwargs):  # noqa: ARG002
                 reviewer_calls.append(True)
-                return make_reviewer("spec_compliance").run()
+                return await make_reviewer("spec_compliance").run()
 
         stage = InspectFeatureStage(
             context.events_log,
@@ -256,7 +261,7 @@ class TestInspectFeatureStage:
             feature_path=feature_path,
         )
 
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             context,
             feature_id="feat-1",
             scenarios=[invalid],
@@ -271,25 +276,26 @@ class TestInspectFeatureStage:
         assert mechanical["outcome"] == "fail"
         assert mechanical["findings"]
 
-    def test_reviews_every_scenario_with_real_body_and_tags(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_reviews_every_scenario_with_real_body_and_tags(self, tmp_path):
         reviewed = []
         cross_scenarios = []
 
         class RecordingReviewer:
             dimension = "scenario_clarity"
 
-            def run(self, *, draft, spec_context, **kwargs):  # noqa: ARG002
+            async def run(self, *, draft, spec_context, **kwargs):  # noqa: ARG002
                 reviewed.append(
                     (draft.name, draft.gherkin_body, draft.tags, spec_context["sub_bid"])
                 )
-                return make_reviewer("scenario_clarity").run()
+                return await make_reviewer("scenario_clarity").run()
 
         class CrossReviewer:
             dimension = "cross_scenario"
 
-            def run(self, *, scenarios, **kwargs):  # noqa: ARG002
+            async def run(self, *, scenarios, **kwargs):  # noqa: ARG002
                 cross_scenarios.extend(scenarios)
-                return make_reviewer("cross_scenario").run()
+                return await make_reviewer("cross_scenario").run()
 
         scenarios = [
             make_scenario("000000", "first", "Given first\nWhen A\nThen one"),
@@ -304,7 +310,7 @@ class TestInspectFeatureStage:
             host_config=HostConfig(),
         )
 
-        stage.run_pass(context, feature_id="feat-1", scenarios=scenarios)
+        await stage.run_pass(context, feature_id="feat-1", scenarios=scenarios)
 
         assert reviewed == [
             (scenario["scenario_name"], scenario["gherkin_body"], scenario["tags"], scenario["sub_bid"])
@@ -312,7 +318,8 @@ class TestInspectFeatureStage:
         ]
         assert cross_scenarios == scenarios
 
-    def test_minor_findings_append_cosmetic_queue_and_cross_field_is_findings(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_minor_findings_append_cosmetic_queue_and_cross_field_is_findings(self, tmp_path):
         finding = ReviewerFinding(
             id="minor-1",
             severity="minor",
@@ -330,7 +337,7 @@ class TestInspectFeatureStage:
             host_config=HostConfig(),
         )
 
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             context,
             feature_id="feat-1",
             scenarios=[make_scenario()],
@@ -348,7 +355,8 @@ class TestInspectFeatureStage:
         ]
         assert MappingArtifact.load(tmp_path / "mapping.yaml") == context.mapping
 
-    def test_important_findings_dispatch_one_brief_and_retry_until_clean(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_important_findings_dispatch_one_brief_and_retry_until_clean(self, tmp_path):
         findings = [
             ReviewerFinding(
                 id=f"important-{index}",
@@ -367,10 +375,10 @@ class TestInspectFeatureStage:
         class ImportantThenCleanReviewer:
             dimension = "testability"
 
-            def run(self, **kwargs):  # noqa: ARG002
+            async def run(self, **kwargs):  # noqa: ARG002
                 nonlocal reviewer_calls
                 reviewer_calls += 1
-                return make_reviewer(
+                return await make_reviewer(
                     "testability",
                     findings=findings if reviewer_calls == 1 else [],
                 ).run()
@@ -387,7 +395,7 @@ class TestInspectFeatureStage:
             host_config=HostConfig(eof_max_iterations=3),
         )
 
-        artifact = stage.run_pass(
+        artifact = await stage.run_pass(
             context,
             feature_id="feat-1",
             scenarios=[make_scenario()],
@@ -408,7 +416,8 @@ class TestInspectFeatureStage:
         assert len(fix_events) == 1
         assert fix_events[0].payload["iteration"] == 1
 
-    def test_run_entrypoint_fails_loudly(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_run_entrypoint_fails_loudly(self, tmp_path):
         context = make_context(tmp_path)
         stage = InspectFeatureStage(
             context.events_log,
@@ -418,7 +427,7 @@ class TestInspectFeatureStage:
         )
 
         with pytest.raises(NotImplementedError):
-            stage.run(context)
+            await stage.run(context)
 
         assert not any(
             event.event_type.value == "inspect_feature_completed"
