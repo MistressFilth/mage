@@ -9,6 +9,11 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - Plan 8: asyncio concurrency for LLM-bound operations. `HostConfig.max_concurrent_llm_calls` (default 7) caps fan-out via `asyncio.Semaphore`. Inscribe reviewers run concurrently via `asyncio.gather`; InspectFeature dispatches across scenarios concurrently. Cosmetic-queue per-item parallelism is deferred to Plan 9 (no per-item LLM processing exists today).
+- Plan 9: `PydanticEtchAgent` concrete implementation mirroring `PydanticRealizeAgent` plumbing; `EtchStage` swaps its injected stub for the real agent whenever `HostConfig.model` is set.
+- Plan 9: `CosmeticItem` schema (sub_bid, file_path, line_range, replacement_text, rationale, proposed_by, applied_at, content_hash with sha256 idempotency hash).
+- Plan 9: `CosmeticRefiner` LLM agent converts raw cosmetic-queue dicts into concrete `CosmeticItem` records; falls back to a stub (file_path=None) when the LLM errors.
+- Plan 9: `mage cosmetic show <feature_id>` — refines queue and prints items as a table.
+- Plan 9: `mage cosmetic apply <feature_id> [--dry-run]` — refines queue, atomically edits files, commits per item on the feature branch, and emits 4 new audit events (`COSMETIC_ITEM_APPLIED`, `COSMETIC_ITEM_SKIPPED`, `COSMETIC_APPLY_FAILED`, `COSMETIC_REFINER_FALLBACK`).
 - feat(discipline): add Plan 7 Three Practices enforcement for all six Approved
   Gate Scope rules (P1-P6), revision flow, full supersession flow (v1 only),
   and the cosmetic gate.
@@ -30,6 +35,7 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - `PipelineGraph.run` and all `StageNode.run` methods are now async coroutines; the CLI wraps execution in `asyncio.run`. `EventsLog.append` and `MappingArtifact.save` are async and serialized via per-instance `asyncio.Lock`. `acquire_cycle_lock` and `release_cycle_lock` are async and use a per-context `asyncio.Lock`.
+- Plan 9: `mage run` no longer requires `--dry-run`. The same stage graph is wired regardless of mode; per-agent stub-vs-real substitution is driven by whether `HostConfig.model` is set (default unset → stub agents; `--model` or config → Pydantic-AI agents).
 - feat(orchestrator): wire StageNodes to DisciplineStage event subscriptions,
   enforce the P3 guard in AutomationStage, and acquire the cycle lock in
   InscribeStage.

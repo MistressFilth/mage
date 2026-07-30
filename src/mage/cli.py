@@ -397,15 +397,11 @@ async def cmd_run(args):
         host_config = host_config.model_copy(update={"model": args.model})
     initial_context.host_config = host_config
 
-    if args.dry_run:
-        stages = _make_dry_run_stages(log, host_config)
-    else:
-        # Real-agent wiring is deferred to Plan 9. Until then, --dry-run is
-        # the only working path; running without --dry-run errors out.
-        raise NotImplementedError(
-            "mage run without --dry-run requires LLM agent wiring (Plan 9). "
-            "Re-run with --dry-run to exercise the pipeline end-to-end on stubs."
-        )
+    # Plan 9: stages are the same wiring for both --dry-run and real mode.
+    # The agent substitution (stub vs Pydantic-AI) is driven by whether
+    # host_config.model is set. --dry-run paths leave host_config.model
+    # unset; real mode sets it (or the user passes --model).
+    stages = _make_dry_run_stages(log, host_config)
 
     graph = PipelineGraph(stages=stages, events_log=log)
     try:
