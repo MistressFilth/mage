@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -111,6 +113,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     settle_run_parser.add_argument(
         "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+
+    # mage cosmetic <subcommand>
+    cosmetic_parser = subparsers.add_parser(
+        "cosmetic", help="Show/apply cosmetic items"
+    )
+    cosmetic_subparsers = cosmetic_parser.add_subparsers(
+        dest="cosmetic_command", required=True
+    )
+
+    # mage cosmetic show
+    cosmetic_show_parser = cosmetic_subparsers.add_parser(
+        "show", help="Show refined cosmetic items for a feature"
+    )
+    cosmetic_show_parser.add_argument("feature_id")
+    cosmetic_show_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+
+    # mage cosmetic apply
+    cosmetic_apply_parser = cosmetic_subparsers.add_parser(
+        "apply", help="Apply cosmetic items to the feature branch"
+    )
+    cosmetic_apply_parser.add_argument("feature_id")
+    cosmetic_apply_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_apply_parser.add_argument(
+        "--dry-run", action="store_true", help="Skip file writes + commits"
     )
 
     return parser
@@ -545,6 +576,122 @@ async def cmd_settle_run(args):
     return 0
 
 
+async def cmd_cosmetic_show(args) -> int:
+    """Refine and display the project's cosmetic queue items."""
+    from mage.agents.cosmetic_refiner import CosmeticRefiner
+    from mage.artifacts.mapping import MappingArtifact
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    mapping_path = project_dir / ".haileris" / "mapping.yaml"
+    if not mapping_path.exists():
+        print(
+            f"mage cosmetic show: no mapping found at {mapping_path}", file=sys.stderr
+        )
+        return 1
+    mapping = MappingArtifact.load(mapping_path)
+    refiner = CosmeticRefiner()
+    semaphore = asyncio.Semaphore(7)
+    refined = await asyncio.gather(
+        *[refiner.refine(q, semaphore=semaphore) for q in mapping.feature_cosmetic_queue]
+    )
+    for item in refined:
+        fp = str(item.file_path) if item.file_path else "<unresolved>"
+        print(
+            f"{item.sub_bid} {fp}:{item.line_range[0]}-{item.line_range[1]} "
+            f"{item.rationale}"
+        )
+    return 0
+
+
+async def cmd_cosmetic_apply(args) -> int:
+    """Refine queue, edit files in place, and commit each item."""
+    from mage.agents.cosmetic_refiner import CosmeticRefiner
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import Event, EventType, EventsLog
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    mapping_path = project_dir / ".haileris" / "mapping.yaml"
+    log = EventsLog(project_dir / ".haileris" / "events.jsonl")
+    if not mapping_path.exists():
+        print(
+            f"mage cosmetic apply: no mapping found at {mapping_path}",
+            file=sys.stderr,
+        )
+        return 1
+    mapping = MappingArtifact.load(mapping_path)
+    refiner = CosmeticRefiner()
+    semaphore = asyncio.Semaphore(7)
+    refined = await asyncio.gather(
+        *[refiner.refine(q, semaphore=semaphore) for q in mapping.feature_cosmetic_queue]
+    )
+
+    now = datetime.now(UTC)
+    for item in refined:
+        if item.file_path is None:
+            await log.append(
+                Event(
+                    timestamp=now,
+                    event_type=EventType.COSMETIC_REFINER_FALLBACK,
+                    payload={"sub_bid": item.sub_bid, "rationale": item.rationale},
+                )
+            )
+            continue
+        if item.applied_at is not None and item.content_hash:
+            await log.append(
+                Event(
+                    timestamp=now,
+                    event_type=EventType.COSMETIC_ITEM_SKIPPED,
+                    payload={"sub_bid": item.sub_bid, "reason": "already-applied"},
+                )
+            )
+            continue
+        target = project_dir / item.file_path
+        if not target.exists():
+            await log.append(
+                Event(
+                    timestamp=now,
+                    event_type=EventType.COSMETIC_APPLY_FAILED,
+                    payload={"sub_bid": item.sub_bid, "reason": "file-missing"},
+                )
+            )
+            continue
+        try:
+            lines = target.read_text().splitlines()
+            new_lines = (
+                lines[: item.line_range[0] - 1]
+                + item.replacement_text.splitlines()
+                + lines[item.line_range[1] :]
+            )
+            if not args.dry_run:
+                target.write_text("\n".join(new_lines) + "\n")
+                subprocess.run(  # noqa: S603 — CLI-level commit, not a stage
+                    [
+                        "git",
+                        "commit",
+                        "-am",
+                        f"cosmetic({item.sub_bid}): {item.rationale}",
+                    ],
+                    cwd=project_dir,
+                    check=True,
+                )
+            await log.append(
+                Event(
+                    timestamp=now,
+                    event_type=EventType.COSMETIC_ITEM_APPLIED,
+                    payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
+                )
+            )
+        except Exception as e:  # noqa: BLE001 — surface any failure as event
+            await log.append(
+                Event(
+                    timestamp=now,
+                    event_type=EventType.COSMETIC_APPLY_FAILED,
+                    payload={"sub_bid": item.sub_bid, "reason": str(e)},
+                )
+            )
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -597,6 +744,10 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_inspect_show(args)
     if args.command == "settle" and args.settle_command == "run":
         return await cmd_settle_run(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "show":
+        return await cmd_cosmetic_show(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "apply":
+        return await cmd_cosmetic_apply(args)
     parser.print_help()
     raise SystemExit(1)
 

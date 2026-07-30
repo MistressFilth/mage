@@ -336,6 +336,156 @@ def test_mage_review_resume_is_gone(tmp_path, capsys):
     assert exc.value.code == 2
 
 
+class TestCosmeticShow:
+    @pytest.mark.asyncio
+    async def test_cosmetic_show_refines_and_prints_items(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        from pathlib import Path
+
+        import yaml
+
+        from mage.artifacts.cosmetic import CosmeticItem
+
+        project_dir = tmp_path
+        config_dir = project_dir / ".haileris"
+        config_dir.mkdir()
+        mapping_path = config_dir / "mapping.yaml"
+        mapping_path.write_text(
+            yaml.safe_dump(
+                {
+                    "project_id": "p",
+                    "base_bids": [],
+                    "feature_cosmetic_queue": [
+                        {
+                            "sub_bid": "00000-001",
+                            "text": "use a constant",
+                            "location": {"file": "src/example.py", "line": 5},
+                            "proposed_by": "IncrementQualityReviewer",
+                        }
+                    ],
+                }
+            )
+        )
+
+        stub_item = CosmeticItem(
+            sub_bid="00000-001",
+            file_path=Path("src/example.py"),
+            line_range=(4, 6),
+            replacement_text="CONST = 42\n",
+            rationale="use a constant",
+            proposed_by="IncrementQualityReviewer",
+        )
+
+        class StubRefiner:
+            async def refine(self, raw, *, semaphore):
+                return stub_item
+
+        monkeypatch.setattr(
+            "mage.agents.cosmetic_refiner.CosmeticRefiner",
+            lambda **kw: StubRefiner(),
+        )
+
+        rc = _run_cli(
+            "cosmetic",
+            "show",
+            "feat-1",
+            "--project-dir",
+            str(project_dir),
+        )
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "src/example.py" in captured.out
+        assert "00000-001" in captured.out
+
+
+class TestCosmeticApply:
+    @pytest.mark.asyncio
+    async def test_cosmetic_apply_dry_run_does_not_write_or_commit(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        """--dry-run refines + emits events, but does not touch files or run git."""
+        from pathlib import Path
+
+        import yaml
+
+        from mage.artifacts.cosmetic import CosmeticItem
+
+        project_dir = tmp_path
+        config_dir = project_dir / ".haileris"
+        config_dir.mkdir()
+        target_file = project_dir / "src" / "example.py"
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text("line1\nline2\nline3\nline4\nline5\n")
+
+        (config_dir / "mapping.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "project_id": "p",
+                    "base_bids": [],
+                    "feature_cosmetic_queue": [
+                        {
+                            "sub_bid": "00000-001",
+                            "text": "use a constant",
+                            "location": {"file": "src/example.py", "line": 3},
+                            "proposed_by": "IncrementQualityReviewer",
+                        }
+                    ],
+                }
+            )
+        )
+
+        stub_item = CosmeticItem(
+            sub_bid="00000-001",
+            file_path=Path("src/example.py"),
+            line_range=(3, 3),
+            replacement_text="CONST = 42\n",
+            rationale="use a constant",
+            proposed_by="IncrementQualityReviewer",
+        )
+
+        class StubRefiner:
+            async def refine(self, raw, *, semaphore):
+                return stub_item
+
+        monkeypatch.setattr(
+            "mage.agents.cosmetic_refiner.CosmeticRefiner",
+            lambda **kw: StubRefiner(),
+        )
+
+        # Stub subprocess so we can detect whether git commit was attempted.
+        recorded: list[tuple] = []
+
+        def fake_run(cmd, **kwargs):
+            recorded.append((cmd, kwargs))
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return R()
+
+        monkeypatch.setattr("mage.cli.subprocess.run", fake_run)
+        rc = _run_cli(
+            "cosmetic",
+            "apply",
+            "feat-1",
+            "--dry-run",
+            "--project-dir",
+            str(project_dir),
+        )
+        assert rc == 0
+        assert "CONST = 42" not in target_file.read_text(), (
+            "dry-run must not modify the file"
+        )
+        assert recorded == [], f"dry-run must not invoke git, got {recorded!r}"
+        # Event was logged though.
+        events = list(
+            (project_dir / ".haileris" / "events.jsonl").read_text().splitlines()
+        )
+        assert any("cosmetic_item_applied" in line for line in events)
+        assert all("cosmetic_refiner_fallback" not in line for line in events)
+
+
 class TestInspectShow:
     @pytest.mark.asyncio
     async def test_inspect_show_renders_artifact(self, tmp_path, capsys):
