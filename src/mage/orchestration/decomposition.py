@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
-from mage.agents.decomposition import ArchitectureSpec, DecompositionAgent
+from mage.agents.decomposition import DecompositionAgent
 from mage.artifacts.ascertain import parse_ascertain
 from mage.artifacts.enumeration import enumerate_behaviors
 from mage.artifacts.plan import PlanArtifact
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.plan_writer import render_plan
 from mage.verification.host_overrides import HostConfig
-
 
 DEFAULT_TEMPLATE_PATH = Path(__file__).parent / "plan_template.md"
 
@@ -35,7 +34,7 @@ class DecompositionStage(StageNode):
         self.agent = agent
         self.host_config = host_config
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         project_dir = context.project_dir
         ascertain_path = project_dir / "ascertain.md"
 
@@ -43,16 +42,16 @@ class DecompositionStage(StageNode):
         ascertain = parse_ascertain(ascertain_path)
 
         # 2. Emit DECOMPOSITION_STARTED
-        self.events_log.append(
+        await self.events_log.append(
             Event(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 event_type=EventType.DECOMPOSITION_STARTED,
                 payload={"feature_id": ascertain.feature_id, "ascertain_path": str(ascertain_path)},
             )
         )
 
         # 3. Run Decomposition agent
-        agent_output = self.agent.run(
+        agent_output = await self.agent.run(
             ascertain=ascertain, existing_mapping=context.mapping
         )
 
@@ -63,7 +62,7 @@ class DecompositionStage(StageNode):
             "feature_id": ascertain.feature_id,
             "architecture": agent_output.architecture.model_dump(),
             "behaviors_input": [b.model_dump() for b in agent_output.behaviors],
-            "decomposed_at": datetime.now(timezone.utc).isoformat(),
+            "decomposed_at": datetime.now(UTC).isoformat(),
         }
         decomposition_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = decomposition_path.with_suffix(decomposition_path.suffix + ".tmp")
@@ -71,13 +70,15 @@ class DecompositionStage(StageNode):
         tmp.replace(decomposition_path)
 
         # 5. Enumerate behaviors + write files
-        updated_mapping, behaviors_path = enumerate_behaviors(
+        enumeration_result = await enumerate_behaviors(
             agent_output.behaviors,
             context.mapping,
             project_dir,
             self.events_log,
             feature_id=ascertain.feature_id,
         )
+        assert isinstance(enumeration_result, tuple)
+        updated_mapping, behaviors_path = enumeration_result
 
         # 6. Generate plan.md content
         template_path = (
@@ -103,12 +104,15 @@ class DecompositionStage(StageNode):
             )
 
         # 8. Finalize Plan
-        PlanArtifact.finalize(context.plan_path, plan_content, self.events_log)
+        assert context.plan_path is not None
+        await PlanArtifact.finalize(
+            context.plan_path, plan_content, self.events_log
+        )
 
         # 9. Emit DECOMPOSITION_COMPLETED
-        self.events_log.append(
+        await self.events_log.append(
             Event(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 event_type=EventType.DECOMPOSITION_COMPLETED,
                 payload={
                     "feature_id": ascertain.feature_id,

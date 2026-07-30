@@ -30,12 +30,13 @@ def test_dimension_is_spec_compliance():
     assert SpecComplianceReviewer.dimension == "spec_compliance"
 
 
-def test_run_emits_reviewerverdict(tmp_path, spec_compliance_reviewer):
+@pytest.mark.asyncio
+async def test_run_emits_reviewerverdict(tmp_path, spec_compliance_reviewer):
     log = EventsLog(tmp_path / "events.jsonl")
     mapping = MappingArtifact(project_id="p", base_bids=[])
     draft = ScenarioSpec(name="login", gherkin_body="Given ...")
 
-    verdict = spec_compliance_reviewer.run(
+    verdict = await spec_compliance_reviewer.run(
         draft=draft,
         spec_context={"behavior_name": "auth", "behavior_description": "log in"},
         mapping=mapping,

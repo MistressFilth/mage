@@ -80,7 +80,8 @@ def _canned_inscribe_output() -> InscribeOutput:
     )
 
 
-def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     events_path = project_dir / "events.jsonl"
@@ -116,7 +117,7 @@ def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
             "cross_behavior_links": [],
         }],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir, mapping=mapping, events_log=log,
@@ -134,7 +135,7 @@ def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
         reviewers=reviewers,
     )
 
-    new_context = stage.run(context)
+    new_context = await stage.run(context)
 
     # Verify mapping has at least one APPROVED scenario under base_bid 00000
     updated_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
@@ -158,7 +159,8 @@ def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     assert "scenario_approved" in event_types
 
 
-def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
     """When HostConfig.enabled_reviewers is a subset, only those run."""
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
@@ -183,7 +185,7 @@ def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
             "post_live_revisions": [], "cross_behavior_links": [],
         }],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir, mapping=mapping, events_log=log,
@@ -207,7 +209,7 @@ def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
         host_config=host_config,
         reviewers=reviewers,
     )
-    new_context = stage.run(context)
+    new_context = await stage.run(context)
 
     # Mapping was updated with at least one approved scenario
     updated_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
@@ -215,7 +217,8 @@ def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
     assert len(target.scenarios) >= 1
 
 
-def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     """When reviewers always fail and budget is small, Inscribe halts."""
     from datetime import datetime, UTC
 
@@ -246,7 +249,7 @@ def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
             "post_live_revisions": [], "cross_behavior_links": [],
         }],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir, mapping=mapping, events_log=log,
@@ -254,13 +257,13 @@ def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     )
 
     class AlwaysFailReviewer(SpecComplianceReviewer):
-        def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
+        async def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
             v = ReviewerVerdict(
                 dimension=self.dimension, outcome="fail", draft_hash="x",
                 reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
-            VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(verdict_path, v, events_log)
             return v
 
     failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
@@ -274,14 +277,15 @@ def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ReviewBudgetExhausted):
-        stage.run(context)
+        await stage.run(context)
 
     events = log.read_all()
     event_types = {e.event_type.value for e in events}
     assert "review_halt_persisted" in event_types
 
 
-def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
     """With the default empty-check MechanicalVerifier, every scenario
     passes pre-check and emits MECHANICAL_PRECHECK_PASSED before the
     reviewer loop runs."""
@@ -308,7 +312,7 @@ def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
             "post_live_revisions": [], "cross_behavior_links": [],
         }],
     )
-    mapping.save(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
         project_dir=project_dir, mapping=mapping, events_log=log,
@@ -327,7 +331,7 @@ def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
         reviewers=_all_seven_reviewers(),
     )
 
-    stage.run(context)
+    await stage.run(context)
 
     events = log.read_all()
     precheck_passed = [

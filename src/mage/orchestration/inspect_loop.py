@@ -50,7 +50,7 @@ class InspectLoopStage:
         self.increment_quality_reviewer = increment_quality_reviewer
         self.host_config = host_config
 
-    def inspect_increment(
+    async def inspect_increment(
         self,
         context: PipelineContext,
         *,
@@ -65,7 +65,7 @@ class InspectLoopStage:
             "code" — the runner re-loops with this finding in carry-forward.
             None   — clean OR cosmetic-only (cosmetic is queued, not re-looped).
         """
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_LOOP_STARTED,
@@ -87,7 +87,7 @@ class InspectLoopStage:
         # 1. Mechanical pre-check
         raw_mech = self.mechanical_verifier.verify(scope="increment")
         for f in _normalize_mechanical_findings(raw_mech):
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.INSPECT_JOURNAL_APPENDED,
@@ -124,7 +124,7 @@ class InspectLoopStage:
             InspectJournalEntry.model_validate(e)
             for e in context.mapping.inspect_journal.get(target.sub_bid, [])[-5:]
         ]
-        verdict = self.increment_quality_reviewer.run(
+        verdict = await self.increment_quality_reviewer.run(
             increment_diff=result.diff,
             new_test=increment.red_test_code,
             scenario_steps=target.steps,
@@ -158,7 +158,7 @@ class InspectLoopStage:
                     )
                 )
 
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.INSPECT_JOURNAL_APPENDED,
@@ -201,7 +201,7 @@ class InspectLoopStage:
                 if spec_finding is not None
                 else "spec-route finding"
             )
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.SCENARIO_REVISION_REQUESTED,

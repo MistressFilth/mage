@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Literal, cast
+from typing import Any, Literal, cast
 
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.inspect import (
@@ -65,7 +66,7 @@ class InspectFeatureStage(StageNode):
             fix_wave_dispatcher or _noop_fix_wave_dispatcher
         )
 
-    def _run(self, context: PipelineContext) -> PipelineContext:  # noqa: ARG002
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         raise NotImplementedError(
             "InspectFeatureStage._run is not wired into the linear graph driver. "
             "Use run_pass with the feature id and complete scenario payloads."
@@ -164,7 +165,7 @@ class InspectFeatureStage(StageNode):
             citations=[sub_bid],
         )
 
-    def _run_mechanical_precheck(
+    async def _run_mechanical_precheck(
         self,
         context: PipelineContext,
         scenarios: list[dict],
@@ -208,7 +209,7 @@ class InspectFeatureStage(StageNode):
             findings_with_source.extend(
                 (finding, "mechanical", scenario) for finding in findings
             )
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=(
@@ -225,7 +226,7 @@ class InspectFeatureStage(StageNode):
             )
         return records, findings_with_source
 
-    def _dispatch_scenario_reviewer(
+    async def _dispatch_scenario_reviewer(
         self,
         reviewer,
         *,
@@ -257,7 +258,7 @@ class InspectFeatureStage(StageNode):
             / sub_bid
             / f"{reviewer.dimension}.yaml"
         )
-        verdict = reviewer.run(
+        verdict = await reviewer.run(
             draft=draft,
             spec_context=spec_context,
             mapping=context.mapping,
@@ -271,7 +272,7 @@ class InspectFeatureStage(StageNode):
             )
         return verdict
 
-    def _run_reviewers(
+    async def _run_reviewers(
         self,
         context: PipelineContext,
         *,
@@ -293,7 +294,7 @@ class InspectFeatureStage(StageNode):
 
         for scenario in scenarios:
             for reviewer in scenario_reviewers:
-                verdict = self._dispatch_scenario_reviewer(
+                verdict = await self._dispatch_scenario_reviewer(
                     reviewer,
                     context=context,
                     feature_id=feature_id,
@@ -308,7 +309,7 @@ class InspectFeatureStage(StageNode):
                 )
 
         for reviewer in cross_reviewers:
-            verdict = reviewer.run(
+            verdict = await reviewer.run(
                 feature_summary={"feature_id": feature_id},
                 scenarios=scenarios,
                 mapping=context.mapping,
@@ -383,7 +384,7 @@ class InspectFeatureStage(StageNode):
             )
         return "\n".join(lines) + "\n"
 
-    def _run_iteration(
+    async def _run_iteration(
         self,
         context: PipelineContext,
         *,
@@ -391,7 +392,7 @@ class InspectFeatureStage(StageNode):
         scenarios: list[dict],
         iteration: int,
     ) -> InspectArtifactContent:
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_FEATURE_STARTED,
@@ -404,11 +405,11 @@ class InspectFeatureStage(StageNode):
             )
         )
 
-        per_reviewer, sourced_findings = self._run_mechanical_precheck(
+        per_reviewer, sourced_findings = await self._run_mechanical_precheck(
             context, scenarios
         )
         if not sourced_findings:
-            reviewer_records, reviewer_findings = self._run_reviewers(
+            reviewer_records, reviewer_findings = await self._run_reviewers(
                 context,
                 feature_id=feature_id,
                 scenarios=scenarios,
@@ -428,7 +429,7 @@ class InspectFeatureStage(StageNode):
 
         for finding, _dimension, _scenario in critical:
             for sub_bid in self._affected_sub_bids(finding, scenarios):
-                self.events_log.append(
+                await self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -508,7 +509,7 @@ class InspectFeatureStage(StageNode):
             / feature_id
             / f"{iteration}.yaml"
         )
-        digest = InspectArtifact.finalize(
+        digest = await InspectArtifact.finalize(
             artifact_path,
             content,
             self.events_log,
@@ -528,14 +529,14 @@ class InspectFeatureStage(StageNode):
                 )
             }
         )
-        context.mapping.save(context.project_dir / "mapping.yaml")
+        await context.mapping.save(context.project_dir / "mapping.yaml")
 
         if iteration >= self.host_config.eof_max_iterations and not ready_to_merge:
             context.mapping = context.mapping.model_copy(
                 update={"feature_status": "halted"}
             )
-            context.mapping.save(context.project_dir / "mapping.yaml")
-            self.events_log.append(
+            await context.mapping.save(context.project_dir / "mapping.yaml")
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.INSPECT_FEATURE_HALT_PERSISTED,
@@ -549,7 +550,7 @@ class InspectFeatureStage(StageNode):
             raise InspectFeatureHalted(feature_id=feature_id, iteration=iteration)
 
         if ready_to_merge:
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.INSPECT_FEATURE_PASSED,
@@ -557,7 +558,7 @@ class InspectFeatureStage(StageNode):
                 )
             )
 
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_FEATURE_COMPLETED,
@@ -574,7 +575,7 @@ class InspectFeatureStage(StageNode):
         )
         return content
 
-    def run_pass(
+    async def run_pass(
         self,
         context: PipelineContext,
         *,
@@ -586,7 +587,7 @@ class InspectFeatureStage(StageNode):
         current_iteration = iteration or (context.iteration + 1)
         while True:
             context.iteration = current_iteration
-            content = self._run_iteration(
+            content = await self._run_iteration(
                 context,
                 feature_id=feature_id,
                 scenarios=scenarios,
@@ -603,7 +604,7 @@ class InspectFeatureStage(StageNode):
                 brief=brief,
                 findings=content.important,
             )
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.FIX_WAVE_DISPATCHED,

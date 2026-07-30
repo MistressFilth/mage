@@ -21,7 +21,8 @@ class TestCli:
             cli.main([])
         assert exc_info.value.code in (0, 1, 2)
 
-    def test_verify_subcommand_runs_mechanical_checks(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_verify_subcommand_runs_mechanical_checks(self, tmp_project_dir: Path):
         feature_path = tmp_project_dir / "test.feature"
         feature_path.write_text(
             "Feature: Test\n\n  Scenario: Valid\n    Given x\n    When y\n    Then z\n"
@@ -46,20 +47,47 @@ class TestCli:
                 )
             ],
         )
-        mapping.save(tmp_project_dir / "mapping.yaml")
+        await mapping.save(tmp_project_dir / "mapping.yaml")
 
-        rc = cli.main([
+        rc = _run_cli(
             "--project-dir", str(tmp_project_dir),
             "verify",
             "--feature", str(feature_path),
             "--scenario", "Valid",
             "--sub-bid", "A",
             "--base-bid", "00000",
-        ])
+        )
         assert rc in (0, 1)
 
 
-def test_plan_show_prints_digest_and_content(tmp_path, capsys):
+def _run_cli(*args, **kwargs):
+    """Execute the CLI's `main` coroutine on a fresh event loop.
+
+    The CLI uses `asyncio.run` internally, which fails when called
+    from within a running event loop. This helper runs the CLI on a
+    fresh event loop in a separate thread, where no outer loop is
+    running.
+    """
+    import threading
+    from mage.cli import main
+
+    result_box: list = []
+    error_box: list = []
+
+    def _target():
+        try:
+            result_box.append(main(*args))
+        except BaseException as exc:
+            error_box.append(exc)
+
+    thread = threading.Thread(target=_target)
+    thread.start()
+    thread.join()
+    if error_box:
+        raise error_box[0]
+    return result_box[0] if result_box else None
+@pytest.mark.asyncio
+async def test_plan_show_prints_digest_and_content(tmp_path, capsys):
     from mage.artifacts.plan import PlanArtifact
     from mage.cli import main
     from mage.orchestration.events import EventsLog
@@ -67,11 +95,11 @@ def test_plan_show_prints_digest_and_content(tmp_path, capsys):
 
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
-    PlanArtifact.finalize(plan_path, "# Plan\n\ncontent\n", log)
+    await PlanArtifact.finalize(plan_path, "# Plan\n\ncontent\n", log)
 
     test_argv = ["mage", "--project-dir", str(tmp_path), "plan", "show"]
     with patch.object(sys, "argv", test_argv):
-        main()
+        _run_cli()
 
     captured = capsys.readouterr()
     assert "Plan:" in captured.out
@@ -80,7 +108,8 @@ def test_plan_show_prints_digest_and_content(tmp_path, capsys):
     assert "# Plan" in captured.out
 
 
-def test_plan_revise_records_event(tmp_path, capsys):
+@pytest.mark.asyncio
+async def test_plan_revise_records_event(tmp_path, capsys):
     from mage.artifacts.plan import PlanArtifact
     from mage.cli import main
     from mage.orchestration.events import EventsLog, EventType
@@ -88,7 +117,7 @@ def test_plan_revise_records_event(tmp_path, capsys):
 
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
-    PlanArtifact.finalize(plan_path, "# original\n", log)
+    await PlanArtifact.finalize(plan_path, "# original\n", log)
     plan_path.write_text("# revised\n", encoding="utf-8")
 
     test_argv = [
@@ -98,7 +127,7 @@ def test_plan_revise_records_event(tmp_path, capsys):
         "--approver", "alice",
     ]
     with patch.object(sys, "argv", test_argv):
-        main()
+        _run_cli()
 
     revised = [e for e in log.read_all() if e.event_type == EventType.PLAN_REVISED]
     assert len(revised) == 1
@@ -109,7 +138,8 @@ def test_plan_revise_records_event(tmp_path, capsys):
     assert "Plan revision recorded" in captured.out or "revision" in captured.out.lower()
 
 
-def test_plan_revise_warns_on_unchanged_digest(tmp_path, capsys):
+@pytest.mark.asyncio
+async def test_plan_revise_warns_on_unchanged_digest(tmp_path, capsys):
     from mage.artifacts.plan import PlanArtifact
     from mage.cli import main
     from mage.orchestration.events import EventsLog
@@ -117,7 +147,7 @@ def test_plan_revise_warns_on_unchanged_digest(tmp_path, capsys):
 
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
-    PlanArtifact.finalize(plan_path, "# same\n", log)
+    await PlanArtifact.finalize(plan_path, "# same\n", log)
 
     test_argv = [
         "mage", "--project-dir", str(tmp_path),
@@ -126,7 +156,7 @@ def test_plan_revise_warns_on_unchanged_digest(tmp_path, capsys):
         "--approver", "a",
     ]
     with patch.object(sys, "argv", test_argv):
-        main()
+        _run_cli()
 
     captured = capsys.readouterr()
     assert "Plan digest unchanged; recording anyway" in captured.err
@@ -142,9 +172,8 @@ def test_plan_revise_missing_plan(tmp_path, capsys):
         "--reason", "r",
         "--approver", "a",
     ]
-    with patch.object(sys, "argv", test_argv):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
+    with patch.object(sys, "argv", test_argv), pytest.raises(SystemExit) as exc_info:
+        _run_cli()
     assert exc_info.value.code != 0
 
 
@@ -155,8 +184,12 @@ def test_mage_run_raises_without_dry_run(tmp_path, capsys):
 
     test_argv = ["mage", "--project-dir", str(tmp_path), "run"]
     with patch.object(sys, "argv", test_argv):
-        with pytest.raises(NotImplementedError, match="requires LLM agent wiring"):
-            main()
+        try:
+            _run_cli()
+        except NotImplementedError as exc:
+            assert "requires LLM agent wiring" in str(exc)
+        else:
+            pytest.fail("Expected NotImplementedError")
 
 
 def test_mage_run_dry_run_completes_on_empty_project(tmp_path):
@@ -224,7 +257,8 @@ def test_mage_run_model_flag_overrides_host_config(tmp_path, monkeypatch):
     assert captured["model"] == "openai:gpt-4o"
 
 
-def test_review_show_prints_latest_aggregate(tmp_path, capsys):
+@pytest.mark.asyncio
+async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
     from mage.artifacts.verdict import (
         VerdictArtifact, ReviewerAggregate, DimensionSummary,
     )
@@ -247,11 +281,11 @@ def test_review_show_prints_latest_aggregate(tmp_path, capsys):
         decision="approved", reasoning="all passed",
     )
     path = project_dir / "agg.yaml"
-    VerdictArtifact.finalize(path, agg, log)
+    await VerdictArtifact.finalize(path, agg, log)
 
     test_argv = ["mage", "--project-dir", str(project_dir), "review", "show"]
     with patch.object(sys, "argv", test_argv):
-        rc = main()
+        rc = _run_cli()
     assert rc == 0
 
     captured = capsys.readouterr()
@@ -266,7 +300,8 @@ def test_mage_review_resume_is_gone(tmp_path, capsys):
 
 
 class TestInspectShow:
-    def test_inspect_show_renders_artifact(self, tmp_path, capsys):
+    @pytest.mark.asyncio
+    async def test_inspect_show_renders_artifact(self, tmp_path, capsys):
         from datetime import UTC, datetime
 
         from mage.orchestration.events import EventsLog
@@ -293,9 +328,9 @@ class TestInspectShow:
             ready_to_merge=True,
             ledger_markdown="| step | result |\n|---|---|\n| mechanical | pass |",
         )
-        InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+        await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
 
-        rc = main(["inspect", "show", "feat-1", "--project-dir", str(project)])
+        rc = _run_cli(["inspect", "show", "feat-1", "--project-dir", str(project)])
         out = capsys.readouterr().out
         assert "feat-1" in out
         assert "ready_to_merge" in out or "Ready" in out
@@ -331,7 +366,8 @@ class TestSettleRun:
             runner,
         )
 
-    def test_settle_run_non_interactive(self, tmp_path, capsys, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_settle_run_non_interactive(self, tmp_path, capsys, monkeypatch):
         from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.cli import main
@@ -358,9 +394,9 @@ class TestSettleRun:
             ready_to_merge=True,
             ledger_markdown="",
         )
-        InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+        await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
 
-        rc = main(["settle", "run", "feat-1", "--disposition", "kept", "--project-dir", str(project)])
+        rc = _run_cli(["settle", "run", "feat-1", "--disposition", "kept", "--project-dir", str(project)])
         out = capsys.readouterr().out
         assert rc == 0
         assert "settle" in out.lower() or "feat-1" in out
@@ -371,7 +407,8 @@ class TestSettleRun:
         disposal_events = [e for e in events if e.event_type.value == "settle_feature_finalized"]
         assert disposal_events[0].payload["disposition"] == "kept"
 
-    def test_settle_run_returns_nonzero_when_tests_fail(
+    @pytest.mark.asyncio
+    async def test_settle_run_returns_nonzero_when_tests_fail(
         self,
         tmp_path,
         capsys,
@@ -385,7 +422,7 @@ class TestSettleRun:
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         self._install_runner(monkeypatch, project, test_returncode=1)
-        InspectArtifact.finalize(
+        await InspectArtifact.finalize(
             project / ".haileris" / "inspect" / "feat-1" / "1.yaml",
             InspectArtifactContent(
                 feature_id="feat-1",
@@ -397,7 +434,7 @@ class TestSettleRun:
             log,
         )
 
-        rc = main(
+        rc = _run_cli(
             [
                 "settle",
                 "run",
@@ -433,7 +470,7 @@ class TestSettleRun:
 
         monkeypatch.setattr(SettleFeatureStage, "run_settle", explode)
 
-        rc = main(
+        rc = _run_cli(
             [
                 "settle",
                 "run",

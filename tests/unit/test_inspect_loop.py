@@ -49,7 +49,7 @@ class _Reviewer:
         self._verdict = verdict
         self.calls: list[dict] = []
 
-    def run(self, **kwargs) -> _Verdict:
+    async def run(self, **kwargs) -> _Verdict:
         self.calls.append(kwargs)
         return self._verdict
 
@@ -80,7 +80,8 @@ def _increment() -> Increment:
     )
 
 
-def test_clean_increment_returns_none(tmp_path):
+@pytest.mark.asyncio
+async def test_clean_increment_returns_none(tmp_path):
     ctx = _context(tmp_path)
     reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[]))
     mech = _Mechanical([])
@@ -92,7 +93,7 @@ def test_clean_increment_returns_none(tmp_path):
     )
     result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-    route = stage.inspect_increment(
+    route = await stage.inspect_increment(
         ctx, target=_target(), increment=_increment(), result=result
     )
 
@@ -100,7 +101,8 @@ def test_clean_increment_returns_none(tmp_path):
     assert mech.scopes == ["increment"]
 
 
-def test_code_route_re_loops(tmp_path):
+@pytest.mark.asyncio
+async def test_code_route_re_loops(tmp_path):
     ctx = _context(tmp_path)
     finding = _Finding(
         id="f1",
@@ -120,14 +122,15 @@ def test_code_route_re_loops(tmp_path):
     )
     result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-    route = stage.inspect_increment(
+    route = await stage.inspect_increment(
         ctx, target=_target(), increment=_increment(), result=result
     )
 
     assert route == "code"
 
 
-def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
+@pytest.mark.asyncio
+async def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
     """Per GC-9: cosmetic is queued and does not re-loop. The runner must see
     None for cosmetic-only passes, not "cosmetic", so the while loop breaks."""
     ctx = _context(tmp_path)
@@ -149,7 +152,7 @@ def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
     )
     result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-    route = stage.inspect_increment(
+    route = await stage.inspect_increment(
         ctx, target=_target(), increment=_increment(), result=result
     )
 
@@ -158,7 +161,8 @@ def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
     assert len(cosmetic) == 1
 
 
-def test_spec_route_returns_spec(tmp_path):
+@pytest.mark.asyncio
+async def test_spec_route_returns_spec(tmp_path):
     ctx = _context(tmp_path)
     finding = _Finding(
         id="f1",
@@ -178,7 +182,7 @@ def test_spec_route_returns_spec(tmp_path):
     )
     result = IncrementResult(files_changed=["a.py"], summary="", diff="")
 
-    route = stage.inspect_increment(
+    route = await stage.inspect_increment(
         ctx, target=_target(), increment=_increment(), result=result
     )
 

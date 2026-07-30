@@ -64,7 +64,7 @@ class DecompositionAgent:
             system_prompt="Decomposition agent: produce architecture + behavior specs from Ascertain output.",
         )
 
-    def run(
+    async def run(
         self,
         *,
         ascertain: AscertainOutput,
@@ -79,4 +79,4 @@ class DecompositionAgent:
             ascertain=ascertain.model_dump_json(indent=2),
             existing_behaviors=", ".join(existing_names) if existing_names else "(none)",
         )
-        return self._agent.run_sync(prompt).output
+        return (await self._agent.run(prompt)).output

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-
 # Base85 alphabet (RFC 1924 style, 85 printable ASCII characters).
 # Order matters: index 0 = '0', index 84 = '~'.
 BASE85_ALPHABET = (
@@ -41,11 +40,11 @@ class Base85BID(BaseModel):
         return v
 
     @classmethod
-    def parse(cls, value: str) -> "Base85BID":
+    def parse(cls, value: str) -> Base85BID:
         """Validate and construct a Base85BID from a string."""
         return cls(value=value)
 
-    def increment(self) -> "Base85BID":
+    def increment(self) -> Base85BID:
         """Return the next BID in the sequence (monotonic).
 
         Raises OverflowError if all digits are at the maximum alphabet value.
@@ -65,7 +64,7 @@ class Base85BID(BaseModel):
         raise OverflowError(f"BID space exhausted for value {self.value!r}")
 
     @classmethod
-    def derive(cls, parent: "Base85BID", scenario_index: int) -> "Base85BID":
+    def derive(cls, parent: Base85BID, scenario_index: int) -> Base85BID:
         """Derive a sub-BID by appending a Base85-encoded scenario_index to parent.
 
         The result is parent.value + encode_base85(scenario_index). The encoding

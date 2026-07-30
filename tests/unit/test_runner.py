@@ -38,7 +38,7 @@ class _Reviewer:
         self._verdicts = list(verdicts)
         self.calls = 0
 
-    def run(self, **kwargs) -> _Verdict:
+    async def run(self, **kwargs) -> _Verdict:
         self.calls += 1
         return self._verdicts.pop(0) if self._verdicts else _Verdict(
             dimension="increment_quality", findings=[]
@@ -73,32 +73,42 @@ def _ctx(tmp_path):
     )
 
 
-def test_clean_increment_produces_one_scenario_outcome(tmp_path):
+@pytest.mark.asyncio
+async def test_clean_increment_produces_one_scenario_outcome(tmp_path):
     target = _target()
-    etch = type("E", (), {
-        "run_scenario": lambda self, ctx, t: [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
-    })()
-    realize = type("R", (), {
-        "run_increment": lambda self, ctx, *, target, increment, carry_forward=None: IncrementResult(
-            files_changed=[], summary="", diff=""
-        )
-    })()
-    inspect = type("I", (), {
-        "inspect_increment": lambda self, ctx, *, target, increment, result: None
-    })()
+
+    class _Etch:
+        async def run_scenario(self, ctx, t):
+            return [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
+
+    class _Realize:
+        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
+    class _Inspect:
+        async def inspect_increment(self, ctx, *, target, increment, result):
+            return None
+
+    etch = _Etch()
+    realize = _Realize()
+    inspect = _Inspect()
     runner = FeatureRunner(etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8)  # type: ignore[arg-type]
 
-    outcomes = runner.run(_ctx(tmp_path), [target])
+    outcomes = await runner.run(_ctx(tmp_path), [target])
 
     assert outcomes == [ScenarioOutcome(sub_bid="00001-0001", test_paths=["t.py"])]
     assert runner.cursor is None  # cleared after a clean scenario
 
 
-def test_code_route_re_loops_until_clean(tmp_path):
+@pytest.mark.asyncio
+async def test_code_route_re_loops_until_clean(tmp_path):
     target = _target()
-    etch = type("E", (), {
-        "run_scenario": lambda self, ctx, t: [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
-    })()
+
+    class _Etch:
+        async def run_scenario(self, ctx, t):
+            return [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
+
+    etch = _Etch()
 
     verdicts = [
         _Verdict(dimension="iq", findings=[_Finding(
@@ -106,71 +116,86 @@ def test_code_route_re_loops_until_clean(tmp_path):
         )]),
         _Verdict(dimension="iq", findings=[]),
     ]
-    realize = type("R", (), {
-        "run_increment": lambda self, ctx, *, target, increment, carry_forward=None: IncrementResult(
-            files_changed=[], summary="", diff=""
-        )
-    })()
+
+    class _Realize:
+        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
+    realize = _Realize()
     reviewer = _Reviewer(verdicts)
-    inspect = type("I", (), {
-        "inspect_increment": lambda self, ctx, *, target, increment, result: (
-            "code" if reviewer.run().findings else None
-        )
-    })()
+
+    class _Inspect:
+        async def inspect_increment(self, ctx, *, target, increment, result):
+            v = await reviewer.run()
+            return "code" if v.findings else None
+
+    inspect = _Inspect()
     runner = FeatureRunner(etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8)  # type: ignore[arg-type]
 
-    outcomes = runner.run(_ctx(tmp_path), [target])
+    outcomes = await runner.run(_ctx(tmp_path), [target])
 
     assert len(outcomes) == 1
     assert reviewer.calls == 2  # two inspect calls before clean
 
 
-def test_spec_route_raises_scenario_inspect_halted(tmp_path):
+@pytest.mark.asyncio
+async def test_spec_route_raises_scenario_inspect_halted(tmp_path):
     from mage.orchestration.etch import ScenarioInspectHalted
 
     target = _target()
-    etch = type("E", (), {
-        "run_scenario": lambda self, ctx, t: [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
-    })()
-    realize = type("R", (), {
-        "run_increment": lambda self, ctx, *, target, increment, carry_forward=None: IncrementResult(
-            files_changed=[], summary="", diff=""
-        )
-    })()
-    inspect = type("I", (), {
-        "inspect_increment": lambda self, ctx, *, target, increment, result: "spec"
-    })()
+
+    class _Etch:
+        async def run_scenario(self, ctx, t):
+            return [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
+
+    class _Realize:
+        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
+    class _Inspect:
+        async def inspect_increment(self, ctx, *, target, increment, result):
+            return "spec"
+
+    etch = _Etch()
+    realize = _Realize()
+    inspect = _Inspect()
     runner = FeatureRunner(etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8)  # type: ignore[arg-type]
 
     with pytest.raises(ScenarioInspectHalted):
-        runner.run(_ctx(tmp_path), [target])
+        await runner.run(_ctx(tmp_path), [target])
 
 
-def test_cosmetic_only_does_not_re_loop(tmp_path):
+@pytest.mark.asyncio
+async def test_cosmetic_only_does_not_re_loop(tmp_path):
     target = _target()
-    etch = type("E", (), {
-        "run_scenario": lambda self, ctx, t: [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
-    })()
-    realize = type("R", (), {
-        "run_increment": lambda self, ctx, *, target, increment, carry_forward=None: IncrementResult(
-            files_changed=[], summary="", diff=""
-        )
-    })()
+
+    class _Etch:
+        async def run_scenario(self, ctx, t):
+            return [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
+
+    class _Realize:
+        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
     calls = {"n": 0}
 
-    def inspect_increment(self, ctx, **kwargs):
-        calls["n"] += 1
-        return None  # cosmetic-only path returns None
+    class _Inspect:
+        async def inspect_increment(self, ctx, **kwargs):
+            calls["n"] += 1
+            return None  # cosmetic-only path returns None
 
-    inspect = type("I", (), {"inspect_increment": inspect_increment})()
+    etch = _Etch()
+    realize = _Realize()
+    inspect = _Inspect()
     runner = FeatureRunner(etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8)  # type: ignore[arg-type]
 
-    runner.run(_ctx(tmp_path), [target])
+    await runner.run(_ctx(tmp_path), [target])
 
     assert calls["n"] == 1
 
 
-def test_resume_skips_completed_scenarios(tmp_path):
+@pytest.mark.asyncio
+async def test_resume_skips_completed_scenarios(tmp_path):
     """First scenario is already done; resume at the second."""
     t1 = _target(sub_bid="00001-0001")
     t2 = _target(sub_bid="00001-0002")
@@ -178,64 +203,79 @@ def test_resume_skips_completed_scenarios(tmp_path):
     etch_calls: list[str] = []
 
     class E:
-        def run_scenario(self, ctx, t):
+        async def run_scenario(self, ctx, t):
             etch_calls.append(t.sub_bid)
             return [Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")]
 
     class R:
-        def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class I:
-        def inspect_increment(self, ctx, *, target, increment, result):
+        async def inspect_increment(self, ctx, *, target, increment, result):
             return None
 
     runner = FeatureRunner(etch=E(), realize=R(), inspect_loop=I(), per_loop_max_iterations=8)  # type: ignore[arg-type]
     cursor = AutomationCursor(sub_bid="00001-0002", increment_index=0, iteration=1)
 
-    outcomes = runner.run(_ctx(tmp_path), [t1, t2], cursor=cursor)
+    outcomes = await runner.run(_ctx(tmp_path), [t1, t2], cursor=cursor)
 
     assert etch_calls == ["00001-0002"]
     assert outcomes == [ScenarioOutcome(sub_bid="00001-0002", test_paths=["t.py"])]
 
 
-def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path):
+@pytest.mark.asyncio
+async def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path):
     """The cursor's iteration is the next attempt, not the completed one."""
     t1 = _target(sub_bid="00001-0001")
     inspect_iterations: list[int] = []
 
     class E:
-        def run_scenario(self, ctx, t):
+        async def run_scenario(self, ctx, t):
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code=""),
                 Increment(index=1, step="s2", red_test_path="t.py", red_test_code=""),
             ]
 
     class R:
-        def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class I:
-        def inspect_increment(self, ctx, *, target, increment, result):
+        async def inspect_increment(self, ctx, *, target, increment, result):
             inspect_iterations.append(ctx.iteration)
             return None
 
     runner = FeatureRunner(etch=E(), realize=R(), inspect_loop=I(), per_loop_max_iterations=8)  # type: ignore[arg-type]
     cursor = AutomationCursor(sub_bid="00001-0001", increment_index=1, iteration=3)
 
-    runner.run(_ctx(tmp_path), [t1], cursor=cursor)
+    await runner.run(_ctx(tmp_path), [t1], cursor=cursor)
 
     # increment 0 was skipped (completed before halt); increment 1 starts at iter 3
     assert [i for i in inspect_iterations] == [3]
 
 
-def test_cursor_cleared_after_clean_scenario(tmp_path):
+@pytest.mark.asyncio
+async def test_cursor_cleared_after_clean_scenario(tmp_path):
     t1 = _target()
+
+    class _Etch:
+        async def run_scenario(self, c, t):
+            return [Increment(index=0, step="s", red_test_path="t.py", red_test_code="")]
+
+    class _Realize:
+        async def run_increment(self, c, *, target, increment, carry_forward=None):
+            return IncrementResult(files_changed=[], summary="", diff="")
+
+    class _Inspect:
+        async def inspect_increment(self, c, *, target, increment, result):
+            return None
+
     runner = FeatureRunner(
-        etch=type("E", (), {"run_scenario": lambda self, c, t: [Increment(index=0, step="s", red_test_path="t.py", red_test_code="")]})(),
-        realize=type("R", (), {"run_increment": lambda self, c, *, target, increment, carry_forward=None: IncrementResult(files_changed=[], summary="", diff="")})(),
-        inspect_loop=type("I", (), {"inspect_increment": lambda self, c, *, target, increment, result: None})(),
+        etch=_Etch(),
+        realize=_Realize(),
+        inspect_loop=_Inspect(),
         per_loop_max_iterations=8,
     )
-    runner.run(_ctx(tmp_path), [t1], cursor=AutomationCursor(sub_bid="00001-0001", increment_index=0, iteration=1))
+    await runner.run(_ctx(tmp_path), [t1], cursor=AutomationCursor(sub_bid="00001-0001", increment_index=0, iteration=1))
     assert runner.cursor is None

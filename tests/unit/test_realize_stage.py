@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import UTC, datetime
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -29,7 +31,7 @@ class _StubAgent:
     def __init__(self, output: RealizeOutput) -> None:
         self._output = output
 
-    def run(self, **kwargs) -> RealizeOutput:
+    async def run(self, **kwargs) -> RealizeOutput:
         return self._output
 
 
@@ -43,7 +45,8 @@ class _RecordingRunner:
         return CompletedProcess(command, 0, stdout=self.stdout, stderr="")
 
 
-def test_run_increment_returns_increment_result_with_diff(tmp_path):
+@pytest.mark.asyncio
+async def test_run_increment_returns_increment_result_with_diff(tmp_path):
     ctx = _context(tmp_path)
     target = ScenarioTarget(
         base_bid="00001",
@@ -61,7 +64,7 @@ def test_run_increment_returns_increment_result_with_diff(tmp_path):
     runner = _RecordingRunner(stdout="diff payload")
     stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
 
-    result = stage.run_increment(ctx, target=target, increment=increment)
+    result = await stage.run_increment(ctx, target=target, increment=increment)
 
     assert result.files_changed == ["foo.py", "bar.py"]
     assert result.summary == "ok"
@@ -72,7 +75,8 @@ def test_run_increment_returns_increment_result_with_diff(tmp_path):
     assert command[-3:] == ["--", "foo.py", "bar.py"]
 
 
-def test_run_increment_uses_default_runner_when_none_provided(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_run_increment_uses_default_runner_when_none_provided(tmp_path, monkeypatch):
     """The default runner must exist and be callable; tests don't hit real git."""
     ctx = _context(tmp_path)
     target = ScenarioTarget(
@@ -95,12 +99,13 @@ def test_run_increment_uses_default_runner_when_none_provided(tmp_path, monkeypa
     )
     stage = RealizeStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
 
-    result = stage.run_increment(ctx, target=target, increment=increment)
+    result = await stage.run_increment(ctx, target=target, increment=increment)
 
     assert result.diff == ""
 
 
-def test_run_increment_emits_realize_increment_done(tmp_path):
+@pytest.mark.asyncio
+async def test_run_increment_emits_realize_increment_done(tmp_path):
     ctx = _context(tmp_path)
     target = ScenarioTarget(
         base_bid="00001",
@@ -116,7 +121,7 @@ def test_run_increment_emits_realize_increment_done(tmp_path):
     runner = _RecordingRunner(stdout="")
     stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
 
-    stage.run_increment(ctx, target=target, increment=increment)
+    await stage.run_increment(ctx, target=target, increment=increment)
 
     types = [e.event_type.value for e in ctx.events_log.read_all()]
     assert "realize_increment_done" in types
@@ -129,7 +134,7 @@ class _RecordingAgent:
         self._output = output
         self.calls: list[dict] = []
 
-    def run(self, **kwargs) -> RealizeOutput:
+    async def run(self, **kwargs) -> RealizeOutput:
         self.calls.append(kwargs)
         return self._output
 
@@ -148,7 +153,8 @@ def _journal_entry(*, sub_bid: str, finding_id: str, route: str = "code", ts: da
     )
 
 
-def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
+@pytest.mark.asyncio
+async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
     """Pins the R3 / R21 carry-forward contract: RealizeStage builds
     `carry_forward` from the last `per_scenario_window` entries of the
     target sub_bid's inspect_journal.
@@ -172,7 +178,7 @@ def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
     entry = _journal_entry(sub_bid="00001-0001", finding_id="f-1")
     ctx.mapping = ctx.mapping.append_inspect_journal("00001-0001", entry)
 
-    stage.run_increment(ctx, target=target, increment=increment)
+    await stage.run_increment(ctx, target=target, increment=increment)
 
     assert len(agent.calls) == 1
     carry_forward = agent.calls[0]["carry_forward"]
@@ -181,7 +187,8 @@ def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
     assert carry_forward[0].route == "code"
 
 
-def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp_path):
+@pytest.mark.asyncio
+async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp_path):
     """Pins the R3 / R21 cross-scenario contract: entries from sibling
     sub_bids appear in `cross_scenario_observations`, ordered most-recent
     first, truncated to `cross_scenario_window`.
@@ -213,7 +220,7 @@ def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp_path)
             ),
         )
 
-    stage.run_increment(ctx, target=target, increment=increment)
+    await stage.run_increment(ctx, target=target, increment=increment)
 
     cross = agent.calls[0]["cross_scenario_observations"]
     # Default cross_scenario_window is 3, so only the most-recent 3 survive.
@@ -221,7 +228,8 @@ def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp_path)
     assert [e.finding_id for e in cross] == ["sib-4", "sib-3", "sib-2"]
 
 
-def test_run_increment_carry_forward_window_respects_size(tmp_path):
+@pytest.mark.asyncio
+async def test_run_increment_carry_forward_window_respects_size(tmp_path):
     """`per_scenario_window` truncates the per-scenario slice."""
     ctx = _context(tmp_path)
     target = ScenarioTarget(
@@ -248,7 +256,7 @@ def test_run_increment_carry_forward_window_respects_size(tmp_path):
             "00001-0001", _journal_entry(sub_bid="00001-0001", finding_id=fid)
         )
 
-    stage.run_increment(ctx, target=target, increment=increment)
+    await stage.run_increment(ctx, target=target, increment=increment)
 
     carry_forward = agent.calls[0]["carry_forward"]
     assert [e.finding_id for e in carry_forward] == ["b", "c"]

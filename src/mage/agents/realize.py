@@ -23,7 +23,7 @@ class RealizeAgent:
     """Realize agent with carry-forward injection."""
 
     def __init__(self, model=None, *, system_prompt_only: bool = False) -> None:
-        self._model = model  # noqa: F841
+        self._model = model
         self._system_prompt_only = system_prompt_only
         if not system_prompt_only:
             from pydantic_ai import Agent
@@ -84,7 +84,7 @@ class RealizeAgent:
             f"Do not modify the spec — only code + tests."
         )
 
-    def run(
+    async def run(
         self,
         *,
         step: str,
@@ -105,4 +105,4 @@ class RealizeAgent:
             carry_forward=carry_forward,
             cross_scenario_observations=cross_scenario_observations,
         )
-        return self._agent.run_sync(prompt).output
+        return (await self._agent.run(prompt)).output

@@ -71,7 +71,7 @@ class PipelineContext(BaseModel):
 class StageNode(ABC):
     """Abstract base for all pipeline stages.
 
-    Subclasses must define `name` and implement `run()`. The base class
+    Subclasses must define `name` and implement async `_run()`. The base class
     emits STAGE_STARTED and STAGE_COMPLETED events around each run.
     """
 
@@ -82,27 +82,25 @@ class StageNode(ABC):
             raise ValueError(f"{type(self).__name__} must define `name`")
         self.events_log = events_log
 
-    def run(self, context: PipelineContext) -> PipelineContext:
+    async def run(self, context: PipelineContext) -> PipelineContext:
         """Execute the stage, emitting start/complete events."""
-        self._emit(EventType.STAGE_STARTED)
-        try:
-            result = self._run(context)
-            self._emit(EventType.STAGE_COMPLETED)
-            return result
-        except Exception:
-            # Don't emit COMPLETED on failure; let the exception propagate.
-            raise
+        await self._emit(EventType.STAGE_STARTED)
+        result = await self._run(context)
+        await self._emit(EventType.STAGE_COMPLETED)
+        return result
 
     @abstractmethod
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         """Stage-specific execution. Must be implemented by subclasses."""
         ...
 
-    def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
+    async def _emit(
+        self, event_type: EventType, payload: dict | None = None
+    ) -> None:
         """Emit an event to the log."""
         event = Event(
             timestamp=datetime.now(UTC),
             event_type=event_type,
             payload={"stage": self.name, **(payload or {})},
         )
-        self.events_log.append(event)
+        await self.events_log.append(event)
