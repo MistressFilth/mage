@@ -43,7 +43,7 @@ class DecompositionStage(StageNode):
         ascertain = parse_ascertain(ascertain_path)
 
         # 2. Emit DECOMPOSITION_STARTED
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(timezone.utc),
                 event_type=EventType.DECOMPOSITION_STARTED,
@@ -106,7 +106,7 @@ class DecompositionStage(StageNode):
         PlanArtifact.finalize(context.plan_path, plan_content, self.events_log)
 
         # 9. Emit DECOMPOSITION_COMPLETED
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(timezone.utc),
                 event_type=EventType.DECOMPOSITION_COMPLETED,
