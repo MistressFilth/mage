@@ -145,9 +145,7 @@ async def test_inscribe_stage_constructs_semaphore_with_max_concurrent_llm_calls
             ),
         ]
     )
-    inscribe_agent = InscribeAgent(
-        model=TestModel(custom_output_args=canned)
-    )
+    inscribe_agent = InscribeAgent(model=TestModel(custom_output_args=canned))
 
     stage = InscribeStage(
         events_log=log,

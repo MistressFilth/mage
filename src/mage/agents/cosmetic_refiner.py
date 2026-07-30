@@ -72,8 +72,7 @@ class CosmeticRefiner:
                     line_range=(0, 0),
                     replacement_text="",
                     rationale=(
-                        f"{raw.get('text', '')} "
-                        f"[refiner-error: {type(exc).__name__}]"
+                        f"{raw.get('text', '')} [refiner-error: {type(exc).__name__}]"
                     ),
                     proposed_by=raw.get("proposed_by", "unknown"),
                 )

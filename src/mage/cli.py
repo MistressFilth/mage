@@ -590,7 +590,10 @@ async def cmd_cosmetic_show(args) -> int:
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
     refined = await asyncio.gather(
-        *[refiner.refine(q, semaphore=semaphore) for q in mapping.feature_cosmetic_queue]
+        *[
+            refiner.refine(q, semaphore=semaphore)
+            for q in mapping.feature_cosmetic_queue
+        ]
     )
     for item in refined:
         fp = str(item.file_path) if item.file_path else "<unresolved>"
@@ -605,7 +608,7 @@ async def cmd_cosmetic_apply(args) -> int:
     """Refine queue, edit files in place, and commit each item."""
     from mage.agents.cosmetic_refiner import CosmeticRefiner
     from mage.artifacts.mapping import MappingArtifact
-    from mage.orchestration.events import Event, EventType, EventsLog
+    from mage.orchestration.events import Event, EventsLog, EventType
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
     mapping_path = project_dir / "mapping.yaml"
@@ -621,7 +624,10 @@ async def cmd_cosmetic_apply(args) -> int:
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
     refined = await asyncio.gather(
-        *[refiner.refine(q, semaphore=semaphore) for q in mapping.feature_cosmetic_queue]
+        *[
+            refiner.refine(q, semaphore=semaphore)
+            for q in mapping.feature_cosmetic_queue
+        ]
     )
 
     now = datetime.now(UTC)
@@ -670,7 +676,8 @@ async def cmd_cosmetic_apply(args) -> int:
             await log.append(
                 Event(
                     timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_APPLIED if applied
+                    event_type=EventType.COSMETIC_ITEM_APPLIED
+                    if applied
                     else EventType.COSMETIC_ITEM_SKIPPED,
                     payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
                 )
