@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Plan 8: asyncio concurrency for LLM-bound operations. `HostConfig.max_concurrent_llm_calls` (default 7) caps fan-out via `asyncio.Semaphore`. Inscribe reviewers run concurrently via `asyncio.gather`; InspectFeature dispatches across scenarios concurrently.
+- Plan 8: asyncio concurrency for LLM-bound operations. `HostConfig.max_concurrent_llm_calls` (default 7) caps fan-out via `asyncio.Semaphore`. Inscribe reviewers run concurrently via `asyncio.gather`; InspectFeature dispatches across scenarios concurrently. Cosmetic-queue per-item parallelism is deferred to Plan 9 (no per-item LLM processing exists today).
 - feat(discipline): add Plan 7 Three Practices enforcement for all six Approved
   Gate Scope rules (P1-P6), revision flow, full supersession flow (v1 only),
   and the cosmetic gate.
