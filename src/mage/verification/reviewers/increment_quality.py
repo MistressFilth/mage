@@ -57,7 +57,7 @@ class IncrementQualityReviewer(ReviewerAgent):
             "rationale are rejected."
         )
 
-    def run(
+    async def run(
         self,
         *,
         increment_diff: str,
@@ -87,7 +87,7 @@ class IncrementQualityReviewer(ReviewerAgent):
             f"Recent carry-forward (from inspect journal):\n{cf_section}"
         )
 
-        result = self._agent.run_sync(prompt).output
+        result = (await self._agent.run(prompt)).output
         # Force the dimension + timestamps (do not trust LLM output for these)
         result_dict = result.model_dump()
         result_dict["dimension"] = self.dimension

@@ -30,7 +30,7 @@ class DisciplineStage(StageNode):
         # INSCRIBING.
         self._seen_events: set[tuple[EventType, str]] = set()
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         """No proactive work — DisciplineStage reacts to events.
 
         The actual enforcement happens when other stages emit events that this
@@ -39,7 +39,7 @@ class DisciplineStage(StageNode):
         """
         return context
 
-    def _handle_event(self, context: PipelineContext, event: Event) -> None:
+    async def _handle_event(self, context: PipelineContext, event: Event) -> None:
         """Public hook for the orchestrator to invoke on each emitted event.
 
         Routes events to the matching policy method. Idempotent on repeat
@@ -70,7 +70,7 @@ class DisciplineStage(StageNode):
                 context.current_sub_bid is None
                 or context.current_sub_bid == payload_sub_bid
             ):
-                release_cycle_lock(context)
+                await release_cycle_lock(context)
             return
 
         if et == EventType.SCENARIO_REVISION_REQUESTED:
@@ -96,8 +96,8 @@ class DisciplineStage(StageNode):
                 originating_stage=payload.get("originating_stage", "unknown"),
                 timestamp=event.timestamp,
             )
-            self._emit(EventType.SCENARIO_REVERTED_TO_INSCRIBING, {"sub_bid": sub_bid})
-            self._emit(EventType.REVERSION_LOGGED, {"sub_bid": sub_bid})
+            await self._emit(EventType.SCENARIO_REVERTED_TO_INSCRIBING, {"sub_bid": sub_bid})
+            await self._emit(EventType.REVERSION_LOGGED, {"sub_bid": sub_bid})
             return
 
         if et == EventType.SCENARIO_SUPERSESSION_REQUESTED:
@@ -132,7 +132,7 @@ class DisciplineStage(StageNode):
                             new_sub_bid=new_sub_bid,
                             timestamp=event.timestamp,
                         )
-                        self._emit(
+                        await self._emit(
                             EventType.SCENARIO_DEPRECATED,
                             {"old_sub_bid": s.supersedes, "new_sub_bid": new_sub_bid},
                         )

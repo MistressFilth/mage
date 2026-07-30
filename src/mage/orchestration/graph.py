@@ -25,11 +25,11 @@ class PipelineGraph:
         self.events_log = events_log
         self.stages = list(stages)
 
-    def run(self, initial_context: PipelineContext) -> PipelineContext:
-        """Synchronously run the graph, threading context through stages.
+    async def run(self, initial_context: PipelineContext) -> PipelineContext:
+        """Run the graph asynchronously, threading context through stages.
 
-        For Plan 1, runs stages directly (not via Pydantic-Graph's async runner).
-        Plan 6 will wire in the full async runner for cross-cutting discipline.
+        The graph remains linear; the async surface allows stages to coordinate
+        their own concurrent work while preserving stage order.
         """
         # I1: lazy-import the InscribeStage exception to avoid a circular import
         # (inscribe.py imports from orchestration.nodes; graph.py lives alongside).
@@ -65,8 +65,8 @@ class PipelineGraph:
                     assert_independent_gates(context.mapping, scenario.sub_bid)
         for stage in self.stages:
             try:
-                context = stage.run(context)
-                last_seen_count = self._dispatch_new_events(
+                context = await stage.run(context)
+                last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
             except ScenarioInspectHalted as e:
@@ -77,9 +77,9 @@ class PipelineGraph:
                     update={"feature_status": "halted"}
                 )
                 if context.project_dir is not None and context.project_dir.exists():
-                    context.mapping.save(context.project_dir / "mapping.yaml")
-                self._persist_halt(context, e)
-                last_seen_count = self._dispatch_new_events(
+                    await context.mapping.save(context.project_dir / "mapping.yaml")
+                await self._persist_halt(context, e)
+                last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
                 raise SystemExit(0) from e
@@ -91,8 +91,8 @@ class PipelineGraph:
                     update={"feature_status": "halted"}
                 )
                 if context.project_dir is not None and context.project_dir.exists():
-                    context.mapping.save(context.project_dir / "mapping.yaml")
-                last_seen_count = self._dispatch_new_events(
+                    await context.mapping.save(context.project_dir / "mapping.yaml")
+                last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
                 raise SystemExit(0) from e
@@ -101,19 +101,19 @@ class PipelineGraph:
                 # The InscribeStage already emitted REVIEW_HALT_PERSISTED and
                 # the halt is visible in the events log; we just need to stop
                 # the graph cleanly.
-                last_seen_count = self._dispatch_new_events(
+                last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
                 raise SystemExit(0) from e
             except PlanRevisionRequired as e:
-                self._persist_halt(context, e)
-                last_seen_count = self._dispatch_new_events(
+                await self._persist_halt(context, e)
+                last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
                 raise SystemExit(0) from e
         return context
 
-    def _dispatch_new_events(
+    async def _dispatch_new_events(
         self,
         context: PipelineContext,
         discipline: DisciplineStage,
@@ -122,10 +122,12 @@ class PipelineGraph:
         """Send events emitted since the previous stage to DisciplineStage."""
         current_events = self.events_log.read_all()
         for event in current_events[last_seen_count:]:
-            discipline._handle_event(context, event)
+            await discipline._handle_event(context, event)
         return len(current_events)
 
-    def _persist_halt(self, context: PipelineContext, halt: BaseException) -> None:
+    async def _persist_halt(
+        self, context: PipelineContext, halt: BaseException
+    ) -> None:
         """Persist halt record (event + state).
 
         PlanRevisionRequired carries structured fields (reason,
@@ -150,7 +152,7 @@ class PipelineGraph:
                 "context_snapshot": context.model_dump(mode="json"),
             },
         )
-        context.events_log.append(halt_event)
+        await context.events_log.append(halt_event)
 
         state_dir = context.project_dir / ".haileris" / "state"
         state_dir.mkdir(parents=True, exist_ok=True)

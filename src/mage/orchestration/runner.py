@@ -67,19 +67,26 @@ class AutomationCursor(BaseModel):
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from mage.orchestration.inspect_loop import InspectRoute
     from mage.orchestration.nodes import PipelineContext
 
 
 class _EtchLike(Protocol):
-    def run_scenario(self, context, target: ScenarioTarget) -> list[Increment]: ...
+    async def run_scenario(
+        self, context, target: ScenarioTarget
+    ) -> list[Increment]: ...
 
 
 class _RealizeLike(Protocol):
-    def run_increment(self, context, *, target, increment, carry_forward=None) -> IncrementResult: ...
+    async def run_increment(
+        self, context, *, target, increment, carry_forward=None
+    ) -> IncrementResult: ...
 
 
 class _InspectLike(Protocol):
-    def inspect_increment(self, context, *, target, increment, result) -> "InspectRoute | None": ...
+    async def inspect_increment(
+        self, context, *, target, increment, result
+    ) -> InspectRoute | None: ...
 
 
 class FeatureRunner:
@@ -99,9 +106,9 @@ class FeatureRunner:
         self.per_loop_max_iterations = per_loop_max_iterations
         self.cursor: AutomationCursor | None = None
 
-    def run(
+    async def run(
         self,
-        context: "PipelineContext",
+        context: PipelineContext,
         targets: list[ScenarioTarget],
         *,
         cursor: AutomationCursor | None = None,
@@ -111,7 +118,7 @@ class FeatureRunner:
         if cursor is not None:
             targets = [t for t in targets if t.sub_bid >= cursor.sub_bid]
         for target in targets:
-            increments = self.etch.run_scenario(context, target)
+            increments = await self.etch.run_scenario(context, target)
             start_idx = 0
             start_iter = 1
             if cursor is not None and cursor.sub_bid == target.sub_bid:
@@ -133,10 +140,10 @@ class FeatureRunner:
                     )
                     context.automation_cursor = self.cursor
                     context.iteration = iteration
-                    result = self.realize.run_increment(
+                    result = await self.realize.run_increment(
                         context, target=target, increment=increment
                     )
-                    route = self.inspect_loop.inspect_increment(
+                    route = await self.inspect_loop.inspect_increment(
                         context, target=target, increment=increment, result=result
                     )
                     if route is None:

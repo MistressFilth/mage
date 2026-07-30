@@ -36,7 +36,8 @@ three_amigos:
 """
 
 
-def test_full_decomposition_flow_with_mock_agent(tmp_path):
+@pytest.mark.asyncio
+async def test_full_decomposition_flow_with_mock_agent(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -57,7 +58,7 @@ def test_full_decomposition_flow_with_mock_agent(tmp_path):
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
     ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
 
-    result_ctx = stage.run(ctx)
+    result_ctx = await stage.run(ctx)
 
     # All files written
     assert (project_dir / "decomposition.yaml").exists()
@@ -72,7 +73,7 @@ def test_full_decomposition_flow_with_mock_agent(tmp_path):
 
     # Plan is finalized (digest matches on load)
     from mage.artifacts.plan import PlanArtifact
-    content = PlanArtifact.load(project_dir / "plan.md", log)
+    content = await PlanArtifact.load(project_dir / "plan.md", log)
     assert "auth" in content
     assert "logout" in content
 
@@ -85,7 +86,8 @@ def test_full_decomposition_flow_with_mock_agent(tmp_path):
     assert EventType.PLAN_FINALIZED in event_types
 
 
-def test_halt_and_resume_cycle(tmp_path):
+@pytest.mark.asyncio
+async def test_halt_and_resume_cycle(tmp_path):
     """Verify: Decomposition halts -> mage plan revise -> mage run resumes."""
     from mage.artifacts.plan import PlanArtifact, PlanRevisionRequired
     from mage.orchestration.decomposition import DecompositionStage
@@ -112,7 +114,7 @@ def test_halt_and_resume_cycle(tmp_path):
 
     class HaltAfterDecomp(StageNode):
         name = "halt_after_decomp"
-        def _run(self, context):
+        async def _run(self, context):
             raise PlanRevisionRequired(
                 reason="Plan ordering is wrong",
                 originating_stage="halt_after_decomp",
@@ -126,7 +128,7 @@ def test_halt_and_resume_cycle(tmp_path):
     ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
 
     with pytest.raises(SystemExit) as exc_info:
-        graph.run(ctx)
+        await graph.run(ctx)
     assert exc_info.value.code == 0
 
     # Halt record persisted
@@ -149,14 +151,26 @@ def test_halt_and_resume_cycle(tmp_path):
         "--approver", "alice",
     ]
     with patch.object(sys, "argv", test_argv):
-        main()
+        import threading
+        exc_box: list[BaseException] = []
+        def _thread_main() -> None:
+            try:
+                main()
+            except BaseException as exc:  # noqa: BLE001
+                exc_box.append(exc)
+        thread = threading.Thread(target=_thread_main)
+        thread.start()
+        thread.join()
+        if exc_box:
+            raise exc_box[0]
 
     # Plan load now succeeds with new digest
-    content = PlanArtifact.load(plan_path, log)
+    content = await PlanArtifact.load(plan_path, log)
     assert content == "# revised plan content\n"
 
 
-def test_approval_gate_required_emits_warning(tmp_path):
+@pytest.mark.asyncio
+async def test_approval_gate_required_emits_warning(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -177,14 +191,15 @@ def test_approval_gate_required_emits_warning(tmp_path):
     import warnings
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        stage.run(ctx)
+        await stage.run(ctx)
         approval_warnings = [
             x for x in w if "require_plan_approval" in str(x.message)
         ]
         assert len(approval_warnings) >= 1
 
 
-def test_approval_gate_disabled_runs_silently(tmp_path):
+@pytest.mark.asyncio
+async def test_approval_gate_disabled_runs_silently(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -205,7 +220,7 @@ def test_approval_gate_disabled_runs_silently(tmp_path):
     import warnings
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        stage.run(ctx)
+        await stage.run(ctx)
         approval_warnings = [
             x for x in w if "require_plan_approval" in str(x.message)
         ]

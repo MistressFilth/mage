@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import BaseBIDEntry, LifecycleStatus, MappingArtifact, ScenarioEntry
 
@@ -42,7 +44,8 @@ def test_base_bid_entry_has_depends_on_and_notes():
     assert entry.notes == "Foundation behavior; everything else depends on this."
 
 
-def test_base_bid_entry_round_trip_with_new_fields(tmp_path):
+@pytest.mark.asyncio
+async def test_base_bid_entry_round_trip_with_new_fields(tmp_path):
     entry = BaseBIDEntry(
         base_bid="00001",
         behavior_name="Place order",
@@ -52,7 +55,7 @@ def test_base_bid_entry_round_trip_with_new_fields(tmp_path):
     )
     mapping = MappingArtifact(project_id="test-project", base_bids=[entry])
     path = tmp_path / "mapping.yaml"
-    mapping.save(path)
+    await mapping.save(path)
     loaded = MappingArtifact.load(path)
     assert loaded.base_bids[0].depends_on == ["00000"]
     assert loaded.base_bids[0].notes == "Depends on authentication."
@@ -82,17 +85,19 @@ class TestMappingArtifact:
 
 
 class TestMappingArtifactIO:
-    def test_round_trip(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_round_trip(self, tmp_project_dir: Path):
         original = MappingArtifact(project_id="round-trip", base_bids=[base("00000").model_copy(update={"scenarios": [ScenarioEntry(sub_bid="A", scenario_text_hash="hash1", lifecycle_status=LifecycleStatus.APPROVED)]})])
         path = tmp_project_dir / "mapping.yaml"
-        original.save(path)
+        await original.save(path)
         loaded = MappingArtifact.load(path)
         assert loaded.project_id == "round-trip"
         assert loaded.base_bids[0].scenarios[0].sub_bid == "A"
 
-    def test_save_is_atomic(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_save_is_atomic(self, tmp_project_dir: Path):
         path = tmp_project_dir / "mapping.yaml"
-        MappingArtifact(project_id="atomic").save(path)
+        await MappingArtifact(project_id="atomic").save(path)
         assert list(tmp_project_dir.glob("*.tmp")) == []
         assert path.exists()
 
@@ -345,7 +350,8 @@ class TestMappingArtifactValidation:
                 {"project_id": "p1", "feature_inspect": "not-a-dict"}
             )
 
-    def test_round_trip_through_yaml_preserves_validation(self, tmp_path: Path):
+    @pytest.mark.asyncio
+    async def test_round_trip_through_yaml_preserves_validation(self, tmp_path: Path):
         """Validation must apply on load() too, not only on model_validate()."""
         from mage.artifacts.mapping import MappingArtifact
 
@@ -355,7 +361,7 @@ class TestMappingArtifactValidation:
             feature_cosmetic_queue=[{"text": "rephrase"}],
         )
         path = tmp_path / "mapping.yaml"
-        m.save(path)
+        await m.save(path)
         loaded = MappingArtifact.load(path)
         assert loaded.inspect_journal == {"00000-0": [{"route": "code", "dimension": "mechanical"}]}
         assert loaded.feature_cosmetic_queue == [{"text": "rephrase"}]

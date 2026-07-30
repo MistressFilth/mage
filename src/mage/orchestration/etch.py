@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from mage.agents.etch import EtchAgent
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, ScenarioTarget
 
@@ -27,11 +27,11 @@ class EtchStage:
         self.events_log = events_log
         self.agent = agent
 
-    def run_scenario(
+    async def run_scenario(
         self, context: PipelineContext, target: ScenarioTarget
     ) -> list[Increment]:
         """Generate a red test for each step. Returns increments in step order."""
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.ETCH_STARTED,
@@ -43,11 +43,11 @@ class EtchStage:
         )
         increments: list[Increment] = []
         for index, step in enumerate(target.steps):
-            spec = self.agent.run(
+            spec = await self.agent.run(
                 step=step,
                 scenario_context={"sub_bid": target.sub_bid},
             )
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.ETCH_RED_CONFIRMED,
@@ -66,7 +66,7 @@ class EtchStage:
                     red_test_code=spec.test_code,
                 )
             )
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.ETCH_COMPLETED,

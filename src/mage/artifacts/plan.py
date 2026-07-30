@@ -10,7 +10,7 @@ import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 
 
 class PlanError(Exception):
@@ -70,7 +70,7 @@ class PlanArtifact:
         return max(candidates, key=lambda e: e.timestamp)
 
     @classmethod
-    def finalize(
+    async def finalize(
         cls, plan_path: Path, content: str, events_log: EventsLog
     ) -> str:
         """Write Plan atomically, compute SHA256, emit PLAN_FINALIZED.
@@ -99,7 +99,7 @@ class PlanArtifact:
         tmp_path.write_text(content, encoding="utf-8")
         tmp_path.replace(plan_path)
 
-        events_log.append(
+        await events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.PLAN_FINALIZED,
@@ -110,7 +110,7 @@ class PlanArtifact:
         return digest
 
     @classmethod
-    def load(cls, plan_path: Path, events_log: EventsLog) -> str:
+    async def load(cls, plan_path: Path, events_log: EventsLog) -> str:
         """Read Plan with digest verification.
 
         Returns content on success. Raises PlanDigestMismatchError if on-disk
@@ -141,7 +141,7 @@ class PlanArtifact:
 
         if computed_digest != recorded_digest:
             # Emit diagnostic event before raising
-            events_log.append(
+            await events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,
@@ -162,7 +162,7 @@ class PlanArtifact:
         return content
 
     @classmethod
-    def revise(
+    async def revise(
         cls,
         plan_path: Path,
         content: str,
@@ -198,7 +198,7 @@ class PlanArtifact:
         tmp_path.write_text(content, encoding="utf-8")
         tmp_path.replace(plan_path)
 
-        events_log.append(
+        await events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.PLAN_REVISED,

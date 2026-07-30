@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Any
 
 from mage.artifacts.verdict import (
     DimensionSummary,
@@ -94,7 +95,7 @@ def aggregate_verdicts(
 
     decision = "needs_refactor" if any_fail else "approved"
     reasoning = (
-        f"all 7 dimensions passed" if decision == "approved"
+        "all 7 dimensions passed" if decision == "approved"
         else f"at least one dimension failed; iteration={iteration}"
     )
 

@@ -135,11 +135,12 @@ class EventsLog:
             self._lock = asyncio.Lock()
         return self._lock
 
-    def append(self, event: Event) -> None:
-        """Append a single event to the log (JSONL format, one event per line)."""
+    async def append(self, event: Event) -> None:
+        """Append one event while serializing writes to the JSONL log."""
         line = event.model_dump_json()
-        with self.log_path.open("a") as f:
-            f.write(line + "\n")
+        async with self._get_lock():
+            with self.log_path.open("a") as f:
+                f.write(line + "\n")
 
     def read_all(self) -> list[Event]:
         """Read all events from the log in order."""

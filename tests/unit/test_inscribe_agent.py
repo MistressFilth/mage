@@ -30,7 +30,8 @@ def canned_output() -> InscribeOutput:
     )
 
 
-def test_inscribe_agent_run_returns_inscribe_output(canned_output: InscribeOutput):
+@pytest.mark.asyncio
+async def test_inscribe_agent_run_returns_inscribe_output(canned_output: InscribeOutput):
     agent = InscribeAgent(model=TestModel(custom_output_args=canned_output))
     behavior = BaseBIDEntry(
         base_bid="00000",
@@ -39,7 +40,7 @@ def test_inscribe_agent_run_returns_inscribe_output(canned_output: InscribeOutpu
     )
     mapping = MappingArtifact(project_id="p", base_bids=[behavior])
 
-    output = agent.run(behavior=behavior, existing_scenarios=[], mapping=mapping)
+    output = await agent.run(behavior=behavior, existing_scenarios=[], mapping=mapping)
     assert isinstance(output, InscribeOutput)
     assert isinstance(output.scenarios, list)
     assert output.scenarios[0].name == "login succeeds"

@@ -128,7 +128,8 @@ class TestInspectArtifactContent:
 
 
 class TestInspectArtifact:
-    def test_finalize_writes_yaml_and_emits_event(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_finalize_writes_yaml_and_emits_event(self, tmp_path):
         from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
 
@@ -149,7 +150,7 @@ class TestInspectArtifact:
             ledger_markdown="",
         )
 
-        digest = InspectArtifact.finalize(artifact_path, content, log)
+        digest = await InspectArtifact.finalize(artifact_path, content, log)
 
         assert len(digest) == 64  # sha256 hex
         assert artifact_path.exists()
@@ -158,7 +159,8 @@ class TestInspectArtifact:
         assert events[0].payload["inspect_sha256"] == digest
         assert events[0].payload["inspect_path"] == str(artifact_path)
 
-    def test_load_returns_content(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_load_returns_content(self, tmp_path):
         from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
 
@@ -178,14 +180,15 @@ class TestInspectArtifact:
             ready_to_merge=True,
             ledger_markdown="ledger text",
         )
-        InspectArtifact.finalize(artifact_path, content, log)
+        await InspectArtifact.finalize(artifact_path, content, log)
 
-        loaded = InspectArtifact.load(artifact_path, log)
+        loaded = await InspectArtifact.load(artifact_path, log)
         assert loaded.feature_id == "feat-1"
         assert loaded.ready_to_merge is True
         assert loaded.ledger_markdown == "ledger text"
 
-    def test_load_raises_on_digest_mismatch(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_load_raises_on_digest_mismatch(self, tmp_path):
         from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import (
             InspectArtifact,
@@ -209,10 +212,10 @@ class TestInspectArtifact:
             ready_to_merge=False,
             ledger_markdown="",
         )
-        InspectArtifact.finalize(artifact_path, content, log)
+        await InspectArtifact.finalize(artifact_path, content, log)
 
         # Tamper with the file
         artifact_path.write_text("feature_id: tampered\n")
 
         with pytest.raises(InspectArtifactDigestMismatchError):
-            InspectArtifact.load(artifact_path, log)
+            await InspectArtifact.load(artifact_path, log)

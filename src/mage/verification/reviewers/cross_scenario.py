@@ -51,7 +51,7 @@ class CrossScenarioReviewer(ReviewerAgent):
             "Rationale is mandatory."
         )
 
-    def run(
+    async def run(
         self,
         *,
         feature_summary: dict,
@@ -69,10 +69,10 @@ class CrossScenarioReviewer(ReviewerAgent):
         prompt = (
             f"Feature summary: {feature_summary}\n\n"
             f"Scenarios:\n" + "\n".join(f"  {s}" for s in scenarios) + "\n\n"
-            f"Review for cross-scenario issues per your rubric."
+            "Review for cross-scenario issues per your rubric."
         )
 
-        result = self._agent.run_sync(prompt).output
+        result = (await self._agent.run(prompt)).output
         # Force the dimension + timestamps (do not trust LLM output for these)
         result_dict = result.model_dump()
         result_dict["dimension"] = self.dimension

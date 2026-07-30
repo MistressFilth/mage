@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
@@ -54,7 +56,8 @@ def _scenario(sub_bid: str, status: LifecycleStatus) -> ScenarioEntry:
     )
 
 
-def test_automation_stage_excludes_non_approved_scenarios(tmp_path):
+@pytest.mark.asyncio
+async def test_automation_stage_excludes_non_approved_scenarios(tmp_path):
     scenarios = [
         _scenario("00001-0001", LifecycleStatus.APPROVED),
         _scenario("00001-0002", LifecycleStatus.LIVE),  # already done
@@ -66,20 +69,21 @@ def test_automation_stage_excludes_non_approved_scenarios(tmp_path):
     captured_targets: list[list[ScenarioTarget]] = []
 
     class _Runner:
-        def run(self, context, targets, *, cursor=None):
+        async def run(self, context, targets, *, cursor=None):
             captured_targets.append(targets)
             return [
                 ScenarioOutcome(sub_bid=t.sub_bid, test_paths=["t.py"]) for t in targets
             ]
 
     stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
-    stage.run(ctx)
+    await stage.run(ctx)
 
     sent = captured_targets[0]
     assert [t.sub_bid for t in sent] == ["00001-0001"]
 
 
-def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
+@pytest.mark.asyncio
+async def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
     mapping = _make_mapping(
         tmp_path,
         [_scenario("00001-0001", LifecycleStatus.APPROVED)],
@@ -87,13 +91,13 @@ def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
     ctx = _ctx(tmp_path, mapping)
 
     class _Runner:
-        def run(self, context, targets, *, cursor=None):
+        async def run(self, context, targets, *, cursor=None):
             return [
                 ScenarioOutcome(sub_bid="00001-0001", test_paths=["t1.py", "t2.py"])
             ]
 
     stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
-    stage.run(ctx)
+    await stage.run(ctx)
 
     saved = MappingArtifact.load(tmp_path / "mapping.yaml")
     entry = saved.base_bids[0].scenarios[0]
@@ -101,7 +105,8 @@ def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
     assert entry.tests == ["t1.py", "t2.py"]
 
 
-def test_automation_stage_emits_scenario_live(tmp_path):
+@pytest.mark.asyncio
+async def test_automation_stage_emits_scenario_live(tmp_path):
     mapping = _make_mapping(
         tmp_path,
         [_scenario("00001-0001", LifecycleStatus.APPROVED)],
@@ -109,11 +114,11 @@ def test_automation_stage_emits_scenario_live(tmp_path):
     ctx = _ctx(tmp_path, mapping)
 
     class _Runner:
-        def run(self, context, targets, *, cursor=None):
+        async def run(self, context, targets, *, cursor=None):
             return [ScenarioOutcome(sub_bid="00001-0001", test_paths=["t.py"])]
 
     stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
-    stage.run(ctx)
+    await stage.run(ctx)
 
     types = [e.event_type.value for e in ctx.events_log.read_all()]
     assert types.count("scenario_live") == 1
@@ -121,7 +126,8 @@ def test_automation_stage_emits_scenario_live(tmp_path):
     assert "stage_completed" in types
 
 
-def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
+@pytest.mark.asyncio
+async def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
     """P3 enforcement is explicit at target-build time, not just implicit in the filter."""
     from unittest.mock import patch
 
@@ -132,7 +138,7 @@ def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
     ctx = _ctx(tmp_path, mapping)
 
     class _Runner:
-        def run(self, context, targets, *, cursor=None):
+        async def run(self, context, targets, *, cursor=None):
             return [
                 ScenarioOutcome(sub_bid=t.sub_bid, test_paths=["t.py"]) for t in targets
             ]
@@ -141,5 +147,5 @@ def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
         "mage.orchestration.automation.guard_automation_entry", autospec=True
     ) as mock_guard:
         stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
-        stage.run(ctx)
+        await stage.run(ctx)
         assert mock_guard.call_count == 1

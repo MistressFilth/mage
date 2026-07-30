@@ -1,5 +1,7 @@
 """Tests for verdict schemas (no I/O yet)."""
 
+import pytest
+
 
 def test_reviewer_finding_minimal():
     from mage.artifacts.verdict import ReviewerFinding
@@ -129,7 +131,8 @@ def test_reviewer_aggregate_decision_literal():
         )
 
 
-def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
+@pytest.mark.asyncio
+async def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
     from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict
     from mage.orchestration.events import EventsLog
     from datetime import datetime, UTC
@@ -142,7 +145,7 @@ def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
         reviewer_id="spec_compliance@v1",
     )
     path = tmp_path / ".haileris" / "verdicts" / "abc" / "spec_compliance.yaml"
-    digest = VerdictArtifact.finalize(path, verdict, log)
+    digest = await VerdictArtifact.finalize(path, verdict, log)
 
     assert path.exists()
     assert len(digest) == 64  # sha256 hex
@@ -150,7 +153,8 @@ def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
     assert any(e.event_type.value == "reviewer_verdict_recorded" for e in events)
 
 
-def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path):
+@pytest.mark.asyncio
+async def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path):
     from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict
     from mage.orchestration.events import EventsLog
     from datetime import datetime, UTC
@@ -163,13 +167,14 @@ def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path):
         reviewer_id="d@v1",
     )
     path = tmp_path / "v.yaml"
-    VerdictArtifact.finalize(path, verdict, log)
-    loaded = VerdictArtifact.load(path, log)
+    await VerdictArtifact.finalize(path, verdict, log)
+    loaded = await VerdictArtifact.load(path, log)
     assert isinstance(loaded, ReviewerVerdict)
     assert loaded.dimension == "d"
 
 
-def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
+@pytest.mark.asyncio
+async def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
     from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict, VerdictDigestMismatchError
     from mage.orchestration.events import EventsLog
     from datetime import datetime, UTC
@@ -182,15 +187,16 @@ def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
         reviewer_id="d@v1",
     )
     path = tmp_path / "v.yaml"
-    VerdictArtifact.finalize(path, verdict, log)
+    await VerdictArtifact.finalize(path, verdict, log)
     # Tamper with the file
     path.write_text("tampered: yes\n")
     import pytest
     with pytest.raises(VerdictDigestMismatchError):
-        VerdictArtifact.load(path, log)
+        await VerdictArtifact.load(path, log)
 
 
-def test_verdict_artifact_finalize_aggregate_uses_aggregate_event(tmp_path):
+@pytest.mark.asyncio
+async def test_verdict_artifact_finalize_aggregate_uses_aggregate_event(tmp_path):
     from mage.artifacts.verdict import (
         VerdictArtifact, ReviewerAggregate, DimensionSummary,
     )
@@ -209,6 +215,6 @@ def test_verdict_artifact_finalize_aggregate_uses_aggregate_event(tmp_path):
         decision="approved",
     )
     path = tmp_path / "agg.yaml"
-    VerdictArtifact.finalize(path, agg, log)
+    await VerdictArtifact.finalize(path, agg, log)
     events = log.read_all()
     assert any(e.event_type.value == "review_aggregate_recorded" for e in events)

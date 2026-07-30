@@ -32,11 +32,12 @@ class TestStageNode:
                 events_log=EventsLog(tmp_project_dir / "events.jsonl")
             )
 
-    def test_run_emits_start_and_complete_events(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_run_emits_start_and_complete_events(self, tmp_project_dir: Path):
         class SimpleStage(StageNode):
             name = "simple"
 
-            def _run(self, context: PipelineContext) -> PipelineContext:
+            async def _run(self, context: PipelineContext) -> PipelineContext:
                 return context
 
         log_path = tmp_project_dir / "events.jsonl"
@@ -47,7 +48,7 @@ class TestStageNode:
             mapping=MappingArtifact(schema_version=1, project_id="test", base_bids=[]),
             events_log=log,
         )
-        stage.run(ctx)
+        await stage.run(ctx)
         events = log.read_all()
         assert len(events) == 2
         assert events[0].event_type == EventType.STAGE_STARTED
@@ -55,11 +56,12 @@ class TestStageNode:
         assert events[1].event_type == EventType.STAGE_COMPLETED
         assert events[1].payload == {"stage": "simple"}
 
-    def test_run_records_failure_event_on_exception(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_run_records_failure_event_on_exception(self, tmp_project_dir: Path):
         class FailingStage(StageNode):
             name = "failing"
 
-            def _run(self, context: PipelineContext) -> PipelineContext:
+            async def _run(self, context: PipelineContext) -> PipelineContext:
                 raise RuntimeError("simulated failure")
 
         log_path = tmp_project_dir / "events.jsonl"
@@ -71,7 +73,7 @@ class TestStageNode:
             events_log=log,
         )
         with pytest.raises(RuntimeError, match="simulated failure"):
-            stage.run(ctx)
+            await stage.run(ctx)
         events = log.read_all()
         # STAGE_STARTED was emitted; the exception should propagate (no
         # STAGE_COMPLETED, but the failure is visible in the log).

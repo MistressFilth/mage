@@ -30,7 +30,7 @@ from mage.verification.host_overrides import HostConfig
 TEST_COMMAND = ["uv", "run", "pytest", "-v"]
 
 
-def finalize_inspect(
+async def finalize_inspect(
     project: Path,
     log: EventsLog,
     *,
@@ -53,14 +53,14 @@ def finalize_inspect(
         eof_max_iterations=3,
         ready_to_merge=ready,
     )
-    InspectArtifact.finalize(path, content, log)
+    await InspectArtifact.finalize(path, content, log)
     return path
 
 
-def make_context(project: Path, *, ready: bool = True) -> PipelineContext:
+async def make_context(project: Path, *, ready: bool = True) -> PipelineContext:
     project.mkdir(parents=True, exist_ok=True)
     log = EventsLog(project / "events.jsonl")
-    finalize_inspect(project, log, ready=ready)
+    await finalize_inspect(project, log, ready=ready)
     return PipelineContext(
         project_dir=project,
         mapping=MappingArtifact(project_id="feat-1"),
@@ -147,7 +147,8 @@ class RecordingRunner:
 
 
 class TestSettleReadiness:
-    def test_requires_an_inspect_artifact(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_requires_an_inspect_artifact(self, tmp_path):
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
@@ -159,7 +160,7 @@ class TestSettleReadiness:
         runner = RecordingRunner(project)
 
         with pytest.raises(SettleNotReadyError, match="No InspectArtifact"):
-            SettleFeatureStage(log, command_runner=runner).run_settle(
+            await SettleFeatureStage(log, command_runner=runner).run_settle(
                 context,
                 feature_id="feat-1",
                 disposition="kept",
@@ -167,23 +168,25 @@ class TestSettleReadiness:
 
         assert runner.calls == []
 
-    def test_requires_latest_artifact_to_be_ready(self, tmp_path):
-        context = make_context(tmp_path / "project", ready=False)
+    @pytest.mark.asyncio
+    async def test_requires_latest_artifact_to_be_ready(self, tmp_path):
+        context = await make_context(tmp_path / "project", ready=False)
         runner = RecordingRunner(context.project_dir)
 
         with pytest.raises(SettleNotReadyError, match="not ready"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
         assert runner.calls == []
 
-    def test_requires_artifact_feature_id_to_match(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_requires_artifact_feature_id_to_match(self, tmp_path):
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
-        finalize_inspect(
+        await finalize_inspect(
             project,
             log,
             path_feature_id="feat-1",
@@ -196,30 +199,32 @@ class TestSettleReadiness:
         )
 
         with pytest.raises(SettleNotReadyError, match="feature_id"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 log,
                 command_runner=RecordingRunner(project),
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
-    def test_digest_mismatch_aborts_settle(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_digest_mismatch_aborts_settle(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         inspect_path = (
             context.project_dir / ".haileris" / "inspect" / "feat-1" / "1.yaml"
         )
         inspect_path.write_text(inspect_path.read_text() + "# tampered\n")
 
         with pytest.raises(InspectArtifactDigestMismatchError):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=RecordingRunner(context.project_dir),
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
-    def test_latest_iteration_is_selected_numerically(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_latest_iteration_is_selected_numerically(self, tmp_path):
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
-        finalize_inspect(project, log, iteration=9, ready=False)
-        finalize_inspect(project, log, iteration=10, ready=True)
+        await finalize_inspect(project, log, iteration=9, ready=False)
+        await finalize_inspect(project, log, iteration=10, ready=True)
         context = PipelineContext(
             project_dir=project,
             mapping=MappingArtifact(project_id="feat-1"),
@@ -227,7 +232,7 @@ class TestSettleReadiness:
         )
         runner = RecordingRunner(project)
 
-        SettleFeatureStage(log, command_runner=runner).run_settle(
+        await SettleFeatureStage(log, command_runner=runner).run_settle(
             context,
             feature_id="feat-1",
             disposition="kept",
@@ -237,14 +242,15 @@ class TestSettleReadiness:
 
 
 class TestSettleFinalization:
-    def test_failed_tests_emit_halt_without_finalizing(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_failed_tests_emit_halt_without_finalizing(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         original_mapping = context.mapping
         runner = RecordingRunner(context.project_dir, test_returncodes=[1])
         stage = SettleFeatureStage(context.events_log, command_runner=runner)
 
         with pytest.raises(SettleTestsFailed):
-            stage.run_settle(
+            await stage.run_settle(
                 context,
                 feature_id="feat-1",
                 disposition="kept",
@@ -256,8 +262,9 @@ class TestSettleFinalization:
         assert context.mapping == original_mapping
         assert not (context.project_dir / "mapping.yaml").exists()
 
-    def test_keep_writes_reports_and_atomically_settles_mapping(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_keep_writes_reports_and_atomically_settles_mapping(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         context.mapping = context.mapping.append_cosmetic(
             CosmeticItem(
                 sub_bid="000000",
@@ -270,7 +277,7 @@ class TestSettleFinalization:
         runner = RecordingRunner(context.project_dir)
         stage = SettleFeatureStage(context.events_log, command_runner=runner)
 
-        stage.run_settle(context, feature_id="feat-1", disposition="kept")
+        await stage.run_settle(context, feature_id="feat-1", disposition="kept")
 
         assert runner.calls[0] == (TEST_COMMAND, context.project_dir)
         assert context.mapping.feature_status == "settled"
@@ -288,11 +295,12 @@ class TestSettleFinalization:
             "settle_feature_completed",
         ]
 
-    def test_push_and_pr_executes_both_commands(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_push_and_pr_executes_both_commands(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         runner = RecordingRunner(context.project_dir)
 
-        SettleFeatureStage(
+        await SettleFeatureStage(
             context.events_log,
             command_runner=runner,
         ).run_settle(context, feature_id="feat-1", disposition="pr_opened")
@@ -315,13 +323,14 @@ class TestSettleFinalization:
             context.project_dir,
         ) in runner.calls
 
-    def test_failed_branch_action_does_not_emit_finalized(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_failed_branch_action_does_not_emit_finalized(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         failing = ["git", "push", "-u", "origin", "feature/inspect-settle"]
         runner = RecordingRunner(context.project_dir, fail_command=failing)
 
         with pytest.raises(SettleCommandFailed, match="git push"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="pr_opened")
@@ -332,12 +341,13 @@ class TestSettleFinalization:
         )
         assert context.mapping.feature_status != "settled"
 
-    def test_merge_retests_deletes_branch_and_cleans_safe_worktree(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_merge_retests_deletes_branch_and_cleans_safe_worktree(self, tmp_path):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 0])
 
-        SettleFeatureStage(
+        await SettleFeatureStage(
             context.events_log,
             command_runner=runner,
         ).run_settle(context, feature_id="feat-1", disposition="merged")
@@ -360,12 +370,13 @@ class TestSettleFinalization:
             repo_root,
         ) in runner.calls
 
-    def test_discard_force_deletes_branch_and_cleans_safe_worktree(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_discard_force_deletes_branch_and_cleans_safe_worktree(self, tmp_path):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(project, worktree=True)
 
-        SettleFeatureStage(
+        await SettleFeatureStage(
             context.events_log,
             command_runner=runner,
         ).run_settle(context, feature_id="feat-1", disposition="discarded")
@@ -384,13 +395,14 @@ class TestSettleFinalization:
             for event in context.events_log.read_all()
         )
 
-    def test_discard_refuses_harness_owned_worktree_cleanup(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_discard_refuses_harness_owned_worktree_cleanup(self, tmp_path):
         project = tmp_path / "repo" / ".claude" / "worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(project, worktree=True)
 
         with pytest.raises(SettleUnsafeCleanupError, match="provenance"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="discarded")
@@ -400,13 +412,14 @@ class TestSettleFinalization:
             for command, _cwd in runner.calls
         )
 
-    def test_post_merge_test_failure_rolls_the_base_branch_back(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_post_merge_test_failure_rolls_the_base_branch_back(self, tmp_path):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 1])
 
         with pytest.raises(SettleTestsFailed, match="post_merge"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="merged")
@@ -430,12 +443,13 @@ class TestSettleFinalization:
             for event in context.events_log.read_all()
         )
 
-    def test_merge_records_skipped_cleanup_for_harness_worktree(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_merge_records_skipped_cleanup_for_harness_worktree(self, tmp_path):
         project = tmp_path / "repo" / ".claude" / "worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 0])
 
-        SettleFeatureStage(
+        await SettleFeatureStage(
             context.events_log,
             command_runner=runner,
         ).run_settle(context, feature_id="feat-1", disposition="merged")
@@ -457,13 +471,14 @@ class TestSettleFinalization:
         assert skipped[0].payload["branch"] == "feature/inspect-settle"
         assert "provenance" in skipped[0].payload["reason"]
 
-    def test_discard_aborts_when_head_moved_off_the_feature_branch(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_discard_aborts_when_head_moved_off_the_feature_branch(self, tmp_path):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(project, worktree=True, branch_after="main")
 
         with pytest.raises(SettleCommandFailed, match="moved"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="discarded")
@@ -477,9 +492,10 @@ class TestSettleFinalization:
             for command, _cwd in runner.calls
         )
 
-    def test_conflicted_merge_rolls_the_base_branch_back(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_conflicted_merge_rolls_the_base_branch_back(self, tmp_path):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(
             project,
             worktree=True,
@@ -487,7 +503,7 @@ class TestSettleFinalization:
         )
 
         with pytest.raises(SettleCommandFailed, match="git merge"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="merged")
@@ -504,9 +520,10 @@ class TestSettleFinalization:
         )
         assert rolled_back.payload["rollback_succeeded"] is True
 
-    def test_failed_rollback_preserves_the_triggering_failure(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_failed_rollback_preserves_the_triggering_failure(self, tmp_path):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = make_context(project)
+        context = await make_context(project)
         runner = RecordingRunner(
             project,
             worktree=True,
@@ -515,7 +532,7 @@ class TestSettleFinalization:
         )
 
         with pytest.raises(SettleCommandFailed) as raised:
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="merged")
@@ -529,12 +546,13 @@ class TestSettleFinalization:
         assert rolled_back.payload["rollback_succeeded"] is False
         assert "post_merge" in rolled_back.payload["cause"]
 
-    def test_discard_outside_a_worktree_aborts_when_head_moved(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_discard_outside_a_worktree_aborts_when_head_moved(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         runner = RecordingRunner(context.project_dir, branch_after="main")
 
         with pytest.raises(SettleCommandFailed, match="moved"):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="discarded")
@@ -547,8 +565,9 @@ class TestSettleFinalization:
             for command, _cwd in runner.calls
         )
 
-    def test_failed_test_event_truncates_captured_output(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_failed_test_event_truncates_captured_output(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         runner = RecordingRunner(
             context.project_dir,
             test_returncodes=[1],
@@ -556,7 +575,7 @@ class TestSettleFinalization:
         )
 
         with pytest.raises(SettleTestsFailed):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="kept")
@@ -570,22 +589,24 @@ class TestSettleFinalization:
         assert failed.payload["stdout"].endswith("x" * 64)
         assert failed.payload["stdout_truncated"] is True
 
-    def test_report_write_failure_leaves_mapping_unsettled_on_disk(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_report_write_failure_leaves_mapping_unsettled_on_disk(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         runner = RecordingRunner(context.project_dir)
         report_path = context.project_dir / ".haileris" / "settle" / "feat-1.md"
         report_path.mkdir(parents=True)
 
         with pytest.raises(IsADirectoryError):
-            SettleFeatureStage(
+            await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
         assert not (context.project_dir / "mapping.yaml").exists()
 
-    def test_run_delegates_to_configured_settle(self, tmp_path):
-        context = make_context(tmp_path / "project")
+    @pytest.mark.asyncio
+    async def test_run_delegates_to_configured_settle(self, tmp_path):
+        context = await make_context(tmp_path / "project")
         runner = RecordingRunner(context.project_dir)
         stage = SettleFeatureStage(
             context.events_log,
@@ -594,7 +615,7 @@ class TestSettleFinalization:
             disposition="kept",
         )
 
-        result = stage.run(context)
+        result = await stage.run(context)
 
         assert result is context
         assert context.mapping.feature_status == "settled"

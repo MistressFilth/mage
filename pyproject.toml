@@ -31,3 +31,8 @@ packages = ["src/mage"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.4.0",
+]

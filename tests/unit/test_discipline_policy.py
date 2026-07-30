@@ -121,32 +121,36 @@ def _context(tmp_path: Path) -> PipelineContext:
     )
 
 
-def test_p2_acquire_succeeds_when_unset(tmp_path):
+@pytest.mark.asyncio
+async def test_p2_acquire_succeeds_when_unset(tmp_path):
     ctx = _context(tmp_path)
-    acquire_cycle_lock(ctx, "A")
+    await acquire_cycle_lock(ctx, "A")
     assert ctx.current_sub_bid == "A"
 
 
-def test_p2_acquire_raises_when_held_by_other(tmp_path):
+@pytest.mark.asyncio
+async def test_p2_acquire_raises_when_held_by_other(tmp_path):
     ctx = _context(tmp_path)
-    acquire_cycle_lock(ctx, "A")
+    await acquire_cycle_lock(ctx, "A")
     with pytest.raises(CycleAlreadyInProgress):
-        acquire_cycle_lock(ctx, "B")
+        await acquire_cycle_lock(ctx, "B")
 
 
-def test_p2_acquire_allows_same_sub_bid_reacquire(tmp_path):
+@pytest.mark.asyncio
+async def test_p2_acquire_allows_same_sub_bid_reacquire(tmp_path):
     ctx = _context(tmp_path)
-    acquire_cycle_lock(ctx, "A")
-    acquire_cycle_lock(ctx, "A")  # no raise
+    await acquire_cycle_lock(ctx, "A")
+    await acquire_cycle_lock(ctx, "A")  # no raise
     assert ctx.current_sub_bid == "A"
 
 
-def test_p2_release_clears_lock(tmp_path):
+@pytest.mark.asyncio
+async def test_p2_release_clears_lock(tmp_path):
     ctx = _context(tmp_path)
-    acquire_cycle_lock(ctx, "A")
-    release_cycle_lock(ctx)
+    await acquire_cycle_lock(ctx, "A")
+    await release_cycle_lock(ctx)
     assert ctx.current_sub_bid is None
-    acquire_cycle_lock(ctx, "B")  # no raise
+    await acquire_cycle_lock(ctx, "B")  # no raise
 
 
 from mage.orchestration.discipline.policy import guard_automation_entry
@@ -181,15 +185,16 @@ def _log(tmp_path: Path) -> EventsLog:
     return EventsLog(tmp_path / "events.jsonl")
 
 
-def _emit(log: EventsLog, event_type: EventType, payload: dict) -> None:
-    log.append(
+async def _emit(log: EventsLog, event_type: EventType, payload: dict) -> None:
+    await log.append(
         Event(timestamp=datetime.now(UTC), event_type=event_type, payload=payload)
     )
 
 
-def test_p4_passes_when_plan_finalized_event_present(tmp_path):
+@pytest.mark.asyncio
+async def test_p4_passes_when_plan_finalized_event_present(tmp_path):
     log = _log(tmp_path)
-    _emit(
+    await _emit(
         log,
         EventType.PLAN_FINALIZED,
         {"plan_path": str(tmp_path / "plan.md"), "plan_sha256": "abc"},
@@ -197,9 +202,10 @@ def test_p4_passes_when_plan_finalized_event_present(tmp_path):
     assert_decomposition_closed(tmp_path / "plan.md", log)  # no raise
 
 
-def test_p4_passes_when_plan_revised_event_present(tmp_path):
+@pytest.mark.asyncio
+async def test_p4_passes_when_plan_revised_event_present(tmp_path):
     log = _log(tmp_path)
-    _emit(
+    await _emit(
         log,
         EventType.PLAN_REVISED,
         {"plan_path": str(tmp_path / "plan.md"), "plan_sha256": "abc"},

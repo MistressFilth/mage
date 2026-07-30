@@ -30,12 +30,13 @@ class CountingStage(StageNode):
 
     name = "count"
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         return context.model_copy(update={"iteration": context.iteration + 1})
 
 
 class TestFoundationEndToEnd:
-    def test_full_flow(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_full_flow(self, tmp_project_dir: Path):
         # 1. Mapping artifact: create with one base BID.
         mapping = MappingArtifact(
             schema_version=1,
@@ -63,7 +64,7 @@ class TestFoundationEndToEnd:
             ],
         )
         mapping_path = tmp_project_dir / "mapping.yaml"
-        mapping.save(mapping_path)
+        await mapping.save(mapping_path)
         loaded = MappingArtifact.load(mapping_path)
         assert loaded.project_id == "smoke"
         assert loaded.next_base_bid().value == "00001"
@@ -84,7 +85,7 @@ class TestFoundationEndToEnd:
 
         # 3. Events log: append a few events, read them back.
         log = EventsLog(tmp_project_dir / "events.jsonl")
-        log.append(Event(
+        await log.append(Event(
             timestamp=datetime.now(timezone.utc),
             event_type=EventType.STAGE_STARTED,
             payload={"stage": "smoke"},
@@ -127,5 +128,5 @@ class TestFoundationEndToEnd:
         # 6. Stage node: run a stage through the graph.
         stage = CountingStage(events_log=log)
         graph = PipelineGraph(stages=[stage, stage], events_log=log)
-        result = graph.run(ctx)
+        result = await graph.run(ctx)
         assert result.iteration == 7  # 5 (from restore) + 2 stages

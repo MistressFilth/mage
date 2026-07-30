@@ -1,32 +1,44 @@
-"""Tests for the EventsLog asyncio lock infrastructure."""
+"""Tests for serialized async EventsLog appends."""
 
 from __future__ import annotations
 
-import threading
+import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 
-from mage.orchestration.events import EventsLog
+import pytest
+
+from mage.orchestration.events import Event, EventsLog, EventType
 
 
-def test_get_lock_returns_same_instance(tmp_path: Path):
+def _event(index: int) -> Event:
+    return Event(
+        timestamp=datetime(2026, 7, 29, 12, 0, index, tzinfo=UTC),
+        event_type=EventType.STAGE_STARTED,
+        payload={"index": index},
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_appends_serialize(tmp_path: Path):
     log = EventsLog(tmp_path / "events.jsonl")
-    lock_a = log._get_lock()
-    lock_b = log._get_lock()
-    assert lock_a is lock_b
+
+    coroutines = [log.append(_event(index)) for index in range(10)]
+    await asyncio.gather(*coroutines)
+
+    events = log.read_all()
+    assert len(events) == 10
+    assert sorted(event.payload["index"] for event in events) == list(range(10))
+    assert log._get_lock() is log._get_lock()
 
 
-def test_get_lock_is_threadsafe_init(tmp_path: Path):
-    """Concurrent first-touch must yield exactly one lock instance."""
+@pytest.mark.asyncio
+async def test_reads_remain_lock_free(tmp_path: Path):
     log = EventsLog(tmp_path / "events.jsonl")
-    locks = []
 
-    def grab():
-        locks.append(log._get_lock())
+    await log.append(_event(0))
+    snapshot_before = log.read_all()
+    await log.append(_event(1))
 
-    threads = [threading.Thread(target=grab) for _ in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    assert len({id(l) for l in locks}) == 1
+    assert [event.payload["index"] for event in snapshot_before] == [0]
+    assert [event.payload["index"] for event in log.read_all()] == [0, 1]
