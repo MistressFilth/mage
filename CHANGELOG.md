@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Plan 8: asyncio concurrency for LLM-bound operations. `HostConfig.max_concurrent_llm_calls` (default 7) caps fan-out via `asyncio.Semaphore`. Inscribe reviewers run concurrently via `asyncio.gather`; InspectFeature dispatches across scenarios concurrently.
 - feat(discipline): add Plan 7 Three Practices enforcement for all six Approved
   Gate Scope rules (P1-P6), revision flow, full supersession flow (v1 only),
   and the cosmetic gate.
@@ -28,6 +29,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `PipelineGraph.run` and all `StageNode.run` methods are now async coroutines; the CLI wraps execution in `asyncio.run`. `EventsLog.append` and `MappingArtifact.save` are async and serialized via per-instance `asyncio.Lock`. `acquire_cycle_lock` and `release_cycle_lock` are async and use a per-context `asyncio.Lock`.
 - feat(orchestrator): wire StageNodes to DisciplineStage event subscriptions,
   enforce the P3 guard in AutomationStage, and acquire the cycle lock in
   InscribeStage.
