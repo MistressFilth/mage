@@ -29,7 +29,7 @@
 |---|---|---|
 | 7 reviewers per scenario (Inscribe) | `asyncio.gather` over reviewers | `max_concurrent_llm_calls` semaphore |
 | InspectFeature across scenarios | `asyncio.gather` over scenario Inspect runs | same |
-| Cosmetic queue items (Settle) | `asyncio.gather` over cosmetic items | same |
+| Cosmetic queue items (Settle) | **Deferred to Plan 9** — no per-item LLM processing exists today; cosmetic items are rendered as a single markdown report. When Plan 9 introduces per-item application/refinement, it will use the same semaphore cap. | (deferred) |
 
 ### Sequential (Plan 7 P2)
 
@@ -51,7 +51,7 @@
 | `src/mage/verification/host_overrides.py` | Add `max_concurrent_llm_calls: int = 7` to `HostConfig`. |
 | `src/mage/orchestration/inscribe.py` | `InscribeStage._run` becomes async; reviewers dispatched via `asyncio.gather` with `asyncio.Semaphore(host_config.max_concurrent_llm_calls)`. |
 | `src/mage/orchestration/inspect_feature.py` | `InspectFeatureStage._run` becomes async; per-scenario Inspect dispatched via `asyncio.gather` with semaphore. |
-| `src/mage/orchestration/settle_feature.py` | `SettleFeatureStage._run` becomes async; cosmetic queue items dispatched via `asyncio.gather` with semaphore. |
+| `src/mage/orchestration/settle_feature.py` | `SettleFeatureStage._run` becomes async. Cosmetic queue item dispatch via `asyncio.gather` + semaphore is deferred to Plan 9, when per-item LLM processing is introduced. |
 
 ### Write coordination
 
@@ -121,7 +121,7 @@ class HostConfig(BaseModel):
 
 ## Handoff
 
-- **Plan 9 (stub completion):** ships the LLM agents that benefit most from Plan 8's concurrency (especially `EtchAgent` and the 7 reviewers with real model wiring).
+- **Plan 9 (stub completion):** ships the LLM agents that benefit most from Plan 8's concurrency (especially `EtchAgent` and the 7 reviewers with real model wiring). Plan 9 will also introduce the cosmetic-queue per-item LLM processing that Plan 8 spec'd but deferred — when that processing exists, the same `max_concurrent_llm_calls` semaphore cap will apply.
 - **Future plan (post-Plan 9):** Pydantic-Graph's full async node-traversal machinery if branching scenarios are ever introduced. Plan 8 deliberately keeps `graph.py` as a linear async orchestrator.
 
 ## Spec Self-Review
