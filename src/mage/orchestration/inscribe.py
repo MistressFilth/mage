@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -225,17 +226,26 @@ class InscribeStage(StageNode):
                     )
 
                     # Run each enabled reviewer; verdicts stored alongside aggregate.
-                    per_dimension_verdicts = {}
-                    for reviewer in reviewers_to_run:
-                        verdict_path = verdicts_dir / f"{reviewer.dimension}.yaml"
-                        verdict = await reviewer.run(
-                            draft=scenario,
-                            spec_context=spec_context,
-                            mapping=mapping,
-                            events_log=self.events_log,
-                            verdict_path=verdict_path,
-                        )
-                        per_dimension_verdicts[reviewer.dimension] = verdict
+                    semaphore = asyncio.Semaphore(self.host_config.max_concurrent_llm_calls)
+
+                    async def run_one(reviewer):
+                        async with semaphore:
+                            verdict_path = verdicts_dir / f"{reviewer.dimension}.yaml"
+                            return (
+                                reviewer.dimension,
+                                await reviewer.run(
+                                    draft=scenario,
+                                    spec_context=spec_context,
+                                    mapping=mapping,
+                                    events_log=self.events_log,
+                                    verdict_path=verdict_path,
+                                ),
+                            )
+
+                    results = await asyncio.gather(
+                        *[run_one(r) for r in reviewers_to_run]
+                    )
+                    per_dimension_verdicts = dict(results)
 
                     # Aggregate (registry builds reviewer_verdict_ref as
                     # `.haileris/verdicts/{draft_hash}/{dimension}.yaml`).
