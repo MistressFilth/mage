@@ -69,7 +69,7 @@ class AutomationStage(StageNode):
                     )
                 )
                 entry_changed = True
-                self.events_log.append(
+                self.events_log.append_sync(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.SCENARIO_LIVE,

@@ -84,7 +84,7 @@ class TestFoundationEndToEnd:
 
         # 3. Events log: append a few events, read them back.
         log = EventsLog(tmp_project_dir / "events.jsonl")
-        log.append(Event(
+        log.append_sync(Event(
             timestamp=datetime.now(timezone.utc),
             event_type=EventType.STAGE_STARTED,
             payload={"stage": "smoke"},

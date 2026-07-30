@@ -209,7 +209,7 @@ def enumerate_behaviors(
     # Write updated mapping atomically.
     updated_mapping.save(project_dir / "mapping.yaml")
 
-    events_log.append(
+    events_log.append_sync(
         Event(
             timestamp=datetime.now(timezone.utc),
             event_type=EventType.BEHAVIORS_ENUMERATED,

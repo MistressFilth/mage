@@ -126,7 +126,7 @@ class RealizeStage:
                 cwd=context.project_dir,
             )
             diff = result.stdout
-        self.events_log.append(
+        self.events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.REALIZE_INCREMENT_DONE,

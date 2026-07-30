@@ -111,7 +111,7 @@ class TestE2EInnerTDDHappyPath:
                 realize_stage.run_increment(
                     ctx, target=target, increment=increment
                 )
-            log.append(
+            log.append_sync(
                 __import__("mage.orchestration.events", fromlist=["Event", "EventType"]).Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.SCENARIO_LIVE,
