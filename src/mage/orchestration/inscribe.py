@@ -226,7 +226,9 @@ class InscribeStage(StageNode):
                     )
 
                     # Run each enabled reviewer; verdicts stored alongside aggregate.
-                    semaphore = asyncio.Semaphore(self.host_config.max_concurrent_llm_calls)
+                    semaphore = asyncio.Semaphore(
+                        self.host_config.max_concurrent_llm_calls
+                    )
 
                     async def run_one(
                         reviewer,
