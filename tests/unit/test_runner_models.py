@@ -26,7 +26,9 @@ def test_scenario_target_is_frozen():
 
 
 def test_increment_carries_red_test():
-    inc = Increment(index=0, step="seed", red_test_path="t.py", red_test_code="def test(): pass")
+    inc = Increment(
+        index=0, step="seed", red_test_path="t.py", red_test_code="def test(): pass"
+    )
     assert inc.index == 0
     with pytest.raises(ValidationError):
         inc.index = 1

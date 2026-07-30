@@ -32,7 +32,9 @@ class HostConfig(BaseModel):
     enabled_reviewers: list[str] | None = None  # Plan 3 addition; None = all enabled
 
     # Plan 4 — Inner TDD loop iteration budgets
-    per_loop_max_iterations: int = 8  # per scenario, shared by Realize + per-loop Inspect
+    per_loop_max_iterations: int = (
+        8  # per scenario, shared by Realize + per-loop Inspect
+    )
     eof_max_iterations: int = 3  # per feature, end-of-feature Inspect fix-wave (Plan 5)
 
     # Plan 5 — Settle finalization
@@ -40,7 +42,9 @@ class HostConfig(BaseModel):
         default_factory=lambda: ["uv", "run", "pytest", "-v"]
     )
     base_branch: str = "main"
-    model: str | None = None  # Plan 6: agent model identifier; None = pydantic-ai default
+    model: str | None = (
+        None  # Plan 6: agent model identifier; None = pydantic-ai default
+    )
     max_concurrent_llm_calls: int = 7  # Plan 8: asyncio.Semaphore cap for LLM fan-out
 
 

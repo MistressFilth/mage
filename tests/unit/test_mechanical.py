@@ -6,18 +6,19 @@ import re
 from pathlib import Path
 
 import pytest
+
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.verification.mechanical import (
     CheckResult,
+    GherkinSyntaxCheck,
     MechanicalCheck,
     MechanicalVerifier,
     ScenarioDraft,
+    ScenarioNameUniqueCheck,
     StepDefinitionsResolvableCheck,
+    TagsRegisteredCheck,
 )
-from mage.verification.mechanical import GherkinSyntaxCheck
-from mage.verification.mechanical import ScenarioNameUniqueCheck
-from mage.verification.mechanical import TagsRegisteredCheck
 
 
 class DummyCheck(MechanicalCheck):

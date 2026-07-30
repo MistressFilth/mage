@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from mage.artifacts.bid import Base85BID, next_base_bid
 
 
@@ -24,7 +25,9 @@ class TestBase85BID:
         # 84 is the highest 2-digit value in Base85 (alphabet has 85 chars)
         bid = Base85BID(value="0000z")  # 'z' is index 57, not the end
         # Use the highest possible 5-digit Base85 value
-        max_bid = Base85BID(value="~~~~~")  # '~' is the last char in alphabet (index 84)
+        max_bid = Base85BID(
+            value="~~~~~"
+        )  # '~' is the last char in alphabet (index 84)
         with pytest.raises(OverflowError, match="exhausted"):
             max_bid.increment()
 
@@ -45,6 +48,7 @@ class TestBase85BID:
 
 def test_derive_sub_bid_with_index_zero():
     from mage.artifacts.bid import Base85BID
+
     parent = Base85BID(value="00000")
     sub = Base85BID.derive(parent, 0)
     assert sub.value == "00000" + "0"  # parent + '0' = first scenario
@@ -52,6 +56,7 @@ def test_derive_sub_bid_with_index_zero():
 
 def test_derive_sub_bid_with_index_84():
     from mage.artifacts.bid import Base85BID
+
     parent = Base85BID(value="00001")
     sub = Base85BID.derive(parent, 84)
     # index 84 → single char '~' (last in alphabet)
@@ -60,6 +65,7 @@ def test_derive_sub_bid_with_index_84():
 
 def test_derive_sub_bid_with_index_85():
     from mage.artifacts.bid import Base85BID
+
     parent = Base85BID(value="00010")
     sub = Base85BID.derive(parent, 85)
     # index 85 → two chars: "01" (since 85 = 1*85 + 0)
@@ -68,8 +74,10 @@ def test_derive_sub_bid_with_index_85():
 
 def test_derive_sub_bid_rejects_negative_index():
     from mage.artifacts.bid import Base85BID
+
     parent = Base85BID(value="00000")
     import pytest
+
     with pytest.raises(ValueError, match="non-negative"):
         Base85BID.derive(parent, -1)
 

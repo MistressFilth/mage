@@ -54,6 +54,7 @@ def _write(tmp_path: Path, content: str) -> Path:
 
 def test_parse_ascertain_full(tmp_path):
     from mage.artifacts.ascertain import parse_ascertain
+
     path = _write(tmp_path, ASCERTAIN_FULL)
     out = parse_ascertain(path)
     assert out.feature_id == "feat-001"
@@ -68,6 +69,7 @@ def test_parse_ascertain_full(tmp_path):
 
 def test_parse_ascertain_minimal(tmp_path):
     from mage.artifacts.ascertain import parse_ascertain
+
     path = _write(tmp_path, ASCERTAIN_MINIMAL)
     out = parse_ascertain(path)
     assert out.feature_id == "feat-002"
@@ -79,6 +81,7 @@ def test_parse_ascertain_minimal(tmp_path):
 
 def test_parse_ascertain_body_is_preserved(tmp_path):
     from mage.artifacts.ascertain import parse_ascertain
+
     path = _write(tmp_path, ASCERTAIN_FULL)
     out = parse_ascertain(path)
     assert "We discussed scope" in out.body
@@ -86,6 +89,7 @@ def test_parse_ascertain_body_is_preserved(tmp_path):
 
 def test_parse_ascertain_missing_frontmatter_raises(tmp_path):
     from mage.artifacts.ascertain import AscertainSchemaError, parse_ascertain
+
     path = tmp_path / "bad.md"
     path.write_text("No frontmatter here.\n", encoding="utf-8")
     with pytest.raises(AscertainSchemaError):

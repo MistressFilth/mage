@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+
 from mage import cli
-from unittest.mock import patch
 
 
 class TestCli:
@@ -22,16 +23,21 @@ class TestCli:
         assert exc_info.value.code in (0, 1, 2)
 
     @pytest.mark.asyncio
-    async def test_verify_subcommand_runs_mechanical_checks(self, tmp_project_dir: Path):
+    async def test_verify_subcommand_runs_mechanical_checks(
+        self, tmp_project_dir: Path
+    ):
         feature_path = tmp_project_dir / "test.feature"
         feature_path.write_text(
             "Feature: Test\n\n  Scenario: Valid\n    Given x\n    When y\n    Then z\n"
         )
         config_dir = tmp_project_dir / ".haileris"
         config_dir.mkdir()
-        (config_dir / "config.yaml").write_text("max_iterations: 3\ncheck_set: default\n")
+        (config_dir / "config.yaml").write_text(
+            "max_iterations: 3\ncheck_set: default\n"
+        )
 
         from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
+
         mapping = MappingArtifact(
             schema_version=1,
             project_id="cli-test",
@@ -50,12 +56,17 @@ class TestCli:
         await mapping.save(tmp_project_dir / "mapping.yaml")
 
         rc = _run_cli(
-            "--project-dir", str(tmp_project_dir),
+            "--project-dir",
+            str(tmp_project_dir),
             "verify",
-            "--feature", str(feature_path),
-            "--scenario", "Valid",
-            "--sub-bid", "A",
-            "--base-bid", "00000",
+            "--feature",
+            str(feature_path),
+            "--scenario",
+            "Valid",
+            "--sub-bid",
+            "A",
+            "--base-bid",
+            "00000",
         )
         assert rc in (0, 1)
 
@@ -69,6 +80,7 @@ def _run_cli(*args, **kwargs):
     running.
     """
     import threading
+
     from mage.cli import main
 
     result_box: list = []
@@ -86,12 +98,14 @@ def _run_cli(*args, **kwargs):
     if error_box:
         raise error_box[0]
     return result_box[0] if result_box else None
+
+
 @pytest.mark.asyncio
 async def test_plan_show_prints_digest_and_content(tmp_path, capsys):
-    from mage.artifacts.plan import PlanArtifact
-    from mage.cli import main
-    from mage.orchestration.events import EventsLog
     import sys
+
+    from mage.artifacts.plan import PlanArtifact
+    from mage.orchestration.events import EventsLog
 
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
@@ -110,10 +124,10 @@ async def test_plan_show_prints_digest_and_content(tmp_path, capsys):
 
 @pytest.mark.asyncio
 async def test_plan_revise_records_event(tmp_path, capsys):
-    from mage.artifacts.plan import PlanArtifact
-    from mage.cli import main
-    from mage.orchestration.events import EventsLog, EventType
     import sys
+
+    from mage.artifacts.plan import PlanArtifact
+    from mage.orchestration.events import EventsLog, EventType
 
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
@@ -121,10 +135,15 @@ async def test_plan_revise_records_event(tmp_path, capsys):
     plan_path.write_text("# revised\n", encoding="utf-8")
 
     test_argv = [
-        "mage", "--project-dir", str(tmp_path),
-        "plan", "revise",
-        "--reason", "Reordered behaviors",
-        "--approver", "alice",
+        "mage",
+        "--project-dir",
+        str(tmp_path),
+        "plan",
+        "revise",
+        "--reason",
+        "Reordered behaviors",
+        "--approver",
+        "alice",
     ]
     with patch.object(sys, "argv", test_argv):
         _run_cli()
@@ -135,25 +154,32 @@ async def test_plan_revise_records_event(tmp_path, capsys):
     assert revised[0].payload["human_approver"] == "alice"
 
     captured = capsys.readouterr()
-    assert "Plan revision recorded" in captured.out or "revision" in captured.out.lower()
+    assert (
+        "Plan revision recorded" in captured.out or "revision" in captured.out.lower()
+    )
 
 
 @pytest.mark.asyncio
 async def test_plan_revise_warns_on_unchanged_digest(tmp_path, capsys):
-    from mage.artifacts.plan import PlanArtifact
-    from mage.cli import main
-    from mage.orchestration.events import EventsLog
     import sys
+
+    from mage.artifacts.plan import PlanArtifact
+    from mage.orchestration.events import EventsLog
 
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
     await PlanArtifact.finalize(plan_path, "# same\n", log)
 
     test_argv = [
-        "mage", "--project-dir", str(tmp_path),
-        "plan", "revise",
-        "--reason", "r",
-        "--approver", "a",
+        "mage",
+        "--project-dir",
+        str(tmp_path),
+        "plan",
+        "revise",
+        "--reason",
+        "r",
+        "--approver",
+        "a",
     ]
     with patch.object(sys, "argv", test_argv):
         _run_cli()
@@ -163,14 +189,18 @@ async def test_plan_revise_warns_on_unchanged_digest(tmp_path, capsys):
 
 
 def test_plan_revise_missing_plan(tmp_path, capsys):
-    from mage.cli import main
     import sys
 
     test_argv = [
-        "mage", "--project-dir", str(tmp_path),
-        "plan", "revise",
-        "--reason", "r",
-        "--approver", "a",
+        "mage",
+        "--project-dir",
+        str(tmp_path),
+        "plan",
+        "revise",
+        "--reason",
+        "r",
+        "--approver",
+        "a",
     ]
     with patch.object(sys, "argv", test_argv), pytest.raises(SystemExit) as exc_info:
         _run_cli()
@@ -179,7 +209,6 @@ def test_plan_revise_missing_plan(tmp_path, capsys):
 
 def test_mage_run_raises_without_dry_run(tmp_path, capsys):
     """Without --dry-run, mage run errors out (real-agent wiring is Plan 9)."""
-    from mage.cli import main
     import sys
 
     test_argv = ["mage", "--project-dir", str(tmp_path), "run"]
@@ -259,26 +288,33 @@ def test_mage_run_model_flag_overrides_host_config(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
-    from mage.artifacts.verdict import (
-        VerdictArtifact, ReviewerAggregate, DimensionSummary,
-    )
-    from mage.cli import main
-    from mage.orchestration.events import EventsLog
-    from datetime import datetime, UTC
     import sys
+    from datetime import UTC, datetime
+
+    from mage.artifacts.verdict import (
+        DimensionSummary,
+        ReviewerAggregate,
+        VerdictArtifact,
+    )
+    from mage.orchestration.events import EventsLog
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     log = EventsLog(project_dir / "events.jsonl")
 
     agg = ReviewerAggregate(
-        draft_hash="x", aggregated_at=datetime.now(UTC), iteration=1,
+        draft_hash="x",
+        aggregated_at=datetime.now(UTC),
+        iteration=1,
         per_dimension={
             "spec_compliance": DimensionSummary(
-                outcome="pass", reviewer_verdict_ref="r.yaml", findings_count=0,
+                outcome="pass",
+                reviewer_verdict_ref="r.yaml",
+                findings_count=0,
             ),
         },
-        decision="approved", reasoning="all passed",
+        decision="approved",
+        reasoning="all passed",
     )
     path = project_dir / "agg.yaml"
     await VerdictArtifact.finalize(path, agg, log)
@@ -294,6 +330,7 @@ async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
 
 def test_mage_review_resume_is_gone(tmp_path, capsys):
     from mage.cli import main
+
     with pytest.raises(SystemExit) as exc:
         main(["review", "resume", "--project-dir", str(tmp_path)])
     assert exc.value.code == 2
@@ -304,9 +341,8 @@ class TestInspectShow:
     async def test_inspect_show_renders_artifact(self, tmp_path, capsys):
         from datetime import UTC, datetime
 
-        from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
-        from mage.cli import main
+        from mage.orchestration.events import EventsLog
 
         # Build a minimal project with an InspectArtifact
         project = tmp_path / "proj"
@@ -350,9 +386,7 @@ class TestSettleRun:
                 ("git", "branch", "--show-current"): "feature/settle",
             }
             returncode = (
-                test_returncode
-                if command == ["uv", "run", "pytest", "-v"]
-                else 0
+                test_returncode if command == ["uv", "run", "pytest", "-v"] else 0
             )
             return CompletedProcess(
                 command,
@@ -368,9 +402,8 @@ class TestSettleRun:
 
     @pytest.mark.asyncio
     async def test_settle_run_non_interactive(self, tmp_path, capsys, monkeypatch):
-        from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
-        from mage.cli import main
+        from mage.orchestration.events import EventsLog
 
         project = tmp_path / "proj"
         project.mkdir()
@@ -396,7 +429,17 @@ class TestSettleRun:
         )
         await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
 
-        rc = _run_cli(["settle", "run", "feat-1", "--disposition", "kept", "--project-dir", str(project)])
+        rc = _run_cli(
+            [
+                "settle",
+                "run",
+                "feat-1",
+                "--disposition",
+                "kept",
+                "--project-dir",
+                str(project),
+            ]
+        )
         out = capsys.readouterr().out
         assert rc == 0
         assert "settle" in out.lower() or "feat-1" in out
@@ -404,7 +447,9 @@ class TestSettleRun:
         events = log.read_all()
         types = [e.event_type.value for e in events]
         assert "settle_feature_finalized" in types
-        disposal_events = [e for e in events if e.event_type.value == "settle_feature_finalized"]
+        disposal_events = [
+            e for e in events if e.event_type.value == "settle_feature_finalized"
+        ]
         assert disposal_events[0].payload["disposition"] == "kept"
 
     @pytest.mark.asyncio
@@ -415,7 +460,6 @@ class TestSettleRun:
         monkeypatch,
     ):
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
-        from mage.cli import main
         from mage.orchestration.events import EventsLog
 
         project = tmp_path / "proj"
@@ -459,7 +503,6 @@ class TestSettleRun:
         capsys,
         monkeypatch,
     ):
-        from mage.cli import main
         from mage.orchestration.settle_feature import SettleFeatureStage
 
         project = tmp_path / "proj"

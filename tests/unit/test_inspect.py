@@ -64,15 +64,21 @@ class TestInspectJournalEntry:
 
 class TestScenarioInspectStatus:
     def test_live_status(self):
-        s = ScenarioInspectStatus(sub_bid="00000-0", scenario_name="happy", status="live")
+        s = ScenarioInspectStatus(
+            sub_bid="00000-0", scenario_name="happy", status="live"
+        )
         assert s.status == "live"
 
     def test_needs_refactor_status(self):
-        s = ScenarioInspectStatus(sub_bid="00000-0", scenario_name="x", status="needs_refactor")
+        s = ScenarioInspectStatus(
+            sub_bid="00000-0", scenario_name="x", status="needs_refactor"
+        )
         assert s.status == "needs_refactor"
 
     def test_approved_with_caveat_status(self):
-        s = ScenarioInspectStatus(sub_bid="00000-0", scenario_name="x", status="approved_with_caveat")
+        s = ScenarioInspectStatus(
+            sub_bid="00000-0", scenario_name="x", status="approved_with_caveat"
+        )
         assert s.status == "approved_with_caveat"
 
 
@@ -100,7 +106,6 @@ class TestInspectArtifactRef:
 
 class TestInspectArtifactContent:
     def test_constructs_minimal(self):
-        from mage.artifacts.verdict import ReviewerVerdict
         content = InspectArtifactContent(
             feature_id="feat-1",
             inspected_at=datetime.now(UTC),
@@ -121,6 +126,7 @@ class TestInspectArtifactContent:
     def test_no_digest_field_in_content(self):
         """Per spec R24 / GC-7: digest is event payload, not a content field."""
         from mage.artifacts.inspect import InspectArtifactContent
+
         fields = InspectArtifactContent.model_fields.keys()
         assert "digest" not in fields
         assert "inspect_sha256" not in fields
@@ -130,8 +136,8 @@ class TestInspectArtifactContent:
 class TestInspectArtifact:
     @pytest.mark.asyncio
     async def test_finalize_writes_yaml_and_emits_event(self, tmp_path):
-        from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+        from mage.orchestration.events import EventsLog
 
         log = EventsLog(tmp_path / "events.jsonl")
         artifact_path = tmp_path / "inspect.yaml"
@@ -161,8 +167,8 @@ class TestInspectArtifact:
 
     @pytest.mark.asyncio
     async def test_load_returns_content(self, tmp_path):
-        from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+        from mage.orchestration.events import EventsLog
 
         log = EventsLog(tmp_path / "events.jsonl")
         artifact_path = tmp_path / "inspect.yaml"
@@ -189,12 +195,12 @@ class TestInspectArtifact:
 
     @pytest.mark.asyncio
     async def test_load_raises_on_digest_mismatch(self, tmp_path):
-        from mage.orchestration.events import EventsLog
         from mage.artifacts.inspect import (
             InspectArtifact,
             InspectArtifactContent,
             InspectArtifactDigestMismatchError,
         )
+        from mage.orchestration.events import EventsLog
 
         log = EventsLog(tmp_path / "events.jsonl")
         artifact_path = tmp_path / "inspect.yaml"

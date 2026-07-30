@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-from pydantic_ai.models.test import TestModel
 from pydantic_ai import models
+from pydantic_ai.models.test import TestModel
 
 from mage.agents.decomposition import DecompositionAgent
 from mage.artifacts.ascertain import AscertainOutput, ThreeAmigos
@@ -46,11 +44,18 @@ async def test_decomposition_agent_returns_architecture_and_behaviors():
 
 @pytest.mark.asyncio
 async def test_decomposition_agent_receives_existing_mapping_context():
-    from mage.artifacts.mapping import MappingArtifact, BaseBIDEntry
+    from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
+
     agent = DecompositionAgent(model=TestModel())
     mapping = MappingArtifact(
         project_id="p",
-        base_bids=[BaseBIDEntry(base_bid="00005", behavior_name="existing", behavior_description="existing")],
+        base_bids=[
+            BaseBIDEntry(
+                base_bid="00005",
+                behavior_name="existing",
+                behavior_description="existing",
+            )
+        ],
     )
     output = await agent.run(ascertain=_ascertain(), existing_mapping=mapping)
     assert output is not None

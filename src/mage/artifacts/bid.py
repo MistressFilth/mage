@@ -72,7 +72,9 @@ class Base85BID(BaseModel):
         (i.e., index 0 → "0", index 1 → "1", ..., index 84 → "~", index 85 → "10").
         """
         if scenario_index < 0:
-            raise ValueError(f"scenario_index must be non-negative; got {scenario_index}")
+            raise ValueError(
+                f"scenario_index must be non-negative; got {scenario_index}"
+            )
 
         if scenario_index == 0:
             suffix = BASE85_ALPHABET[0]  # "0"

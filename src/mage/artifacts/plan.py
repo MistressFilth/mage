@@ -61,7 +61,8 @@ class PlanArtifact:
     ) -> Event | None:
         plan_path_str = str(plan_path)
         candidates = [
-            e for e in events_log.read_all()
+            e
+            for e in events_log.read_all()
             if e.event_type in event_types
             and e.payload.get("plan_path") == plan_path_str
         ]
@@ -127,9 +128,7 @@ class PlanArtifact:
                 f"refusing to read unverified Plan content."
             )
 
-        recorded_digest = (
-            _recorded_digest(event)
-        )
+        recorded_digest = _recorded_digest(event)
 
         if not plan_path.exists():
             raise PlanNotFinalizedError(
@@ -186,11 +185,7 @@ class PlanArtifact:
         existing = cls._latest_event_for_path(
             events_log, plan_path, (EventType.PLAN_FINALIZED, EventType.PLAN_REVISED)
         )
-        old_digest = (
-            _recorded_digest(existing)
-            if existing is not None
-            else None
-        )
+        old_digest = _recorded_digest(existing) if existing is not None else None
 
         # Atomic write
         plan_path.parent.mkdir(parents=True, exist_ok=True)

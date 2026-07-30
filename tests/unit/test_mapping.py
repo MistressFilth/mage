@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from mage.artifacts.bid import Base85BID
-from mage.artifacts.mapping import BaseBIDEntry, LifecycleStatus, MappingArtifact, ScenarioEntry
+from mage.artifacts.mapping import (
+    BaseBIDEntry,
+    LifecycleStatus,
+    MappingArtifact,
+    ScenarioEntry,
+)
 
 
 def base(value: str, name: str = "b") -> BaseBIDEntry:
@@ -17,12 +22,22 @@ def base(value: str, name: str = "b") -> BaseBIDEntry:
 
 class TestLifecycleStatus:
     def test_values(self):
-        assert [s.value for s in LifecycleStatus] == ["inscribing", "approved", "live", "deprecated", "retired"]
+        assert [s.value for s in LifecycleStatus] == [
+            "inscribing",
+            "approved",
+            "live",
+            "deprecated",
+            "retired",
+        ]
 
 
 class TestScenarioEntry:
     def test_minimal_construction(self):
-        entry = ScenarioEntry(sub_bid="A", scenario_text_hash="abc123", lifecycle_status=LifecycleStatus.INSCRIBING)
+        entry = ScenarioEntry(
+            sub_bid="A",
+            scenario_text_hash="abc123",
+            lifecycle_status=LifecycleStatus.INSCRIBING,
+        )
         assert entry.sub_bid == "A"
         assert entry.lifecycle_status == LifecycleStatus.INSCRIBING
 
@@ -71,23 +86,54 @@ class TestMappingArtifact:
         assert MappingArtifact(project_id="test").next_base_bid().value == "00000"
 
     def test_next_base_bid_with_existing(self):
-        artifact = MappingArtifact(project_id="test", base_bids=[base("00000"), base("00005")])
+        artifact = MappingArtifact(
+            project_id="test", base_bids=[base("00000"), base("00005")]
+        )
         assert artifact.next_base_bid().value == "00006"
 
     def test_lookup_sub_bid(self):
-        scenario = ScenarioEntry(sub_bid="A", scenario_text_hash="h1", lifecycle_status=LifecycleStatus.LIVE, tests=["test_login"], derivations=["src/auth.py"])
-        artifact = MappingArtifact(project_id="test", base_bids=[base("00000") .model_copy(update={"scenarios": [scenario]})])
+        scenario = ScenarioEntry(
+            sub_bid="A",
+            scenario_text_hash="h1",
+            lifecycle_status=LifecycleStatus.LIVE,
+            tests=["test_login"],
+            derivations=["src/auth.py"],
+        )
+        artifact = MappingArtifact(
+            project_id="test",
+            base_bids=[base("00000").model_copy(update={"scenarios": [scenario]})],
+        )
         assert artifact.lookup_sub_bid(Base85BID(value="00000"), "A") == scenario
         assert artifact.lookup_sub_bid(Base85BID(value="00000"), "B") is None
 
     def test_lookup_sub_bid_not_found(self):
-        assert MappingArtifact(project_id="test").lookup_sub_bid(Base85BID(value="00000"), "A") is None
+        assert (
+            MappingArtifact(project_id="test").lookup_sub_bid(
+                Base85BID(value="00000"), "A"
+            )
+            is None
+        )
 
 
 class TestMappingArtifactIO:
     @pytest.mark.asyncio
     async def test_round_trip(self, tmp_project_dir: Path):
-        original = MappingArtifact(project_id="round-trip", base_bids=[base("00000").model_copy(update={"scenarios": [ScenarioEntry(sub_bid="A", scenario_text_hash="hash1", lifecycle_status=LifecycleStatus.APPROVED)]})])
+        original = MappingArtifact(
+            project_id="round-trip",
+            base_bids=[
+                base("00000").model_copy(
+                    update={
+                        "scenarios": [
+                            ScenarioEntry(
+                                sub_bid="A",
+                                scenario_text_hash="hash1",
+                                lifecycle_status=LifecycleStatus.APPROVED,
+                            )
+                        ]
+                    }
+                )
+            ],
+        )
         path = tmp_project_dir / "mapping.yaml"
         await original.save(path)
         loaded = MappingArtifact.load(path)
@@ -104,8 +150,12 @@ class TestMappingArtifactIO:
 
 def test_append_scenario_adds_to_matching_base_bid():
     from mage.artifacts.mapping import (
-        BaseBIDEntry, MappingArtifact, ScenarioEntry, LifecycleStatus,
+        BaseBIDEntry,
+        LifecycleStatus,
+        MappingArtifact,
+        ScenarioEntry,
     )
+
     entry = BaseBIDEntry(
         base_bid="00000",
         behavior_name="Authenticate user",
@@ -129,15 +179,26 @@ def test_append_scenario_adds_to_matching_base_bid():
 
 def test_append_scenario_raises_on_unknown_base_bid():
     from mage.artifacts.mapping import (
-        BaseBIDEntry, MappingArtifact, ScenarioEntry, LifecycleStatus, BaseBIDNotFoundError,
+        BaseBIDEntry,
+        BaseBIDNotFoundError,
+        LifecycleStatus,
+        MappingArtifact,
+        ScenarioEntry,
     )
-    mapping = MappingArtifact(project_id="p", base_bids=[
-        BaseBIDEntry(base_bid="00000", behavior_name="x", behavior_description="y"),
-    ])
+
+    mapping = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            BaseBIDEntry(base_bid="00000", behavior_name="x", behavior_description="y"),
+        ],
+    )
     scenario = ScenarioEntry(
-        sub_bid="000000", scenario_text_hash="h", lifecycle_status=LifecycleStatus.APPROVED,
+        sub_bid="000000",
+        scenario_text_hash="h",
+        lifecycle_status=LifecycleStatus.APPROVED,
     )
     import pytest
+
     with pytest.raises(BaseBIDNotFoundError, match="99999"):
         mapping.append_scenario("99999", scenario)
 
@@ -145,34 +206,40 @@ def test_append_scenario_raises_on_unknown_base_bid():
 class TestPlan4MappingFields:
     def test_inspect_journal_defaults_empty(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         assert m.inspect_journal == {}
 
     def test_feature_inspect_defaults_none(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         assert m.feature_inspect is None
 
     def test_feature_cosmetic_queue_defaults_empty(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         assert m.feature_cosmetic_queue == []
 
     def test_feature_status_defaults_pending(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         assert m.feature_status == "pending"
 
     def test_feature_status_live_assembling(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1", feature_status="live_assembling")
         assert m.feature_status == "live_assembling"
 
 
 class TestPlan4MappingMethods:
     def test_append_inspect_journal(self):
-        from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.inspect import InspectJournalEntry
+        from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         entry = InspectJournalEntry(
             timestamp=datetime.now(UTC),
@@ -191,8 +258,9 @@ class TestPlan4MappingMethods:
         assert m2.inspect_journal["00000-0"][0]["finding_id"] == "f-1"
 
     def test_append_inspect_journal_appends_to_existing(self):
-        from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.inspect import InspectJournalEntry
+        from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         entry1 = InspectJournalEntry(
             timestamp=datetime.now(UTC),
@@ -221,8 +289,9 @@ class TestPlan4MappingMethods:
         assert len(m.inspect_journal["00000-0"]) == 2
 
     def test_attach_feature_inspect(self):
-        from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.inspect import InspectArtifactRef
+        from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         ref = InspectArtifactRef(
             inspect_path=".haileris/inspect/feat-1/1.yaml",
@@ -234,8 +303,9 @@ class TestPlan4MappingMethods:
         assert m2.feature_inspect["inspect_sha256"] == "abc"
 
     def test_append_cosmetic(self):
-        from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.inspect import CosmeticItem
+        from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         item = CosmeticItem(
             sub_bid="00000-0",
@@ -250,6 +320,7 @@ class TestPlan4MappingMethods:
 
     def test_feature_resume_state_halted(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1", feature_status="halted")
         state = m.feature_resume_state()
         assert state["status"] == "halted"
@@ -257,6 +328,7 @@ class TestPlan4MappingMethods:
 
     def test_feature_resume_state_running(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1", feature_status="live_assembling")
         state = m.feature_resume_state()
         assert state["should_resume"] is False
@@ -270,6 +342,7 @@ class TestMappingArtifactValidation:
 
     def test_valid_empty_passes(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(project_id="p1")
         assert m.inspect_journal == {}
         assert m.feature_cosmetic_queue == []
@@ -277,6 +350,7 @@ class TestMappingArtifactValidation:
 
     def test_valid_journal_entry_passes(self):
         from mage.artifacts.mapping import MappingArtifact
+
         m = MappingArtifact(
             project_id="p1",
             inspect_journal={"00000-0": [{"dimension": "mechanical", "route": "code"}]},
@@ -363,7 +437,9 @@ class TestMappingArtifactValidation:
         path = tmp_path / "mapping.yaml"
         await m.save(path)
         loaded = MappingArtifact.load(path)
-        assert loaded.inspect_journal == {"00000-0": [{"route": "code", "dimension": "mechanical"}]}
+        assert loaded.inspect_journal == {
+            "00000-0": [{"route": "code", "dimension": "mechanical"}]
+        }
         assert loaded.feature_cosmetic_queue == [{"text": "rephrase"}]
 
     def test_save_rejects_malformed_journal(self, tmp_path: Path):

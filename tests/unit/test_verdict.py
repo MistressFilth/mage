@@ -5,6 +5,7 @@ import pytest
 
 def test_reviewer_finding_minimal():
     from mage.artifacts.verdict import ReviewerFinding
+
     f = ReviewerFinding(
         id="f-001",
         severity="critical",
@@ -18,8 +19,10 @@ def test_reviewer_finding_minimal():
 
 
 def test_reviewer_verdict_pass_with_no_findings():
+    from datetime import UTC, datetime
+
     from mage.artifacts.verdict import ReviewerVerdict
-    from datetime import datetime, UTC
+
     v = ReviewerVerdict(
         dimension="spec_compliance",
         outcome="pass",
@@ -33,8 +36,10 @@ def test_reviewer_verdict_pass_with_no_findings():
 
 
 def test_reviewer_verdict_fail_with_findings():
-    from mage.artifacts.verdict import ReviewerVerdict, ReviewerFinding
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
+
+    from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
+
     findings = [
         ReviewerFinding(
             id="f-1",
@@ -58,9 +63,11 @@ def test_reviewer_verdict_fail_with_findings():
 
 
 def test_reviewer_finding_requires_rationale():
-    from mage.artifacts.verdict import ReviewerFinding
     import pytest
     from pydantic import ValidationError
+
+    from mage.artifacts.verdict import ReviewerFinding
+
     with pytest.raises(ValidationError):
         ReviewerFinding(
             id="f-1",
@@ -72,10 +79,13 @@ def test_reviewer_finding_requires_rationale():
 
 
 def test_reviewer_verdict_outcome_literal():
-    from mage.artifacts.verdict import ReviewerVerdict
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
+
     import pytest
     from pydantic import ValidationError
+
+    from mage.artifacts.verdict import ReviewerVerdict
+
     with pytest.raises(ValidationError):
         ReviewerVerdict(
             dimension="d",
@@ -88,6 +98,7 @@ def test_reviewer_verdict_outcome_literal():
 
 def test_dimension_summary():
     from mage.artifacts.verdict import DimensionSummary
+
     s = DimensionSummary(
         outcome="pass",
         reviewer_verdict_ref=".haileris/verdicts/abc/spec_compliance.yaml",
@@ -97,12 +108,23 @@ def test_dimension_summary():
 
 
 def test_reviewer_aggregate_all_pass_yields_approved():
-    from mage.artifacts.verdict import ReviewerAggregate, DimensionSummary
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
+
+    from mage.artifacts.verdict import DimensionSummary, ReviewerAggregate
+
     per_dim = {
-        d: DimensionSummary(outcome="pass", reviewer_verdict_ref=f"{d}.yaml", findings_count=0)
-        for d in ["spec_compliance", "scenario_clarity", "step_grammar",
-                  "testability", "determinism", "naming_idiom", "lifecycle_tags"]
+        d: DimensionSummary(
+            outcome="pass", reviewer_verdict_ref=f"{d}.yaml", findings_count=0
+        )
+        for d in [
+            "spec_compliance",
+            "scenario_clarity",
+            "step_grammar",
+            "testability",
+            "determinism",
+            "naming_idiom",
+            "lifecycle_tags",
+        ]
     }
     agg = ReviewerAggregate(
         draft_hash="h",
@@ -117,10 +139,13 @@ def test_reviewer_aggregate_all_pass_yields_approved():
 
 
 def test_reviewer_aggregate_decision_literal():
-    from mage.artifacts.verdict import ReviewerAggregate
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
+
     import pytest
     from pydantic import ValidationError
+
+    from mage.artifacts.verdict import ReviewerAggregate
+
     with pytest.raises(ValidationError):
         ReviewerAggregate(
             draft_hash="h",
@@ -133,9 +158,11 @@ def test_reviewer_aggregate_decision_literal():
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
-    from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict
+    from datetime import UTC, datetime
+
+    from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
     from mage.orchestration.events import EventsLog
-    from datetime import datetime, UTC
+
     log = EventsLog(tmp_path / "events.jsonl")
     verdict = ReviewerVerdict(
         dimension="spec_compliance",
@@ -155,9 +182,11 @@ async def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path):
-    from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict
+    from datetime import UTC, datetime
+
+    from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
     from mage.orchestration.events import EventsLog
-    from datetime import datetime, UTC
+
     log = EventsLog(tmp_path / "events.jsonl")
     verdict = ReviewerVerdict(
         dimension="d",
@@ -175,9 +204,15 @@ async def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path)
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
-    from mage.artifacts.verdict import VerdictArtifact, ReviewerVerdict, VerdictDigestMismatchError
+    from datetime import UTC, datetime
+
+    from mage.artifacts.verdict import (
+        ReviewerVerdict,
+        VerdictArtifact,
+        VerdictDigestMismatchError,
+    )
     from mage.orchestration.events import EventsLog
-    from datetime import datetime, UTC
+
     log = EventsLog(tmp_path / "events.jsonl")
     verdict = ReviewerVerdict(
         dimension="d",
@@ -191,17 +226,22 @@ async def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
     # Tamper with the file
     path.write_text("tampered: yes\n")
     import pytest
+
     with pytest.raises(VerdictDigestMismatchError):
         await VerdictArtifact.load(path, log)
 
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_finalize_aggregate_uses_aggregate_event(tmp_path):
+    from datetime import UTC, datetime
+
     from mage.artifacts.verdict import (
-        VerdictArtifact, ReviewerAggregate, DimensionSummary,
+        DimensionSummary,
+        ReviewerAggregate,
+        VerdictArtifact,
     )
     from mage.orchestration.events import EventsLog
-    from datetime import datetime, UTC
+
     log = EventsLog(tmp_path / "events.jsonl")
     agg = ReviewerAggregate(
         draft_hash="x",

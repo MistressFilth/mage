@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 
 class TestRealizeOutput:
     def test_constructs(self):
@@ -66,5 +64,8 @@ class TestRealizeAgent:
             carry_forward=[],
             cross_scenario_observations=[entry],
         )
-        assert "Cross-scenario observations" in prompt or "cross-scenario" in prompt.lower()
+        assert (
+            "Cross-scenario observations" in prompt
+            or "cross-scenario" in prompt.lower()
+        )
         assert "Rephrase" in prompt

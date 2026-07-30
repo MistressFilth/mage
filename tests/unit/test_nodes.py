@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+
 from mage.artifacts.mapping import MappingArtifact
-from mage.orchestration.events import EventType, EventsLog
+from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 
 
@@ -28,9 +28,7 @@ class TestStageNode:
             name = "incomplete"
 
         with pytest.raises(TypeError, match="abstract"):
-            IncompleteStage(
-                events_log=EventsLog(tmp_project_dir / "events.jsonl")
-            )
+            IncompleteStage(events_log=EventsLog(tmp_project_dir / "events.jsonl"))
 
     @pytest.mark.asyncio
     async def test_run_emits_start_and_complete_events(self, tmp_project_dir: Path):

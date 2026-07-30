@@ -30,6 +30,7 @@ class CrossScenarioReviewer(ReviewerAgent):
         self._system_prompt_only = system_prompt_only
         if not system_prompt_only:
             from pydantic_ai import Agent
+
             self._agent = Agent(
                 model, output_type=ReviewerVerdict, system_prompt=self._system_prompt()
             )

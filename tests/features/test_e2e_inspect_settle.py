@@ -10,12 +10,12 @@ import pytest
 class TestE2EInspectSettle:
     @pytest.mark.asyncio
     async def test_full_feature_through_settle(self, tmp_path):
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.settle_feature import SettleFeatureStage
-        from mage.orchestration.inspect_feature import InspectFeatureStage
-        from mage.orchestration.nodes import PipelineContext
         from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.verdict import ReviewerVerdict
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_feature import InspectFeatureStage
+        from mage.orchestration.nodes import PipelineContext
+        from mage.orchestration.settle_feature import SettleFeatureStage
         from mage.verification.host_overrides import HostConfig
 
         log = EventsLog(tmp_path / "events.jsonl")
@@ -31,7 +31,7 @@ class TestE2EInspectSettle:
             class R:
                 dimension = dim
 
-                async def run(self, **kwargs):  # noqa: ARG002
+                async def run(self, **kwargs):
                     return ReviewerVerdict(
                         dimension=dim,
                         outcome="pass",
@@ -44,9 +44,16 @@ class TestE2EInspectSettle:
             return R()
 
         reviewers = [
-            make_reviewer(d) for d in [
-                "spec_compliance", "scenario_clarity", "step_grammar", "testability",
-                "determinism", "naming_idiom", "lifecycle_tags", "cross_scenario",
+            make_reviewer(d)
+            for d in [
+                "spec_compliance",
+                "scenario_clarity",
+                "step_grammar",
+                "testability",
+                "determinism",
+                "naming_idiom",
+                "lifecycle_tags",
+                "cross_scenario",
             ]
         ]
 
@@ -72,7 +79,7 @@ class TestE2EInspectSettle:
         # Run SettleFeature with deterministic host-command responses.
         from subprocess import CompletedProcess
 
-        def command_runner(command, *, cwd):  # noqa: ARG001
+        def command_runner(command, *, cwd):
             outputs = {
                 ("git", "rev-parse", "--git-dir"): str(tmp_path / ".git"),
                 ("git", "rev-parse", "--git-common-dir"): str(tmp_path / ".git"),
@@ -104,11 +111,14 @@ class TestE2EInspectSettle:
 class TestE2EInspectFeatureHalt:
     @pytest.mark.asyncio
     async def test_eof_budget_overflow_raises_halt(self, tmp_path):
-        from mage.orchestration.events import EventsLog
-        from mage.orchestration.inspect_feature import InspectFeatureStage, InspectFeatureHalted
-        from mage.orchestration.nodes import PipelineContext
         from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict, ReviewerFinding
+        from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
+        from mage.orchestration.events import EventsLog
+        from mage.orchestration.inspect_feature import (
+            InspectFeatureHalted,
+            InspectFeatureStage,
+        )
+        from mage.orchestration.nodes import PipelineContext
         from mage.verification.host_overrides import HostConfig
 
         log = EventsLog(tmp_path / "events.jsonl")
@@ -123,6 +133,7 @@ class TestE2EInspectFeatureHalt:
         def make_reviewer(dim, severity="pass"):
             class R:
                 dimension = dim
+
                 async def run(self, **kwargs):
                     if severity == "pass":
                         return ReviewerVerdict(
@@ -139,24 +150,35 @@ class TestE2EInspectFeatureHalt:
                         draft_hash="",
                         reviewed_at=datetime.now(UTC),
                         reviewer_id=f"{dim}@v1",
-                        findings=[ReviewerFinding(
-                            id="f-1",
-                            severity="critical",
-                            location="00000-0",
-                            issue="Critical",
-                            rationale="Spec violation",
-                            suggestion="Fix",
-                            citations=["00000-0"],
-                        )],
+                        findings=[
+                            ReviewerFinding(
+                                id="f-1",
+                                severity="critical",
+                                location="00000-0",
+                                issue="Critical",
+                                rationale="Spec violation",
+                                suggestion="Fix",
+                                citations=["00000-0"],
+                            )
+                        ],
                     )
+
             return R()
 
         reviewers = [
             make_reviewer("spec_compliance", "critical"),
-            *[make_reviewer(d) for d in [
-                "scenario_clarity", "step_grammar", "testability",
-                "determinism", "naming_idiom", "lifecycle_tags", "cross_scenario",
-            ]],
+            *[
+                make_reviewer(d)
+                for d in [
+                    "scenario_clarity",
+                    "step_grammar",
+                    "testability",
+                    "determinism",
+                    "naming_idiom",
+                    "lifecycle_tags",
+                    "cross_scenario",
+                ]
+            ],
         ]
 
         from mage.verification.mechanical import MechanicalVerifier
@@ -183,11 +205,11 @@ class TestE2EInspectFeatureHalt:
 class TestE2ECosmeticQueueAccumulation:
     @pytest.mark.asyncio
     async def test_minor_findings_flow_to_cosmetic_queue(self, tmp_path):
+        from mage.artifacts.mapping import MappingArtifact
+        from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_feature import InspectFeatureStage
         from mage.orchestration.nodes import PipelineContext
-        from mage.artifacts.mapping import MappingArtifact
-        from mage.artifacts.verdict import ReviewerVerdict, ReviewerFinding
         from mage.verification.host_overrides import HostConfig
 
         log = EventsLog(tmp_path / "events.jsonl")
@@ -202,20 +224,22 @@ class TestE2ECosmeticQueueAccumulation:
         def make_reviewer(dim, *, severity="pass"):
             findings = []
             if severity == "minor":
-                findings = [ReviewerFinding(
-                    id="m-1",
-                    severity="minor",
-                    location="00000-0",
-                    issue="Rephrase for clarity",
-                    rationale="Cosmetic",
-                    suggestion="Rephrase",
-                    citations=["00000-0"],
-                )]
+                findings = [
+                    ReviewerFinding(
+                        id="m-1",
+                        severity="minor",
+                        location="00000-0",
+                        issue="Rephrase for clarity",
+                        rationale="Cosmetic",
+                        suggestion="Rephrase",
+                        citations=["00000-0"],
+                    )
+                ]
 
             class R:
                 dimension = dim
 
-                async def run(self, **kwargs):  # noqa: ARG002
+                async def run(self, **kwargs):
                     return ReviewerVerdict(
                         dimension=dim,
                         outcome="pass" if severity == "pass" else "fail",
@@ -230,10 +254,17 @@ class TestE2ECosmeticQueueAccumulation:
         reviewers = [
             make_reviewer("spec_compliance"),
             make_reviewer("scenario_clarity", severity="minor"),
-            *[make_reviewer(d) for d in [
-                "step_grammar", "testability", "determinism", "naming_idiom",
-                "lifecycle_tags", "cross_scenario",
-            ]],
+            *[
+                make_reviewer(d)
+                for d in [
+                    "step_grammar",
+                    "testability",
+                    "determinism",
+                    "naming_idiom",
+                    "lifecycle_tags",
+                    "cross_scenario",
+                ]
+            ],
         ]
 
         from mage.verification.mechanical import MechanicalVerifier

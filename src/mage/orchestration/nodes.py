@@ -94,9 +94,7 @@ class StageNode(ABC):
         """Stage-specific execution. Must be implemented by subclasses."""
         ...
 
-    async def _emit(
-        self, event_type: EventType, payload: dict | None = None
-    ) -> None:
+    async def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
         """Emit an event to the log."""
         event = Event(
             timestamp=datetime.now(UTC),

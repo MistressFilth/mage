@@ -84,7 +84,9 @@ class InspectArtifactContent(BaseModel):
     iteration: int
     eof_max_iterations: int
     scenarios: list[ScenarioInspectStatus] = Field(default_factory=list)
-    per_reviewer: list[dict] = Field(default_factory=list)  # list[ReviewerVerdict] — typing kept loose to avoid circular import
+    per_reviewer: list[dict] = Field(
+        default_factory=list
+    )  # list[ReviewerVerdict] — typing kept loose to avoid circular import
     critical: list[dict] = Field(default_factory=list)  # list[ReviewerFinding]
     important: list[dict] = Field(default_factory=list)
     minor: list[dict] = Field(default_factory=list)
@@ -114,9 +116,9 @@ class InspectArtifact:
     ) -> Event | None:
         path_str = str(path)
         candidates = [
-            e for e in events_log.read_all()
-            if e.event_type in event_types
-            and e.payload.get("inspect_path") == path_str
+            e
+            for e in events_log.read_all()
+            if e.event_type in event_types and e.payload.get("inspect_path") == path_str
         ]
         if not candidates:
             return None
@@ -170,10 +172,14 @@ class InspectArtifact:
 
         recorded_digest = event.payload.get("inspect_sha256")
         if recorded_digest is None:
-            raise InspectArtifactError(f"Event for {path} has no inspect_sha256 in payload")
+            raise InspectArtifactError(
+                f"Event for {path} has no inspect_sha256 in payload"
+            )
 
         if not path.exists():
-            raise InspectArtifactError(f"InspectArtifact file {path} does not exist on disk")
+            raise InspectArtifactError(
+                f"InspectArtifact file {path} does not exist on disk"
+            )
 
         content = path.read_text(encoding="utf-8")
         computed = cls._compute_digest(content)
