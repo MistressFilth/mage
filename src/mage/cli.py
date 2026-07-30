@@ -37,9 +37,15 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
 
     # mage verify — run mechanical checks against a feature/scenario.
-    verify = subparsers.add_parser("verify", help="Run mechanical verification on a scenario")
-    verify.add_argument("--feature", type=Path, required=True, help="Path to the .feature file")
-    verify.add_argument("--scenario", required=True, help="Scenario name within the feature")
+    verify = subparsers.add_parser(
+        "verify", help="Run mechanical verification on a scenario"
+    )
+    verify.add_argument(
+        "--feature", type=Path, required=True, help="Path to the .feature file"
+    )
+    verify.add_argument(
+        "--scenario", required=True, help="Scenario name within the feature"
+    )
     verify.add_argument("--sub-bid", required=True, help="Sub-BID for the scenario")
     verify.add_argument("--base-bid", required=True, help="Parent base-BID")
 
@@ -51,7 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
     show_parser = plan_subparsers.add_parser("show", help="Display Plan + digest")
 
     # mage plan revise
-    revise_parser = plan_subparsers.add_parser("revise", help="Record a Plan revision after halt")
+    revise_parser = plan_subparsers.add_parser(
+        "revise", help="Record a Plan revision after halt"
+    )
     revise_parser.add_argument("--reason", type=str, required=True)
     revise_parser.add_argument("--approver", type=str, required=True)
 
@@ -63,23 +71,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     # mage review <subcommand>
     review_parser = subparsers.add_parser("review", help="Review operations")
-    review_subparsers = review_parser.add_subparsers(dest="review_command", required=True)
+    review_subparsers = review_parser.add_subparsers(
+        dest="review_command", required=True
+    )
     review_subparsers.add_parser("show", help="Display latest aggregate verdict")
 
     # mage inspect <subcommand>
     inspect_parser = subparsers.add_parser("inspect", help="Inspect operations")
-    inspect_subparsers = inspect_parser.add_subparsers(dest="inspect_command", required=True)
+    inspect_subparsers = inspect_parser.add_subparsers(
+        dest="inspect_command", required=True
+    )
 
     # mage inspect show
     inspect_show_parser = inspect_subparsers.add_parser(
         "show", help="Display latest Inspect artifact"
     )
     inspect_show_parser.add_argument("feature_id")
-    inspect_show_parser.add_argument("--project-dir", type=Path, default=argparse.SUPPRESS)
+    inspect_show_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
 
     # mage settle <subcommand>
     settle_parser = subparsers.add_parser("settle", help="Settle operations")
-    settle_subparsers = settle_parser.add_subparsers(dest="settle_command", required=True)
+    settle_subparsers = settle_parser.add_subparsers(
+        dest="settle_command", required=True
+    )
 
     # mage settle run
     settle_run_parser = settle_subparsers.add_parser(
@@ -215,7 +231,11 @@ async def cmd_plan_show(args):
 
     project_dir: Path = args.project_dir
     plan_path = project_dir / "plan.md"
-    log = EventsLog(project_dir / "events.jsonl") if (project_dir / "events.jsonl").exists() else None
+    log = (
+        EventsLog(project_dir / "events.jsonl")
+        if (project_dir / "events.jsonl").exists()
+        else None
+    )
 
     print(f"Plan: {plan_path}")
 
@@ -226,7 +246,8 @@ async def cmd_plan_show(args):
     # Find latest FINALIZED/REVISED event
     events = log.read_all() if log is not None else []
     plan_events = [
-        e for e in events
+        e
+        for e in events
         if e.event_type.value in ("plan_finalized", "plan_revised")
         and e.payload.get("plan_path") == str(plan_path)
     ]
@@ -237,7 +258,9 @@ async def cmd_plan_show(args):
     latest = max(plan_events, key=lambda e: e.timestamp)
     digest = latest.payload.get("plan_sha256") or latest.payload.get("new_sha256")
     print(f"Digest: {digest}")
-    print(f"Last event: {latest.event_type.value.upper().replace('_', ' ')} at {latest.timestamp.isoformat()}")
+    print(
+        f"Last event: {latest.event_type.value.upper().replace('_', ' ')} at {latest.timestamp.isoformat()}"
+    )
     print()
 
     assert log is not None
@@ -265,13 +288,17 @@ async def cmd_plan_revise(args):
     plan_path = project_dir / "plan.md"
 
     if not plan_path.exists():
-        print(f"mage plan revise: error: plan.md not found at {plan_path}", file=sys.stderr)
+        print(
+            f"mage plan revise: error: plan.md not found at {plan_path}",
+            file=sys.stderr,
+        )
         sys.exit(2)
 
     # Check that a prior finalization exists
     events = log.read_all()
     plan_events = [
-        e for e in events
+        e
+        for e in events
         if e.event_type.value in ("plan_finalized", "plan_revised")
         and e.payload.get("plan_path") == str(plan_path)
     ]
@@ -287,7 +314,10 @@ async def cmd_plan_revise(args):
     latest = max(plan_events, key=lambda e: e.timestamp)
     recorded = latest.payload.get("plan_sha256") or latest.payload.get("new_sha256")
     if new_digest == recorded:
-        print("mage plan revise: warning: Plan digest unchanged; recording anyway", file=sys.stderr)
+        print(
+            "mage plan revise: warning: Plan digest unchanged; recording anyway",
+            file=sys.stderr,
+        )
 
     new_digest = await PlanArtifact.revise(
         plan_path,
@@ -321,9 +351,7 @@ async def cmd_run(args):
             schema_version=1, project_id=project_dir.name, base_bids=[]
         )
 
-    persistence = FileStatePersistence(
-        state_dir=state_dir, state_type=PipelineContext
-    )
+    persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
     saved = persistence.load_state()
     initial_context = saved or PipelineContext(
         project_dir=project_dir,
@@ -373,7 +401,10 @@ async def cmd_review_show(args):
         e for e in events if e.event_type.value == "review_aggregate_recorded"
     ]
     if not aggregate_events:
-        print(f"mage review show: no aggregate verdicts found in {project_dir}", file=sys.stderr)
+        print(
+            f"mage review show: no aggregate verdicts found in {project_dir}",
+            file=sys.stderr,
+        )
         sys.exit(2)
 
     latest = max(aggregate_events, key=lambda e: e.timestamp)
@@ -506,9 +537,7 @@ async def cmd_settle_run(args):
         host_config=load_host_config(project_dir),
     )
     try:
-        await stage.run_settle(
-            ctx, feature_id=args.feature_id, disposition=disposition
-        )
+        await stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
     except (SettleError, ValueError) as error:
         print(f"mage settle run: error: {error}", file=sys.stderr)
         return 1
@@ -520,8 +549,12 @@ def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
     config = load_host_config(project_dir)
-    mapping = MappingArtifact.load(project_dir / "mapping.yaml") if (project_dir / "mapping.yaml").exists() else MappingArtifact(
-        schema_version=1, project_id=project_dir.name, base_bids=[]
+    mapping = (
+        MappingArtifact.load(project_dir / "mapping.yaml")
+        if (project_dir / "mapping.yaml").exists()
+        else MappingArtifact(
+            schema_version=1, project_id=project_dir.name, base_bids=[]
+        )
     )
     # For Plan 1, we run with empty registries (host project can configure later).
     checks = default_check_set(registered_tags=set(), step_patterns=[])

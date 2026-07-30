@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from mage.artifacts.verdict import (
-    DimensionSummary,
     ReviewerAggregate,
     ReviewerFinding,
     ReviewerVerdict,
@@ -34,8 +33,11 @@ def test_default_registry_has_all_7_dimensions():
 def test_aggregate_all_pass_yields_approved():
     verdicts = {
         d: ReviewerVerdict(
-            dimension=d, outcome="pass", draft_hash="h",
-            reviewed_at=datetime.now(UTC), reviewer_id=f"{d}@v1",
+            dimension=d,
+            outcome="pass",
+            draft_hash="h",
+            reviewed_at=datetime.now(UTC),
+            reviewer_id=f"{d}@v1",
         )
         for d in default_reviewer_registry().keys()
     }
@@ -48,18 +50,27 @@ def test_aggregate_all_pass_yields_approved():
 def test_aggregate_any_fail_yields_needs_refactor():
     verdicts = {
         d: ReviewerVerdict(
-            dimension=d, outcome="pass", draft_hash="h",
-            reviewed_at=datetime.now(UTC), reviewer_id=f"{d}@v1",
+            dimension=d,
+            outcome="pass",
+            draft_hash="h",
+            reviewed_at=datetime.now(UTC),
+            reviewer_id=f"{d}@v1",
         )
         for d in default_reviewer_registry().keys()
     }
     verdicts["scenario_clarity"] = ReviewerVerdict(
-        dimension="scenario_clarity", outcome="fail", draft_hash="h",
-        reviewed_at=datetime.now(UTC), reviewer_id="scenario_clarity@v1",
+        dimension="scenario_clarity",
+        outcome="fail",
+        draft_hash="h",
+        reviewed_at=datetime.now(UTC),
+        reviewer_id="scenario_clarity@v1",
         findings=[
             ReviewerFinding(
-                id="f-1", severity="major", location="line 3",
-                issue="ambiguous step", rationale="'it' has no antecedent.",
+                id="f-1",
+                severity="major",
+                location="line 3",
+                issue="ambiguous step",
+                rationale="'it' has no antecedent.",
             ),
         ],
     )
@@ -72,16 +83,25 @@ def test_aggregate_any_fail_yields_needs_refactor():
 def test_aggregate_stores_findings_count():
     verdicts = {
         d: ReviewerVerdict(
-            dimension=d, outcome="fail", draft_hash="h",
-            reviewed_at=datetime.now(UTC), reviewer_id=f"{d}@v1",
+            dimension=d,
+            outcome="fail",
+            draft_hash="h",
+            reviewed_at=datetime.now(UTC),
+            reviewer_id=f"{d}@v1",
             findings=[
                 ReviewerFinding(
-                    id="f-1", severity="minor", location="line 1",
-                    issue="x", rationale="y",
+                    id="f-1",
+                    severity="minor",
+                    location="line 1",
+                    issue="x",
+                    rationale="y",
                 ),
                 ReviewerFinding(
-                    id="f-2", severity="minor", location="line 2",
-                    issue="x", rationale="y",
+                    id="f-2",
+                    severity="minor",
+                    location="line 2",
+                    issue="x",
+                    rationale="y",
                 ),
             ],
         )
@@ -98,16 +118,18 @@ class TestFeatureReviewerRegistry:
 
         registry = feature_reviewer_registry(model=TestModel())
         dims = sorted(r.dimension for r in registry)
-        assert dims == sorted([
-            "cross_scenario",
-            "determinism",
-            "lifecycle_tags",
-            "naming_idiom",
-            "scenario_clarity",
-            "spec_compliance",
-            "step_grammar",
-            "testability",
-        ])
+        assert dims == sorted(
+            [
+                "cross_scenario",
+                "determinism",
+                "lifecycle_tags",
+                "naming_idiom",
+                "scenario_clarity",
+                "spec_compliance",
+                "step_grammar",
+                "testability",
+            ]
+        )
 
     def test_feature_reviewer_registry_uses_factory_without_caching(self):
         from pydantic_ai.models.test import TestModel

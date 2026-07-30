@@ -46,7 +46,10 @@ class DecompositionStage(StageNode):
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.DECOMPOSITION_STARTED,
-                payload={"feature_id": ascertain.feature_id, "ascertain_path": str(ascertain_path)},
+                payload={
+                    "feature_id": ascertain.feature_id,
+                    "ascertain_path": str(ascertain_path),
+                },
             )
         )
 
@@ -66,7 +69,9 @@ class DecompositionStage(StageNode):
         }
         decomposition_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = decomposition_path.with_suffix(decomposition_path.suffix + ".tmp")
-        tmp.write_text(yaml.safe_dump(decomposition_data, sort_keys=False), encoding="utf-8")
+        tmp.write_text(
+            yaml.safe_dump(decomposition_data, sort_keys=False), encoding="utf-8"
+        )
         tmp.replace(decomposition_path)
 
         # 5. Enumerate behaviors + write files
@@ -87,7 +92,8 @@ class DecompositionStage(StageNode):
             else DEFAULT_TEMPLATE_PATH
         )
         new_entries = [
-            e for e in updated_mapping.base_bids
+            e
+            for e in updated_mapping.base_bids
             if e.base_bid not in {b.base_bid for b in context.mapping.base_bids}
         ]
         plan_content = render_plan(
@@ -98,6 +104,7 @@ class DecompositionStage(StageNode):
         if self.host_config.require_plan_approval:
             # Deferred-tool pause (placeholder — real impl in Plan 6)
             import warnings
+
             warnings.warn(
                 "require_plan_approval=True: deferred-tool prompt not yet wired in Plan 2; "
                 "auto-approving for now."
@@ -105,9 +112,7 @@ class DecompositionStage(StageNode):
 
         # 8. Finalize Plan
         assert context.plan_path is not None
-        await PlanArtifact.finalize(
-            context.plan_path, plan_content, self.events_log
-        )
+        await PlanArtifact.finalize(context.plan_path, plan_content, self.events_log)
 
         # 9. Emit DECOMPOSITION_COMPLETED
         await self.events_log.append(

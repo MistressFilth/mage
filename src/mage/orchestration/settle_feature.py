@@ -130,9 +130,7 @@ class SettleFeatureStage(StageNode):
                 f"requested feature {feature_id!r}"
             )
         if not content.ready_to_merge:
-            raise SettleNotReadyError(
-                f"InspectArtifact {path} is not ready to merge"
-            )
+            raise SettleNotReadyError(f"InspectArtifact {path} is not ready to merge")
         return content
 
     def _run_checked(
@@ -242,7 +240,9 @@ class SettleFeatureStage(StageNode):
 
     @staticmethod
     def _safe_worktree_cleanup(environment: GitEnvironment) -> bool:
-        return environment.is_worktree and ".worktrees" in environment.worktree_root.parts
+        return (
+            environment.is_worktree and ".worktrees" in environment.worktree_root.parts
+        )
 
     def _require_feature_branch(self, environment: GitEnvironment) -> str:
         if not environment.branch:
@@ -497,9 +497,7 @@ class SettleFeatureStage(StageNode):
                 f"expected one of {sorted(_VALID_DISPOSITIONS)}"
             )
 
-        report_path = (
-            context.project_dir / ".haileris" / "settle" / f"{feature_id}.md"
-        )
+        report_path = context.project_dir / ".haileris" / "settle" / f"{feature_id}.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         await self._load_ready_inspect(context, feature_id)
 

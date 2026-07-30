@@ -66,7 +66,9 @@ class TestE2EInnerTDDHappyPath:
                 return []
 
         class CleanReviewer:
-            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(
+                self, *, increment_diff, new_test, scenario_steps, recent_journal_window
+            ):
                 return ReviewerVerdict(
                     dimension="increment_quality",
                     outcome="pass",
@@ -77,7 +79,15 @@ class TestE2EInnerTDDHappyPath:
                 )
 
         class NoOpRealizeAgent:
-            async def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
+            async def run(
+                self,
+                *,
+                step,
+                scenario_context,
+                red_test_path,
+                carry_forward,
+                cross_scenario_observations,
+            ):
                 return RealizeOutput(files_changed=[], summary="stub")
 
         cfg = HostConfig()
@@ -113,10 +123,15 @@ class TestE2EInnerTDDHappyPath:
                     ctx, target=target, increment=increment
                 )
             await log.append(
-                __import__("mage.orchestration.events", fromlist=["Event", "EventType"]).Event(
+                __import__(
+                    "mage.orchestration.events", fromlist=["Event", "EventType"]
+                ).Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.SCENARIO_LIVE,
-                    payload={"sub_bid": scenario.sub_bid, "scenario_name": f"scenario-{scenario.sub_bid}"},
+                    payload={
+                        "sub_bid": scenario.sub_bid,
+                        "scenario_name": f"scenario-{scenario.sub_bid}",
+                    },
                 )
             )
 
@@ -148,17 +163,22 @@ class TestE2EPerLoopHalt:
 
         class AlwaysFailMech:
             def verify(self, scope):
-                return [MechanicalFinding(
-                    check="tests_pass",
-                    severity="critical",
-                    location="tests/test_x.py",
-                    issue="Tests still failing",
-                    rationale="Won't converge",
-                )]
+                return [
+                    MechanicalFinding(
+                        check="tests_pass",
+                        severity="critical",
+                        location="tests/test_x.py",
+                        issue="Tests still failing",
+                        rationale="Won't converge",
+                    )
+                ]
 
         class NoopReviewer:
-            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(
+                self, *, increment_diff, new_test, scenario_steps, recent_journal_window
+            ):
                 from mage.artifacts.verdict import ReviewerVerdict
+
                 return ReviewerVerdict(
                     dimension="increment_quality",
                     outcome="pass",
@@ -255,7 +275,9 @@ class TestE2ESpecRouteHalt:
                     self.findings = []
 
         class SpecRouteReviewer:
-            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(
+                self, *, increment_diff, new_test, scenario_steps, recent_journal_window
+            ):
                 return VerdictWithRoute(findings=[FindingWithRoute()])
 
         stage = InspectLoopStage(
@@ -345,13 +367,23 @@ class TestE2ECodeRouteCarryForward:
                     self.findings = []
 
         class CodeRouteReviewer:
-            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(
+                self, *, increment_diff, new_test, scenario_steps, recent_journal_window
+            ):
                 return VerdictWithRoute(findings=[FindingWithRoute()])
 
         captured_carry_forward = []
 
         class CapturingRealizeAgent:
-            async def run(self, *, step, scenario_context, red_test_path, carry_forward, cross_scenario_observations):
+            async def run(
+                self,
+                *,
+                step,
+                scenario_context,
+                red_test_path,
+                carry_forward,
+                cross_scenario_observations,
+            ):
                 captured_carry_forward.append(list(carry_forward))
                 return RealizeOutput(files_changed=[], summary="stub")
 
@@ -380,9 +412,7 @@ class TestE2ECodeRouteCarryForward:
         )
         assert route == "code"
         # Second increment: realize should see the code-route finding in carry_forward
-        await realize_stage.run_increment(
-            ctx, target=target, increment=increment
-        )
+        await realize_stage.run_increment(ctx, target=target, increment=increment)
 
         assert len(captured_carry_forward) == 1
         assert len(captured_carry_forward[0]) == 1

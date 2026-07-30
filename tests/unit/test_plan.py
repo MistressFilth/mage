@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 
 import pytest
 
-from mage.orchestration.events import EventType, EventsLog
+from mage.orchestration.events import EventsLog, EventType
 
 
 @pytest.mark.asyncio
 async def test_finalize_writes_file_atomically(tmp_path):
     from mage.artifacts.plan import PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
     content = "# Plan\n\nBehaviors: 00000, 00001\n"
@@ -28,6 +28,7 @@ async def test_finalize_writes_file_atomically(tmp_path):
 @pytest.mark.asyncio
 async def test_finalize_emits_plan_finalized_event(tmp_path):
     from mage.artifacts.plan import PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
 
@@ -43,6 +44,7 @@ async def test_finalize_emits_plan_finalized_event(tmp_path):
 @pytest.mark.asyncio
 async def test_finalize_idempotent_with_matching_digest(tmp_path):
     from mage.artifacts.plan import PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
     content = "# Plan\n"
@@ -58,7 +60,8 @@ async def test_finalize_idempotent_with_matching_digest(tmp_path):
 
 @pytest.mark.asyncio
 async def test_finalize_raises_on_digest_mismatch_with_existing_event(tmp_path):
-    from mage.artifacts.plan import PlanArtifact, PlanAlreadyFinalizedError
+    from mage.artifacts.plan import PlanAlreadyFinalizedError, PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
 
@@ -71,6 +74,7 @@ async def test_finalize_raises_on_digest_mismatch_with_existing_event(tmp_path):
 @pytest.mark.asyncio
 async def test_load_returns_content_when_digest_matches(tmp_path):
     from mage.artifacts.plan import PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
     content = "# Plan\n\nAuth, orders.\n"
@@ -84,6 +88,7 @@ async def test_load_returns_content_when_digest_matches(tmp_path):
 @pytest.mark.asyncio
 async def test_load_raises_when_no_event_exists(tmp_path):
     from mage.artifacts.plan import PlanArtifact, PlanNotFinalizedError
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
     plan_path.write_text("# Orphan\n", encoding="utf-8")
@@ -95,6 +100,7 @@ async def test_load_raises_when_no_event_exists(tmp_path):
 @pytest.mark.asyncio
 async def test_load_raises_on_digest_mismatch_after_external_edit(tmp_path):
     from mage.artifacts.plan import PlanArtifact, PlanDigestMismatchError
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
 
@@ -109,6 +115,7 @@ async def test_load_raises_on_digest_mismatch_after_external_edit(tmp_path):
 @pytest.mark.asyncio
 async def test_load_emits_digest_mismatch_event_before_raising(tmp_path):
     from mage.artifacts.plan import PlanArtifact, PlanDigestMismatchError
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
 
@@ -128,12 +135,17 @@ async def test_load_emits_digest_mismatch_event_before_raising(tmp_path):
 @pytest.mark.asyncio
 async def test_revise_writes_new_content_and_emits_event(tmp_path):
     from mage.artifacts.plan import PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
 
     await PlanArtifact.finalize(plan_path, "# v1\n", log)
     new_digest = await PlanArtifact.revise(
-        plan_path, "# v2 — fixed ordering\n", reason="Reordered behaviors", human_approver="alice", events_log=log
+        plan_path,
+        "# v2 — fixed ordering\n",
+        reason="Reordered behaviors",
+        human_approver="alice",
+        events_log=log,
     )
 
     assert plan_path.read_text() == "# v2 — fixed ordering\n"
@@ -148,25 +160,33 @@ async def test_revise_writes_new_content_and_emits_event(tmp_path):
 @pytest.mark.asyncio
 async def test_revise_requires_reason_and_approver(tmp_path):
     from mage.artifacts.plan import PlanArtifact, PlanError
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
     await PlanArtifact.finalize(plan_path, "# v1\n", log)
 
     with pytest.raises(PlanError, match="non-empty reason"):
-        await PlanArtifact.revise(plan_path, "# v2\n", reason="", human_approver="alice", events_log=log)
+        await PlanArtifact.revise(
+            plan_path, "# v2\n", reason="", human_approver="alice", events_log=log
+        )
 
     with pytest.raises(PlanError, match="non-empty human_approver"):
-        await PlanArtifact.revise(plan_path, "# v2\n", reason="r", human_approver="", events_log=log)
+        await PlanArtifact.revise(
+            plan_path, "# v2\n", reason="r", human_approver="", events_log=log
+        )
 
 
 @pytest.mark.asyncio
 async def test_load_after_revise_succeeds_with_new_digest(tmp_path):
     from mage.artifacts.plan import PlanArtifact
+
     log = EventsLog(tmp_path / "events.jsonl")
     plan_path = tmp_path / "plan.md"
 
     await PlanArtifact.finalize(plan_path, "# v1\n", log)
-    await PlanArtifact.revise(plan_path, "# v2\n", reason="r", human_approver="alice", events_log=log)
+    await PlanArtifact.revise(
+        plan_path, "# v2\n", reason="r", human_approver="alice", events_log=log
+    )
 
     loaded = await PlanArtifact.load(plan_path, log)
     assert loaded == "# v2\n"

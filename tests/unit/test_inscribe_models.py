@@ -3,6 +3,7 @@
 
 def test_scenario_spec_minimal():
     from mage.agents.inscribe import ScenarioSpec
+
     spec = ScenarioSpec(name="login succeeds", gherkin_body="Given ...")
     assert spec.name == "login succeeds"
     assert spec.gherkin_body == "Given ..."
@@ -13,6 +14,7 @@ def test_scenario_spec_minimal():
 
 def test_scenario_spec_with_all_fields():
     from mage.agents.inscribe import ScenarioSpec
+
     spec = ScenarioSpec(
         name="register duplicate email fails",
         gherkin_body="Given a registered email\nWhen register\nThen fail",
@@ -25,16 +27,20 @@ def test_scenario_spec_with_all_fields():
 
 
 def test_scenario_spec_is_frozen():
-    from mage.agents.inscribe import ScenarioSpec
     from pydantic import ValidationError
+
+    from mage.agents.inscribe import ScenarioSpec
+
     spec = ScenarioSpec(name="x", gherkin_body="y")
     import pytest
+
     with pytest.raises(ValidationError):
         spec.name = "mutated"
 
 
 def test_inscribe_output_holds_scenarios():
     from mage.agents.inscribe import InscribeOutput, ScenarioSpec
+
     scenarios = [
         ScenarioSpec(name="a", gherkin_body="A"),
         ScenarioSpec(name="b", gherkin_body="B"),

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
-from pydantic import BaseModel, ConfigDict
 
-from mage.agents.etch import EtchAgent, RedTestSpec
-from mage.orchestration.events import EventsLog
+from mage.agents.etch import RedTestSpec
 from mage.orchestration.etch import EtchStage
+from mage.orchestration.events import EventsLog
 from mage.orchestration.runner import ScenarioTarget
 
 
@@ -29,8 +26,8 @@ class _StubAgent:
 
 
 def _context(tmp_path):
-    from mage.orchestration.nodes import PipelineContext
     from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.nodes import PipelineContext
 
     return PipelineContext(
         project_dir=tmp_path,

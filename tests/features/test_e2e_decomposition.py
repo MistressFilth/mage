@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from mage.agents.decomposition import ArchitectureSpec, DecompositionAgent, DecompositionOutput
+from mage.agents.decomposition import (
+    ArchitectureSpec,
+    DecompositionAgent,
+    DecompositionOutput,
+)
 from mage.artifacts.enumeration import BehaviorSpec
 from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.decomposition import DecompositionStage
-from mage.orchestration.events import EventType, EventsLog
+from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
-
 
 ASCERTAIN_FULL = """---
 feature_id: feat-001
@@ -47,10 +49,14 @@ async def test_full_decomposition_flow_with_mock_agent(tmp_path):
 
     agent = MagicMock(spec=DecompositionAgent)
     agent.run.return_value = DecompositionOutput(
-        architecture=ArchitectureSpec(parts=["api"], components=["auth-svc"], layers=["http"]),
+        architecture=ArchitectureSpec(
+            parts=["api"], components=["auth-svc"], layers=["http"]
+        ),
         behaviors=[
             BehaviorSpec(name="auth", description="User logs in"),
-            BehaviorSpec(name="logout", description="User logs out", depends_on=["auth"]),
+            BehaviorSpec(
+                name="logout", description="User logs out", depends_on=["auth"]
+            ),
         ],
     )
 
@@ -73,6 +79,7 @@ async def test_full_decomposition_flow_with_mock_agent(tmp_path):
 
     # Plan is finalized (digest matches on load)
     from mage.artifacts.plan import PlanArtifact
+
     content = await PlanArtifact.load(project_dir / "plan.md", log)
     assert "auth" in content
     assert "logout" in content
@@ -89,13 +96,14 @@ async def test_full_decomposition_flow_with_mock_agent(tmp_path):
 @pytest.mark.asyncio
 async def test_halt_and_resume_cycle(tmp_path):
     """Verify: Decomposition halts -> mage plan revise -> mage run resumes."""
+    import sys
+    from unittest.mock import patch
+
     from mage.artifacts.plan import PlanArtifact, PlanRevisionRequired
+    from mage.cli import main
     from mage.orchestration.decomposition import DecompositionStage
     from mage.orchestration.graph import PipelineGraph
     from mage.orchestration.nodes import PipelineContext, StageNode
-    import sys
-    from unittest.mock import patch
-    from mage.cli import main
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -110,10 +118,13 @@ async def test_halt_and_resume_cycle(tmp_path):
         behaviors=[BehaviorSpec(name="auth", description="User logs in")],
     )
     host_config = HostConfig(require_plan_approval=False)
-    decomp_stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
+    decomp_stage = DecompositionStage(
+        events_log=log, agent=agent, host_config=host_config
+    )
 
     class HaltAfterDecomp(StageNode):
         name = "halt_after_decomp"
+
         async def _run(self, context):
             raise PlanRevisionRequired(
                 reason="Plan ordering is wrong",
@@ -132,7 +143,9 @@ async def test_halt_and_resume_cycle(tmp_path):
     assert exc_info.value.code == 0
 
     # Halt record persisted
-    halt_events = [e for e in log.read_all() if e.event_type == EventType.HALT_PERSISTED]
+    halt_events = [
+        e for e in log.read_all() if e.event_type == EventType.HALT_PERSISTED
+    ]
     assert len(halt_events) == 1
 
     # State persisted
@@ -145,19 +158,27 @@ async def test_halt_and_resume_cycle(tmp_path):
 
     # Run mage plan revise
     test_argv = [
-        "mage", "--project-dir", str(project_dir),
-        "plan", "revise",
-        "--reason", "Reordered behaviors per human review",
-        "--approver", "alice",
+        "mage",
+        "--project-dir",
+        str(project_dir),
+        "plan",
+        "revise",
+        "--reason",
+        "Reordered behaviors per human review",
+        "--approver",
+        "alice",
     ]
     with patch.object(sys, "argv", test_argv):
         import threading
+
         exc_box: list[BaseException] = []
+
         def _thread_main() -> None:
             try:
                 main()
             except BaseException as exc:  # noqa: BLE001
                 exc_box.append(exc)
+
         thread = threading.Thread(target=_thread_main)
         thread.start()
         thread.join()
@@ -189,12 +210,11 @@ async def test_approval_gate_required_emits_warning(tmp_path):
     ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
 
     import warnings
+
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         await stage.run(ctx)
-        approval_warnings = [
-            x for x in w if "require_plan_approval" in str(x.message)
-        ]
+        approval_warnings = [x for x in w if "require_plan_approval" in str(x.message)]
         assert len(approval_warnings) >= 1
 
 
@@ -218,10 +238,9 @@ async def test_approval_gate_disabled_runs_silently(tmp_path):
     ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
 
     import warnings
+
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         await stage.run(ctx)
-        approval_warnings = [
-            x for x in w if "require_plan_approval" in str(x.message)
-        ]
+        approval_warnings = [x for x in w if "require_plan_approval" in str(x.message)]
         assert len(approval_warnings) == 0

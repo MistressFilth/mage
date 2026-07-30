@@ -83,7 +83,9 @@ class MappingArtifact(BaseModel):
     # Plan 4 — Inner TDD loop + feature lifecycle state
     inspect_journal: dict[str, list[dict]] = Field(default_factory=dict)
     # ^ sub_bid (str) -> list[InspectJournalEntry] (kept as dict[str, list[dict]] to avoid circular import; see Tasks 6 + 11 for typed helpers)
-    feature_inspect: dict | None = None  # InspectArtifactRef; typing loose to avoid circular import
+    feature_inspect: dict | None = (
+        None  # InspectArtifactRef; typing loose to avoid circular import
+    )
     feature_cosmetic_queue: list[dict] = Field(default_factory=list)
     # ^ list[CosmeticItem]; typing loose to avoid circular import
     feature_status: str = "pending"  # pending | live_assembling | inspect_pending | inspect_passed | settled | halted
@@ -152,7 +154,9 @@ class MappingArtifact(BaseModel):
                     f"dict; got {type(item).__name__}"
                 )
         # Validate feature_inspect (None or a dict).
-        if self.feature_inspect is not None and not isinstance(self.feature_inspect, dict):
+        if self.feature_inspect is not None and not isinstance(
+            self.feature_inspect, dict
+        ):
             raise ValueError(
                 f"MappingArtifact.feature_inspect must be None or a dict; "
                 f"got {type(self.feature_inspect).__name__}"
@@ -176,7 +180,9 @@ class MappingArtifact(BaseModel):
                         return scenario
         return None
 
-    def append_scenario(self, base_bid: str, scenario: ScenarioEntry) -> MappingArtifact:
+    def append_scenario(
+        self, base_bid: str, scenario: ScenarioEntry
+    ) -> MappingArtifact:
         """Return a new MappingArtifact with `scenario` appended to the matching BaseBIDEntry.scenarios.
 
         Raises BaseBIDNotFoundError if no entry matches.
@@ -204,9 +210,7 @@ class MappingArtifact(BaseModel):
 
         Creates the sub_bid key if absent. Parallel to append_scenario.
         """
-        new_journal = {
-            k: list(v) for k, v in self.inspect_journal.items()
-        }
+        new_journal = {k: list(v) for k, v in self.inspect_journal.items()}
         existing = new_journal.get(sub_bid, [])
         new_journal[sub_bid] = [*existing, entry.model_dump(mode="json")]
         return self.model_copy(update={"inspect_journal": new_journal})
@@ -218,7 +222,12 @@ class MappingArtifact(BaseModel):
     def append_cosmetic(self, item: CosmeticItem) -> MappingArtifact:
         """Return a new MappingArtifact with item appended to feature_cosmetic_queue."""
         return self.model_copy(
-            update={"feature_cosmetic_queue": [*self.feature_cosmetic_queue, item.model_dump(mode="json")]}
+            update={
+                "feature_cosmetic_queue": [
+                    *self.feature_cosmetic_queue,
+                    item.model_dump(mode="json"),
+                ]
+            }
         )
 
     def feature_resume_state(self) -> dict:

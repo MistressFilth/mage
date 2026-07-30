@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from mage.orchestration.events import EventsLog
-
 
 ASCERTAIN_FULL = """---
 feature_id: feat-001
@@ -40,23 +38,28 @@ def project_dir(tmp_path):
 
 @pytest.mark.asyncio
 async def test_decomposition_stage_runs_end_to_end(project_dir):
+    from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
+    from mage.artifacts.enumeration import BehaviorSpec
+    from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.decomposition import DecompositionStage
     from mage.orchestration.nodes import PipelineContext
-    from mage.artifacts.mapping import MappingArtifact
-    from mage.artifacts.enumeration import BehaviorSpec
-    from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
 
     log = EventsLog(project_dir / "events.jsonl")
     mapping = MappingArtifact(project_id="feat-001")
 
     agent = MagicMock()
     from unittest.mock import AsyncMock
+
     agent.run = AsyncMock(
         return_value=DecompositionOutput(
-            architecture=ArchitectureSpec(parts=["api"], components=["auth-svc"], layers=["http"]),
+            architecture=ArchitectureSpec(
+                parts=["api"], components=["auth-svc"], layers=["http"]
+            ),
             behaviors=[
                 BehaviorSpec(name="auth", description="User logs in"),
-                BehaviorSpec(name="logout", description="User logs out", depends_on=["auth"]),
+                BehaviorSpec(
+                    name="logout", description="User logs out", depends_on=["auth"]
+                ),
             ],
         )
     )
@@ -79,17 +82,18 @@ async def test_decomposition_stage_runs_end_to_end(project_dir):
 
 @pytest.mark.asyncio
 async def test_decomposition_stage_writes_decomposition_yaml(project_dir):
+    from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
+    from mage.artifacts.enumeration import BehaviorSpec
+    from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.decomposition import DecompositionStage
     from mage.orchestration.nodes import PipelineContext
-    from mage.artifacts.mapping import MappingArtifact
-    from mage.artifacts.enumeration import BehaviorSpec
-    from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
 
     log = EventsLog(project_dir / "events.jsonl")
     mapping = MappingArtifact(project_id="feat-001")
 
     agent = MagicMock()
     from unittest.mock import AsyncMock
+
     agent.run = AsyncMock(
         return_value=DecompositionOutput(
             architecture=ArchitectureSpec(parts=["api"], components=[], layers=[]),
@@ -106,6 +110,7 @@ async def test_decomposition_stage_writes_decomposition_yaml(project_dir):
     await stage.run(ctx)
 
     import yaml
+
     decomp = yaml.safe_load((project_dir / "decomposition.yaml").read_text())
     assert "architecture" in decomp
     assert "behaviors_input" in decomp

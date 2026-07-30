@@ -5,20 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from mage.verification.host_overrides import (
     HostConfig,
     default_check_set,
     default_host_config,
     load_host_config,
-)
-from mage.verification.mechanical import (
-    CrossBehaviorTagsValidCheck,
-    GherkinSyntaxCheck,
-    LifecycleStatusTagPresentCheck,
-    ScenarioNameUniqueCheck,
-    StepDefinitionsResolvableCheck,
-    SubBidAssignedCheck,
-    TagsRegisteredCheck,
 )
 
 
@@ -118,9 +110,7 @@ def test_load_host_config_parses_max_iterations(tmp_path: Path):
 
     config_dir = tmp_path / ".haileris"
     config_dir.mkdir()
-    (config_dir / "config.yaml").write_text(
-        yaml.safe_dump({"max_iterations": 7})
-    )
+    (config_dir / "config.yaml").write_text(yaml.safe_dump({"max_iterations": 7}))
     config = load_host_config(tmp_path)
     assert config.max_iterations == 7
 
@@ -128,21 +118,25 @@ def test_load_host_config_parses_max_iterations(tmp_path: Path):
 class TestPlan4HostConfig:
     def test_per_loop_max_iterations_default(self):
         from mage.verification.host_overrides import HostConfig
+
         cfg = HostConfig()
         assert cfg.per_loop_max_iterations == 8
 
     def test_eof_max_iterations_default(self):
         from mage.verification.host_overrides import HostConfig
+
         cfg = HostConfig()
         assert cfg.eof_max_iterations == 3
 
     def test_per_loop_max_iterations_override(self):
         from mage.verification.host_overrides import HostConfig
+
         cfg = HostConfig(per_loop_max_iterations=4)
         assert cfg.per_loop_max_iterations == 4
 
     def test_eof_max_iterations_override(self):
         from mage.verification.host_overrides import HostConfig
+
         cfg = HostConfig(eof_max_iterations=5)
         assert cfg.eof_max_iterations == 5
 

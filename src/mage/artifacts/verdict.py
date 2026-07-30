@@ -98,17 +98,20 @@ class VerdictArtifact:
     @staticmethod
     def _compute_digest(content: str) -> str:
         import hashlib
+
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _latest_event_for_path(
-        events_log: EventsLog, path, event_types: tuple,
+        events_log: EventsLog,
+        path,
+        event_types: tuple,
     ):
         path_str = str(path)
         candidates = [
-            e for e in events_log.read_all()
-            if e.event_type in event_types
-            and e.payload.get("verdict_path") == path_str
+            e
+            for e in events_log.read_all()
+            if e.event_type in event_types and e.payload.get("verdict_path") == path_str
         ]
         if not candidates:
             return None
@@ -141,6 +144,7 @@ class VerdictArtifact:
             event_type_value = "reviewer_verdict_recorded"
 
         from mage.orchestration.events import EventType
+
         event_type = EventType(event_type_value)
         await events_log.append(
             Event(
@@ -150,7 +154,8 @@ class VerdictArtifact:
                     "verdict_path": str(path),
                     "verdict_sha256": digest,
                     "dimension": getattr(model, "dimension", None),
-                    "outcome": getattr(model, "outcome", None) or getattr(model, "decision", None),
+                    "outcome": getattr(model, "outcome", None)
+                    or getattr(model, "decision", None),
                 },
             )
         )
@@ -167,7 +172,8 @@ class VerdictArtifact:
         from mage.orchestration.events import Event, EventType
 
         event = cls._latest_event_for_path(
-            events_log, path,
+            events_log,
+            path,
             (EventType.REVIEWER_VERDICT_RECORDED, EventType.REVIEW_AGGREGATE_RECORDED),
         )
         if event is None:
@@ -188,7 +194,9 @@ class VerdictArtifact:
         if computed != recorded_digest:
             await events_log.append(
                 Event(
-                    timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
+                    timestamp=__import__("datetime").datetime.now(
+                        __import__("datetime").UTC
+                    ),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,  # reuse existing event type
                     payload={
                         "verdict_path": str(path),

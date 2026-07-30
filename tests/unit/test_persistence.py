@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from pydantic import BaseModel
 
 from mage.orchestration.persistence import FileStatePersistence
@@ -70,9 +69,9 @@ class TestFileStatePersistence:
 
     def test_pipeline_context_round_trip_through_persistence(self, tmp_path: Path):
         """PipelineContext with EventsLog survives FileStatePersistence round-trip."""
+        from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.nodes import PipelineContext
-        from mage.artifacts.mapping import MappingArtifact
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(

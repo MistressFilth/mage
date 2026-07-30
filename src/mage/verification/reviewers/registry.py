@@ -95,7 +95,8 @@ def aggregate_verdicts(
 
     decision = "needs_refactor" if any_fail else "approved"
     reasoning = (
-        "all 7 dimensions passed" if decision == "approved"
+        "all 7 dimensions passed"
+        if decision == "approved"
         else f"at least one dimension failed; iteration={iteration}"
     )
 

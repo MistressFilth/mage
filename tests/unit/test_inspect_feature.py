@@ -13,15 +13,17 @@ from mage.orchestration.events import EventsLog
 from mage.orchestration.inspect_feature import InspectFeatureStage
 from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig, default_check_set
-from mage.verification.mechanical import CheckResult, MechanicalVerifier
+from mage.verification.mechanical import MechanicalVerifier
 
 
 class CleanMechanicalVerifier:
-    def verify(self, draft, mapping):  # noqa: ARG002
+    def verify(self, draft, mapping):
         return []
 
 
-def make_context(tmp_path, *, mapping: MappingArtifact | None = None) -> PipelineContext:
+def make_context(
+    tmp_path, *, mapping: MappingArtifact | None = None
+) -> PipelineContext:
     log = EventsLog(tmp_path / "events.jsonl")
     return PipelineContext(
         project_dir=tmp_path,
@@ -59,7 +61,7 @@ def make_reviewer(
     outcome: str | None = None,
 ):
     class Reviewer:
-        async def run(self, **kwargs):  # noqa: ARG002
+        async def run(self, **kwargs):
             reviewer_findings = findings or []
             return ReviewerVerdict(
                 dimension=dimension,
@@ -76,7 +78,9 @@ def make_reviewer(
 
 class TestInspectFeatureStage:
     @pytest.mark.asyncio
-    async def test_passes_when_all_reviewers_clean_and_attaches_artifact(self, tmp_path):
+    async def test_passes_when_all_reviewers_clean_and_attaches_artifact(
+        self, tmp_path
+    ):
         context = make_context(tmp_path)
         reviewers = [
             make_reviewer(dimension)
@@ -110,7 +114,9 @@ class TestInspectFeatureStage:
         assert context.mapping.feature_inspect is not None
         assert context.mapping.feature_inspect["inspect_sha256"]
         assert MappingArtifact.load(tmp_path / "mapping.yaml") == context.mapping
-        event_types = [event.event_type.value for event in context.events_log.read_all()]
+        event_types = [
+            event.event_type.value for event in context.events_log.read_all()
+        ]
         assert "inspect_feature_started" in event_types
         assert "inspect_feature_finalized" in event_types
         assert "inspect_feature_passed" in event_types
@@ -149,7 +155,7 @@ class TestInspectFeatureStage:
         class BrokenReviewer:
             dimension = "spec_compliance"
 
-            async def run(self, **kwargs):  # noqa: ARG002
+            async def run(self, **kwargs):
                 raise RuntimeError("review backend unavailable")
 
         context = make_context(tmp_path)
@@ -217,7 +223,9 @@ class TestInspectFeatureStage:
         }
 
     @pytest.mark.asyncio
-    async def test_full_default_mechanical_precheck_blocks_llm_reviewers(self, tmp_path):
+    async def test_full_default_mechanical_precheck_blocks_llm_reviewers(
+        self, tmp_path
+    ):
         feature_path = tmp_path / "happy.feature"
         feature_path.write_text(
             "@status-live\nScenario: happy\n"
@@ -246,7 +254,7 @@ class TestInspectFeatureStage:
         class RecordingReviewer:
             dimension = "spec_compliance"
 
-            async def run(self, **kwargs):  # noqa: ARG002
+            async def run(self, **kwargs):
                 reviewer_calls.append(True)
                 return await make_reviewer("spec_compliance").run()
 
@@ -284,16 +292,21 @@ class TestInspectFeatureStage:
         class RecordingReviewer:
             dimension = "scenario_clarity"
 
-            async def run(self, *, draft, spec_context, **kwargs):  # noqa: ARG002
+            async def run(self, *, draft, spec_context, **kwargs):
                 reviewed.append(
-                    (draft.name, draft.gherkin_body, draft.tags, spec_context["sub_bid"])
+                    (
+                        draft.name,
+                        draft.gherkin_body,
+                        draft.tags,
+                        spec_context["sub_bid"],
+                    )
                 )
                 return await make_reviewer("scenario_clarity").run()
 
         class CrossReviewer:
             dimension = "cross_scenario"
 
-            async def run(self, *, scenarios, **kwargs):  # noqa: ARG002
+            async def run(self, *, scenarios, **kwargs):
                 cross_scenarios.extend(scenarios)
                 return await make_reviewer("cross_scenario").run()
 
@@ -313,13 +326,20 @@ class TestInspectFeatureStage:
         await stage.run_pass(context, feature_id="feat-1", scenarios=scenarios)
 
         assert reviewed == [
-            (scenario["scenario_name"], scenario["gherkin_body"], scenario["tags"], scenario["sub_bid"])
+            (
+                scenario["scenario_name"],
+                scenario["gherkin_body"],
+                scenario["tags"],
+                scenario["sub_bid"],
+            )
             for scenario in scenarios
         ]
         assert cross_scenarios == scenarios
 
     @pytest.mark.asyncio
-    async def test_minor_findings_append_cosmetic_queue_and_cross_field_is_findings(self, tmp_path):
+    async def test_minor_findings_append_cosmetic_queue_and_cross_field_is_findings(
+        self, tmp_path
+    ):
         finding = ReviewerFinding(
             id="minor-1",
             severity="minor",
@@ -356,7 +376,9 @@ class TestInspectFeatureStage:
         assert MappingArtifact.load(tmp_path / "mapping.yaml") == context.mapping
 
     @pytest.mark.asyncio
-    async def test_important_findings_dispatch_one_brief_and_retry_until_clean(self, tmp_path):
+    async def test_important_findings_dispatch_one_brief_and_retry_until_clean(
+        self, tmp_path
+    ):
         findings = [
             ReviewerFinding(
                 id=f"important-{index}",
@@ -375,7 +397,7 @@ class TestInspectFeatureStage:
         class ImportantThenCleanReviewer:
             dimension = "testability"
 
-            async def run(self, **kwargs):  # noqa: ARG002
+            async def run(self, **kwargs):
                 nonlocal reviewer_calls
                 reviewer_calls += 1
                 return await make_reviewer(

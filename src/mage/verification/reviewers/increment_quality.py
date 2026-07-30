@@ -32,6 +32,7 @@ class IncrementQualityReviewer(ReviewerAgent):
         self._system_prompt_only = system_prompt_only
         if not system_prompt_only:
             from pydantic_ai import Agent
+
             self._agent = Agent(
                 model, output_type=ReviewerVerdict, system_prompt=self._system_prompt()
             )
@@ -75,10 +76,13 @@ class IncrementQualityReviewer(ReviewerAgent):
         from mage.artifacts.verdict import ReviewerVerdict
 
         # Format carry-forward section
-        cf_section = "\n".join(
-            f"  - [{e.severity}/{e.route}] {e.location}: {e.issue} (rationale: {e.rationale})"
-            for e in recent_journal_window
-        ) or "  (no carry-forward)"
+        cf_section = (
+            "\n".join(
+                f"  - [{e.severity}/{e.route}] {e.location}: {e.issue} (rationale: {e.rationale})"
+                for e in recent_journal_window
+            )
+            or "  (no carry-forward)"
+        )
 
         prompt = (
             f"Increment diff:\n{increment_diff}\n\n"

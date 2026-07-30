@@ -75,9 +75,7 @@ def _target() -> ScenarioTarget:
 
 
 def _increment() -> Increment:
-    return Increment(
-        index=0, step="seed", red_test_path="t.py", red_test_code="..."
-    )
+    return Increment(index=0, step="seed", red_test_path="t.py", red_test_code="...")
 
 
 @pytest.mark.asyncio
