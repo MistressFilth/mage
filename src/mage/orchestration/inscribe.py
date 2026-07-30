@@ -228,15 +228,23 @@ class InscribeStage(StageNode):
                     # Run each enabled reviewer; verdicts stored alongside aggregate.
                     semaphore = asyncio.Semaphore(self.host_config.max_concurrent_llm_calls)
 
-                    async def run_one(reviewer):
-                        async with semaphore:
-                            verdict_path = verdicts_dir / f"{reviewer.dimension}.yaml"
+                    async def run_one(
+                        reviewer,
+                        *,
+                        _semaphore=semaphore,
+                        _verdicts_dir=verdicts_dir,
+                        _scenario=scenario,
+                        _spec_context=spec_context,
+                        _mapping=mapping,
+                    ):
+                        async with _semaphore:
+                            verdict_path = _verdicts_dir / f"{reviewer.dimension}.yaml"
                             return (
                                 reviewer.dimension,
                                 await reviewer.run(
-                                    draft=scenario,
-                                    spec_context=spec_context,
-                                    mapping=mapping,
+                                    draft=_scenario,
+                                    spec_context=_spec_context,
+                                    mapping=_mapping,
                                     events_log=self.events_log,
                                     verdict_path=verdict_path,
                                 ),
