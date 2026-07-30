@@ -207,18 +207,28 @@ def test_plan_revise_missing_plan(tmp_path, capsys):
     assert exc_info.value.code != 0
 
 
-def test_mage_run_raises_without_dry_run(tmp_path, capsys):
-    """Without --dry-run, mage run errors out (real-agent wiring is Plan 9)."""
-    import sys
+def test_mage_run_without_dry_run_does_not_raise_not_implemented(tmp_path):
+    """`mage run` without --dry-run used to raise NotImplementedError (Plan 9 gate).
+
+    Plan 9 unlocks the path: agent wiring is driven by host_config.model, so
+    real-agent or stub-agent paths both run end-to-end. We only assert the
+    gate is gone — other failures (missing project files) are acceptable.
+    """
+    from mage.cli import _main
 
     test_argv = ["mage", "--project-dir", str(tmp_path), "run"]
-    with patch.object(sys, "argv", test_argv):
-        try:
-            _run_cli()
-        except NotImplementedError as exc:
-            assert "requires LLM agent wiring" in str(exc)
-        else:
-            pytest.fail("Expected NotImplementedError")
+    try:
+        import asyncio as _aio
+        _aio.run(_main(test_argv))
+    except SystemExit:
+        pass  # argparse exit codes from missing args are fine
+    except NotImplementedError as exc:
+        pytest.fail(
+            "cmd_run still raises NotImplementedError after Plan 9 unlock: "
+            f"{exc}"
+        )
+    except Exception:
+        pass  # other failures are OK; we only check the gate is gone
 
 
 def test_mage_run_dry_run_completes_on_empty_project(tmp_path):
