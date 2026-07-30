@@ -208,7 +208,7 @@ class InspectFeatureStage(StageNode):
             findings_with_source.extend(
                 (finding, "mechanical", scenario) for finding in findings
             )
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=(
@@ -391,7 +391,7 @@ class InspectFeatureStage(StageNode):
         scenarios: list[dict],
         iteration: int,
     ) -> InspectArtifactContent:
-        self.events_log.append(
+        self.events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_FEATURE_STARTED,
@@ -428,7 +428,7 @@ class InspectFeatureStage(StageNode):
 
         for finding, _dimension, _scenario in critical:
             for sub_bid in self._affected_sub_bids(finding, scenarios):
-                self.events_log.append(
+                self.events_log.append_sync(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -535,7 +535,7 @@ class InspectFeatureStage(StageNode):
                 update={"feature_status": "halted"}
             )
             context.mapping.save(context.project_dir / "mapping.yaml")
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.INSPECT_FEATURE_HALT_PERSISTED,
@@ -549,7 +549,7 @@ class InspectFeatureStage(StageNode):
             raise InspectFeatureHalted(feature_id=feature_id, iteration=iteration)
 
         if ready_to_merge:
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.INSPECT_FEATURE_PASSED,
@@ -557,7 +557,7 @@ class InspectFeatureStage(StageNode):
                 )
             )
 
-        self.events_log.append(
+        self.events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_FEATURE_COMPLETED,
@@ -603,7 +603,7 @@ class InspectFeatureStage(StageNode):
                 brief=brief,
                 findings=content.important,
             )
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.FIX_WAVE_DISPATCHED,

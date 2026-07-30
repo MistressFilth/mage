@@ -143,7 +143,7 @@ class InspectArtifact:
         )
         tmp_path.replace(path)
 
-        events_log.append(
+        events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSPECT_FEATURE_FINALIZED,
@@ -180,7 +180,7 @@ class InspectArtifact:
         computed = cls._compute_digest(content)
 
         if computed != recorded_digest:
-            events_log.append(
+            events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,  # reuse existing event type
