@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -119,6 +120,20 @@ class EventsLog:
         # Ensure the file exists for empty-log reads.
         if not self.log_path.exists():
             self.log_path.touch()
+        self._lock: asyncio.Lock | None = None  # lazy; asyncio.Lock requires a running loop
+
+    def _get_lock(self) -> asyncio.Lock:
+        """Return the per-instance asyncio.Lock, creating it lazily.
+
+        Lazy initialization is required because `asyncio.Lock()` raises
+        `RuntimeError: no running event loop` if constructed outside a loop.
+        The double-check pattern handles concurrent first-touch (e.g. from
+        multiple threads in tests); for in-loop first-touch the GIL plus
+        the single-attribute write is sufficient.
+        """
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def append(self, event: Event) -> None:
         """Append a single event to the log (JSONL format, one event per line)."""
