@@ -455,7 +455,7 @@ class TestPlan5HaltCatching:
             name = "halt-stage"
 
             def _run(self, context):
-                self.events_log.append_sync(
+                self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.INSPECT_FEATURE_HALT_PERSISTED,

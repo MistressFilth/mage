@@ -99,7 +99,7 @@ class PlanArtifact:
         tmp_path.write_text(content, encoding="utf-8")
         tmp_path.replace(plan_path)
 
-        events_log.append_sync(
+        events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.PLAN_FINALIZED,
@@ -141,7 +141,7 @@ class PlanArtifact:
 
         if computed_digest != recorded_digest:
             # Emit diagnostic event before raising
-            events_log.append_sync(
+            events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,
@@ -198,7 +198,7 @@ class PlanArtifact:
         tmp_path.write_text(content, encoding="utf-8")
         tmp_path.replace(plan_path)
 
-        events_log.append_sync(
+        events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.PLAN_REVISED,

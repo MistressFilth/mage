@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -68,14 +67,12 @@ class StageNode(ABC):
             raise ValueError(f"{type(self).__name__} must define `name`")
         self.events_log = events_log
 
-    async def run(self, context: PipelineContext) -> PipelineContext:
+    def run(self, context: PipelineContext) -> PipelineContext:
         """Execute the stage, emitting start/complete events."""
-        await self._emit(EventType.STAGE_STARTED)
+        self._emit(EventType.STAGE_STARTED)
         try:
             result = self._run(context)
-            if isinstance(result, Awaitable):
-                result = await result
-            await self._emit(EventType.STAGE_COMPLETED)
+            self._emit(EventType.STAGE_COMPLETED)
             return result
         except Exception:
             # Don't emit COMPLETED on failure; let the exception propagate.
@@ -86,11 +83,11 @@ class StageNode(ABC):
         """Stage-specific execution. Must be implemented by subclasses."""
         ...
 
-    async def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
+    def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
         """Emit an event to the log."""
         event = Event(
             timestamp=datetime.now(UTC),
             event_type=event_type,
             payload={"stage": self.name, **(payload or {})},
         )
-        await self.events_log.append(event)
+        self.events_log.append(event)
