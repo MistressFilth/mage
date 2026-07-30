@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -277,8 +278,6 @@ class InspectFeatureStage(StageNode):
         feature_id: str,
         scenarios: list[dict],
     ) -> tuple[list[dict], list[tuple[ReviewerFinding, str, dict | None]]]:
-        records: list[dict] = []
-        findings_with_source: list[tuple[ReviewerFinding, str, dict | None]] = []
         scenario_reviewers = [
             reviewer
             for reviewer in self.reviewers
@@ -290,21 +289,39 @@ class InspectFeatureStage(StageNode):
             if getattr(reviewer, "dimension", "") == "cross_scenario"
         ]
 
-        for scenario in scenarios:
-            for reviewer in scenario_reviewers:
-                verdict = await self._dispatch_scenario_reviewer(
-                    reviewer,
-                    context=context,
-                    feature_id=feature_id,
-                    scenario=scenario,
-                )
-                record = verdict.model_dump(mode="json")
-                record["scenario_sub_bid"] = self._scenario_sub_bid(scenario)
-                records.append(record)
-                findings_with_source.extend(
-                    (finding, verdict.dimension, scenario)
-                    for finding in verdict.findings
-                )
+        semaphore = asyncio.Semaphore(self.host_config.max_concurrent_llm_calls)
+
+        async def run_scenario_block(
+            scenario,
+            *,
+            _semaphore=semaphore,
+            _reviewers=scenario_reviewers,
+        ):
+            async with _semaphore:
+                scenario_records: list[dict] = []
+                scenario_findings: list[tuple[ReviewerFinding, str, dict | None]] = []
+                for reviewer in _reviewers:
+                    verdict = await self._dispatch_scenario_reviewer(
+                        reviewer,
+                        context=context,
+                        feature_id=feature_id,
+                        scenario=scenario,
+                    )
+                    record = verdict.model_dump(mode="json")
+                    record["scenario_sub_bid"] = self._scenario_sub_bid(scenario)
+                    scenario_records.append(record)
+                    scenario_findings.extend(
+                        (finding, verdict.dimension, scenario)
+                        for finding in verdict.findings
+                    )
+                return scenario_records, scenario_findings
+
+        gathered = await asyncio.gather(*[run_scenario_block(s) for s in scenarios])
+        records: list[dict] = []
+        findings_with_source: list[tuple[ReviewerFinding, str, dict | None]] = []
+        for s_records, s_findings in gathered:
+            records.extend(s_records)
+            findings_with_source.extend(s_findings)
 
         for reviewer in cross_reviewers:
             verdict = await reviewer.run(
