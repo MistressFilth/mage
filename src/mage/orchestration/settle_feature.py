@@ -169,7 +169,7 @@ class SettleFeatureStage(StageNode):
             return
         stdout, stdout_truncated = self._truncate(result.stdout or "")
         stderr, stderr_truncated = self._truncate(result.stderr or "")
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_TESTS_FAILED,
@@ -280,7 +280,7 @@ class SettleFeatureStage(StageNode):
         environment: GitEnvironment,
         reason: str,
     ) -> None:
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_CLEANUP_SKIPPED,
@@ -315,7 +315,7 @@ class SettleFeatureStage(StageNode):
             )
         except SettleCommandFailed as error:
             rollback_error = error
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_MERGE_ROLLED_BACK,
@@ -504,7 +504,7 @@ class SettleFeatureStage(StageNode):
         self._load_ready_inspect(context, feature_id)
 
         queue = context.mapping.feature_cosmetic_queue
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_FEATURE_STARTED,
@@ -516,7 +516,7 @@ class SettleFeatureStage(StageNode):
         )
         cosmetic_path = report_path.with_name(f"{feature_id}-cosmetic.md")
         cosmetic_path.write_text(self._render_cosmetic_md(queue), encoding="utf-8")
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_COSMETIC_QUEUED,
@@ -551,7 +551,7 @@ class SettleFeatureStage(StageNode):
             update={"feature_status": "settled"}
         )
         context.mapping.save(context.project_dir / "mapping.yaml")
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_FEATURE_FINALIZED,
@@ -564,14 +564,14 @@ class SettleFeatureStage(StageNode):
             )
         )
         if disposition == "discarded":
-            self.events_log.append_sync(
+            self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.SETTLE_BRANCH_DISCARDED,
                     payload={"feature_id": feature_id},
                 )
             )
-        self.events_log.append_sync(
+        self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.SETTLE_FEATURE_COMPLETED,

@@ -182,7 +182,7 @@ def _log(tmp_path: Path) -> EventsLog:
 
 
 def _emit(log: EventsLog, event_type: EventType, payload: dict) -> None:
-    log.append_sync(
+    log.append(
         Event(timestamp=datetime.now(UTC), event_type=event_type, payload=payload)
     )
 

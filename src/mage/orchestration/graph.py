@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 
 from mage.artifacts.mapping import LifecycleStatus
@@ -66,7 +65,7 @@ class PipelineGraph:
                     assert_independent_gates(context.mapping, scenario.sub_bid)
         for stage in self.stages:
             try:
-                context = asyncio.run(stage.run(context))
+                context = stage.run(context)
                 last_seen_count = self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
@@ -151,7 +150,7 @@ class PipelineGraph:
                 "context_snapshot": context.model_dump(mode="json"),
             },
         )
-        context.events_log.append_sync(halt_event)
+        context.events_log.append(halt_event)
 
         state_dir = context.project_dir / ".haileris" / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
