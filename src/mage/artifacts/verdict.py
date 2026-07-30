@@ -137,7 +137,7 @@ class VerdictArtifact:
 
         from mage.orchestration.events import EventType
         event_type = EventType(event_type_value)
-        events_log.append(
+        events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=event_type,
@@ -181,7 +181,7 @@ class VerdictArtifact:
         computed = cls._compute_digest(content)
 
         if computed != recorded_digest:
-            events_log.append(
+            events_log.append_sync(
                 Event(
                     timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,  # reuse existing event type

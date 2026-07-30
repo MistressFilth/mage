@@ -60,7 +60,7 @@ class InscribeStage(StageNode):
         project_dir: Path = context.project_dir
 
         # Emit INSCRIBE_STARTED
-        self.events_log.append(
+        self.events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_STARTED,
@@ -85,7 +85,7 @@ class InscribeStage(StageNode):
         for beh in behavior_specs:
             base_bid = beh["id"]
             behavior_name = beh["name"]
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.BEHAVIOR_INSCRIBE_STARTED,
@@ -122,7 +122,7 @@ class InscribeStage(StageNode):
                 # For each scenario, run mechanical pre-check, then 7 reviewers + aggregate
                 approved = True  # assume all approved; revise if any fail
                 for scenario_idx, scenario in enumerate(output.scenarios):
-                    self.events_log.append(
+                    self.events_log.append_sync(
                         Event(
                             timestamp=datetime.now(UTC),
                             event_type=EventType.SCENARIO_DRAFTED,
@@ -159,7 +159,7 @@ class InscribeStage(StageNode):
                         precheck_results
                     )
                     if precheck_passed:
-                        self.events_log.append(
+                        self.events_log.append_sync(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.MECHANICAL_PRECHECK_PASSED,
@@ -173,7 +173,7 @@ class InscribeStage(StageNode):
                         )
                     else:
                         failed = [r for r in precheck_results if r.outcome == "fail"]
-                        self.events_log.append(
+                        self.events_log.append_sync(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.MECHANICAL_PRECHECK_FAILED,
@@ -188,7 +188,7 @@ class InscribeStage(StageNode):
                         )
                         # Pre-check failure → treat as needs_refactor.
                         approved = False
-                        self.events_log.append(
+                        self.events_log.append_sync(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -271,7 +271,7 @@ class InscribeStage(StageNode):
                         )
 
                         release_cycle_lock(context)
-                        self.events_log.append(
+                        self.events_log.append_sync(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_APPROVED,
@@ -285,7 +285,7 @@ class InscribeStage(StageNode):
                     else:
                         # needs_refactor: loop
                         approved = False
-                        self.events_log.append(
+                        self.events_log.append_sync(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -298,7 +298,7 @@ class InscribeStage(StageNode):
 
             if not approved:
                 # Budget exhausted: emit halt event and raise.
-                self.events_log.append(
+                self.events_log.append_sync(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.REVIEW_HALT_PERSISTED,
@@ -320,7 +320,7 @@ class InscribeStage(StageNode):
                     iteration=iteration,
                 )
 
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.BEHAVIOR_INSCRIBE_COMPLETED,
@@ -332,7 +332,7 @@ class InscribeStage(StageNode):
         mapping.save(project_dir / "mapping.yaml")
 
         # Emit INSCRIBE_COMPLETED
-        self.events_log.append(
+        self.events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_COMPLETED,

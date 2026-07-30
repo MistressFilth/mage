@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -119,12 +120,22 @@ class EventsLog:
         # Ensure the file exists for empty-log reads.
         if not self.log_path.exists():
             self.log_path.touch()
+        self._lock: asyncio.Lock | None = None
 
-    def append(self, event: Event) -> None:
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def append(self, event: Event) -> None:
         """Append a single event to the log (JSONL format, one event per line)."""
         line = event.model_dump_json()
-        with self.log_path.open("a") as f:
-            f.write(line + "\n")
+        async with self._get_lock():
+            with self.log_path.open("a") as f:
+                f.write(line + "\n")
+
+    def append_sync(self, event: Event) -> None:
+        asyncio.run(self.append(event))
 
     def read_all(self) -> list[Event]:
         """Read all events from the log in order."""

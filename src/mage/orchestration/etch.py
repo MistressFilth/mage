@@ -31,7 +31,7 @@ class EtchStage:
         self, context: PipelineContext, target: ScenarioTarget
     ) -> list[Increment]:
         """Generate a red test for each step. Returns increments in step order."""
-        self.events_log.append(
+        self.events_log.append_sync(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.ETCH_STARTED,
@@ -47,7 +47,7 @@ class EtchStage:
                 step=step,
                 scenario_context={"sub_bid": target.sub_bid},
             )
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.ETCH_RED_CONFIRMED,
@@ -66,7 +66,7 @@ class EtchStage:
                     red_test_code=spec.test_code,
                 )
             )
-            self.events_log.append(
+            self.events_log.append_sync(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.ETCH_COMPLETED,
