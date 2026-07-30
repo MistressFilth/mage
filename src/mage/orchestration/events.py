@@ -100,6 +100,12 @@ class EventType(str, Enum):
     SCENARIO_SUPERSESSION_REQUESTED = "scenario_supersession_requested"
     SCENARIO_DEPRECATED = "scenario_deprecated"
 
+    # Plan 9 — Cosmetic apply pipeline
+    COSMETIC_ITEM_APPLIED = "cosmetic_item_applied"
+    COSMETIC_ITEM_SKIPPED = "cosmetic_item_skipped"
+    COSMETIC_APPLY_FAILED = "cosmetic_apply_failed"
+    COSMETIC_REFINER_FALLBACK = "cosmetic_refiner_fallback"
+
 
 class Event(BaseModel):
     """One event in the log."""
