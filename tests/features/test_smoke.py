@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import (
     BaseBIDEntry,
@@ -14,7 +15,7 @@ from mage.artifacts.mapping import (
     MappingArtifact,
     ScenarioEntry,
 )
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.graph import PipelineGraph
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.persistence import FileStatePersistence
@@ -85,11 +86,13 @@ class TestFoundationEndToEnd:
 
         # 3. Events log: append a few events, read them back.
         log = EventsLog(tmp_project_dir / "events.jsonl")
-        await log.append(Event(
-            timestamp=datetime.now(timezone.utc),
-            event_type=EventType.STAGE_STARTED,
-            payload={"stage": "smoke"},
-        ))
+        await log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.STAGE_STARTED,
+                payload={"stage": "smoke"},
+            )
+        )
         events = log.read_all()
         assert len(events) >= 1
 
@@ -100,7 +103,11 @@ class TestFoundationEndToEnd:
         )
         checks = default_check_set(
             registered_tags=set(),
-            step_patterns=[re.compile(r"Given x"), re.compile(r"When y"), re.compile(r"Then z")],
+            step_patterns=[
+                re.compile(r"Given x"),
+                re.compile(r"When y"),
+                re.compile(r"Then z"),
+            ],
         )
         verifier = MechanicalVerifier(checks=checks)
         draft = ScenarioDraft(

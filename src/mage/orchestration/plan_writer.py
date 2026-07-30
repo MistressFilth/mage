@@ -21,12 +21,14 @@ def _behavior_ids_yaml(entries: list[BaseBIDEntry]) -> str:
 def _behaviors_yaml(entries: list[BaseBIDEntry]) -> str:
     data = []
     for e in entries:
-        data.append({
-            "id": e.base_bid,
-            "name": e.behavior_name,
-            "depends_on": e.depends_on,
-            "notes": e.notes,
-        })
+        data.append(
+            {
+                "id": e.base_bid,
+                "name": e.behavior_name,
+                "depends_on": e.depends_on,
+                "notes": e.notes,
+            }
+        )
     return yaml.safe_dump(data, sort_keys=False).rstrip()
 
 
@@ -34,14 +36,18 @@ def _architecture_summary(arch: ArchitectureSpec) -> str:
     parts = ", ".join(arch.parts) if arch.parts else "(none)"
     components = ", ".join(arch.components) if arch.components else "(none)"
     layers = ", ".join(arch.layers) if arch.layers else "(none)"
-    return f"- **Parts:** {parts}\n- **Components:** {components}\n- **Layers:** {layers}"
+    return (
+        f"- **Parts:** {parts}\n- **Components:** {components}\n- **Layers:** {layers}"
+    )
 
 
 def _behavior_sections(entries: list[BaseBIDEntry]) -> str:
     sections = []
     for e in entries:
         deps = ", ".join(e.depends_on) if e.depends_on else "(none)"
-        cross = ", ".join(e.cross_behavior_links) if e.cross_behavior_links else "(none)"
+        cross = (
+            ", ".join(e.cross_behavior_links) if e.cross_behavior_links else "(none)"
+        )
         section = (
             f"### {e.base_bid} — {e.behavior_name}\n\n"
             f"**Description:** {e.behavior_description}\n\n"

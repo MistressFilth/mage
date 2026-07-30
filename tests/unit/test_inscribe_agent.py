@@ -31,7 +31,9 @@ def canned_output() -> InscribeOutput:
 
 
 @pytest.mark.asyncio
-async def test_inscribe_agent_run_returns_inscribe_output(canned_output: InscribeOutput):
+async def test_inscribe_agent_run_returns_inscribe_output(
+    canned_output: InscribeOutput,
+):
     agent = InscribeAgent(model=TestModel(custom_output_args=canned_output))
     behavior = BaseBIDEntry(
         base_bid="00000",

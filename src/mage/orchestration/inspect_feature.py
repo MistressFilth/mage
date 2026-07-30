@@ -62,9 +62,7 @@ class InspectFeatureStage(StageNode):
         self.reviewers = list(reviewers)
         self.mechanical_verifier = mechanical_verifier
         self.host_config = host_config
-        self.fix_wave_dispatcher = (
-            fix_wave_dispatcher or _noop_fix_wave_dispatcher
-        )
+        self.fix_wave_dispatcher = fix_wave_dispatcher or _noop_fix_wave_dispatcher
 
     async def _run(self, context: PipelineContext) -> PipelineContext:
         raise NotImplementedError(
@@ -356,9 +354,7 @@ class InspectFeatureStage(StageNode):
                 else str(cited_sub_bid or "unknown")
             )
             scenario_name = (
-                self._scenario_name(scenario)
-                if scenario is not None
-                else "unknown"
+                self._scenario_name(scenario) if scenario is not None else "unknown"
             )
             context.mapping = context.mapping.append_cosmetic(
                 CosmeticItem(
@@ -417,15 +413,9 @@ class InspectFeatureStage(StageNode):
             per_reviewer.extend(reviewer_records)
             sourced_findings.extend(reviewer_findings)
 
-        critical = [
-            item for item in sourced_findings if item[0].severity == "critical"
-        ]
-        important = [
-            item for item in sourced_findings if item[0].severity == "major"
-        ]
-        minor = [
-            item for item in sourced_findings if item[0].severity == "minor"
-        ]
+        critical = [item for item in sourced_findings if item[0].severity == "critical"]
+        important = [item for item in sourced_findings if item[0].severity == "major"]
+        minor = [item for item in sourced_findings if item[0].severity == "minor"]
 
         for finding, _dimension, _scenario in critical:
             for sub_bid in self._affected_sub_bids(finding, scenarios):
@@ -467,8 +457,7 @@ class InspectFeatureStage(StageNode):
             for finding, _dimension, _scenario in important
         ]
         minor_models = [
-            finding.model_dump(mode="json")
-            for finding, _dimension, _scenario in minor
+            finding.model_dump(mode="json") for finding, _dimension, _scenario in minor
         ]
         cross_scenario_models = [
             finding.model_dump(mode="json")
@@ -567,8 +556,7 @@ class InspectFeatureStage(StageNode):
                     "iteration": iteration,
                     "ready_to_merge": ready_to_merge,
                     "scenario_statuses": [
-                        status.model_dump(mode="json")
-                        for status in scenario_statuses
+                        status.model_dump(mode="json") for status in scenario_statuses
                     ],
                 },
             )

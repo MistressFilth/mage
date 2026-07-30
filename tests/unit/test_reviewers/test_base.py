@@ -66,7 +66,9 @@ async def test_reviewer_agent_run_persists_verdict(tmp_path, fake_reviewer):
     draft = ScenarioSpec(name="x", gherkin_body="Given y")
     path = tmp_path / "v.yaml"
 
-    await fake_reviewer.run(draft=draft, spec_context={}, mapping=mapping, events_log=log, verdict_path=path)
+    await fake_reviewer.run(
+        draft=draft, spec_context={}, mapping=mapping, events_log=log, verdict_path=path
+    )
     assert path.exists()
     events = log.read_all()
     assert any(e.event_type.value == "reviewer_verdict_recorded" for e in events)

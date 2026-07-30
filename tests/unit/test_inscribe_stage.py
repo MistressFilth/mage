@@ -88,21 +88,25 @@ def canned_inscribe_output() -> InscribeOutput:
 
 def _write_behaviors_yaml(project_dir: Path, feature_id: str = "feat-1") -> Path:
     path = project_dir / "behaviors.yaml"
-    path.write_text(yaml.safe_dump({
-        "schema_version": 1,
-        "feature_id": feature_id,
-        "enumerated_at": "2026-07-27T00:00:00Z",
-        "behaviors": [
+    path.write_text(
+        yaml.safe_dump(
             {
-                "id": "00000",
-                "name": "authenticate-user",
-                "description": "User logs in",
-                "depends_on": [],
-                "notes": "",
-                "cross_behavior_links": [],
-            },
-        ],
-    }))
+                "schema_version": 1,
+                "feature_id": feature_id,
+                "enumerated_at": "2026-07-27T00:00:00Z",
+                "behaviors": [
+                    {
+                        "id": "00000",
+                        "name": "authenticate-user",
+                        "description": "User logs in",
+                        "depends_on": [],
+                        "notes": "",
+                        "cross_behavior_links": [],
+                    },
+                ],
+            }
+        )
+    )
     return path
 
 
@@ -118,22 +122,26 @@ async def test_inscribe_stage_runs_end_to_end_with_test_model(
 
     mapping = MappingArtifact(
         project_id="test-proj",
-        base_bids=[{
-            "base_bid": "00000",
-            "behavior_name": "authenticate-user",
-            "behavior_description": "User logs in",
-            "depends_on": [],
-            "notes": "",
-            "scenarios": [],
-            "reversion_log": [],
-            "post_live_revisions": [],
-            "cross_behavior_links": [],
-        }],
+        base_bids=[
+            {
+                "base_bid": "00000",
+                "behavior_name": "authenticate-user",
+                "behavior_description": "User logs in",
+                "depends_on": [],
+                "notes": "",
+                "scenarios": [],
+                "reversion_log": [],
+                "post_live_revisions": [],
+                "cross_behavior_links": [],
+            }
+        ],
     )
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
-        project_dir=project_dir, mapping=mapping, events_log=log,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
         plan_path=project_dir / "plan.md",
     )
 
@@ -163,36 +171,54 @@ async def test_inscribe_stage_runs_end_to_end_with_test_model(
 async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
     """When iteration >= max_iterations and aggregate says needs_refactor,
     emit REVIEW_HALT_PERSISTED and raise ReviewBudgetExhausted."""
+    from mage.agents.inscribe import InscribeAgent
     from mage.orchestration.inscribe import InscribeStage, ReviewBudgetExhausted
-    from mage.agents.inscribe import InscribeAgent, ScenarioSpec, InscribeOutput
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     log = EventsLog(project_dir / "events.jsonl")
-    (project_dir / "behaviors.yaml").write_text(yaml.safe_dump({
-        "schema_version": 1,
-        "feature_id": "f",
-        "enumerated_at": "2026-07-27T00:00:00Z",
-        "behaviors": [{
-            "id": "00000", "name": "authenticate-user",
-            "description": "User logs in", "depends_on": [],
-            "notes": "", "cross_behavior_links": [],
-        }],
-    }))
+    (project_dir / "behaviors.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "feature_id": "f",
+                "enumerated_at": "2026-07-27T00:00:00Z",
+                "behaviors": [
+                    {
+                        "id": "00000",
+                        "name": "authenticate-user",
+                        "description": "User logs in",
+                        "depends_on": [],
+                        "notes": "",
+                        "cross_behavior_links": [],
+                    }
+                ],
+            }
+        )
+    )
 
     mapping = MappingArtifact(
         project_id="p",
-        base_bids=[{
-            "base_bid": "00000", "behavior_name": "authenticate-user",
-            "behavior_description": "User logs in", "depends_on": [],
-            "notes": "", "scenarios": [], "reversion_log": [],
-            "post_live_revisions": [], "cross_behavior_links": [],
-        }],
+        base_bids=[
+            {
+                "base_bid": "00000",
+                "behavior_name": "authenticate-user",
+                "behavior_description": "User logs in",
+                "depends_on": [],
+                "notes": "",
+                "scenarios": [],
+                "reversion_log": [],
+                "post_live_revisions": [],
+                "cross_behavior_links": [],
+            }
+        ],
     )
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
-        project_dir=project_dir, mapping=mapping, events_log=log,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
         plan_path=project_dir / "plan.md",
     )
 
@@ -201,18 +227,22 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
 
     # Reviewers that always fail (we'll use TestModel that returns fail verdicts
     # via custom_output_args)
+    from datetime import UTC, datetime
+
     from mage.verification.reviewers.spec_compliance import SpecComplianceReviewer
-    from mage.artifacts.verdict import ReviewerVerdict
-    from datetime import datetime, UTC
 
     class AlwaysFailReviewer(SpecComplianceReviewer):
         async def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
             v = ReviewerVerdict(
-                dimension=self.dimension, outcome="fail", draft_hash="x",
-                reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1",
+                dimension=self.dimension,
+                outcome="fail",
+                draft_hash="x",
+                reviewed_at=datetime.now(UTC),
+                reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
             from mage.artifacts.verdict import VerdictArtifact
+
             await VerdictArtifact.finalize(verdict_path, v, events_log)
             return v
 
@@ -220,7 +250,9 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
 
     host_config = HostConfig(max_iterations=2)  # small budget
     stage = InscribeStage(
-        events_log=log, agent=inscribe_agent, host_config=host_config,
+        events_log=log,
+        agent=inscribe_agent,
+        host_config=host_config,
         reviewers=[failing_reviewer],
     )
 

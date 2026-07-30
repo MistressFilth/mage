@@ -75,8 +75,7 @@ class MechanicalCheck(ABC):
         return self._run(draft, mapping)
 
     @abstractmethod
-    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
-        ...
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult: ...
 
 
 class MechanicalVerifier:
@@ -222,7 +221,9 @@ class LifecycleStatusTagPresentCheck(MechanicalCheck):
                 outcome="fail",
                 detail="missing lifecycle status tag (e.g. @status-inscribing)",
             )
-        invalid = [t for t in lifecycle_tags if t[len(self.PREFIX):] not in self.VALID_VALUES]
+        invalid = [
+            t for t in lifecycle_tags if t[len(self.PREFIX) :] not in self.VALID_VALUES
+        ]
         if invalid:
             return CheckResult(
                 name=self.name,
@@ -270,10 +271,7 @@ class CrossBehaviorTagsValidCheck(MechanicalCheck):
         if not cross_tags:
             return CheckResult(name=self.name, outcome="pass", detail=None)
         existing = {entry.base_bid for entry in mapping.base_bids}
-        dangling = [
-            t for t in cross_tags
-            if t[len(self.PREFIX):] not in existing
-        ]
+        dangling = [t for t in cross_tags if t[len(self.PREFIX) :] not in existing]
         if dangling:
             return CheckResult(
                 name=self.name,

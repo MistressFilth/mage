@@ -24,8 +24,6 @@ from mage.orchestration.settle_feature import (
     SettleTestsFailed,
     SettleUnsafeCleanupError,
 )
-from mage.verification.host_overrides import HostConfig
-
 
 TEST_COMMAND = ["uv", "run", "pytest", "-v"]
 
@@ -39,13 +37,7 @@ async def finalize_inspect(
     iteration: int = 1,
     ready: bool = True,
 ) -> Path:
-    path = (
-        project
-        / ".haileris"
-        / "inspect"
-        / path_feature_id
-        / f"{iteration}.yaml"
-    )
+    path = project / ".haileris" / "inspect" / path_feature_id / f"{iteration}.yaml"
     content = InspectArtifactContent(
         feature_id=content_feature_id,
         inspected_at=datetime.now(UTC),
@@ -133,9 +125,7 @@ class RecordingRunner:
                 if self.worktree
                 else str(self.project / ".git")
             ),
-            ("git", "rev-parse", "--git-common-dir"): str(
-                self.repo_root / ".git"
-            ),
+            ("git", "rev-parse", "--git-common-dir"): str(self.repo_root / ".git"),
             ("git", "rev-parse", "--show-toplevel"): str(self.project),
         }
         return CompletedProcess(
@@ -256,7 +246,9 @@ class TestSettleFinalization:
                 disposition="kept",
             )
 
-        event_types = [event.event_type.value for event in context.events_log.read_all()]
+        event_types = [
+            event.event_type.value for event in context.events_log.read_all()
+        ]
         assert event_types.count("settle_tests_failed") == 1
         assert "settle_feature_finalized" not in event_types
         assert context.mapping == original_mapping
@@ -281,15 +273,18 @@ class TestSettleFinalization:
 
         assert runner.calls[0] == (TEST_COMMAND, context.project_dir)
         assert context.mapping.feature_status == "settled"
-        assert MappingArtifact.load(context.project_dir / "mapping.yaml") == context.mapping
-        report = context.project_dir / ".haileris" / "settle" / "feat-1.md"
-        cosmetic = (
-            context.project_dir / ".haileris" / "settle" / "feat-1-cosmetic.md"
+        assert (
+            MappingArtifact.load(context.project_dir / "mapping.yaml")
+            == context.mapping
         )
+        report = context.project_dir / ".haileris" / "settle" / "feat-1.md"
+        cosmetic = context.project_dir / ".haileris" / "settle" / "feat-1-cosmetic.md"
         assert report.exists()
         assert cosmetic.exists()
         assert "kept" in report.read_text()
-        event_types = [event.event_type.value for event in context.events_log.read_all()]
+        event_types = [
+            event.event_type.value for event in context.events_log.read_all()
+        ]
         assert event_types[-2:] == [
             "settle_feature_finalized",
             "settle_feature_completed",
@@ -342,7 +337,9 @@ class TestSettleFinalization:
         assert context.mapping.feature_status != "settled"
 
     @pytest.mark.asyncio
-    async def test_merge_retests_deletes_branch_and_cleans_safe_worktree(self, tmp_path):
+    async def test_merge_retests_deletes_branch_and_cleans_safe_worktree(
+        self, tmp_path
+    ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
         context = await make_context(project)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 0])
@@ -371,7 +368,9 @@ class TestSettleFinalization:
         ) in runner.calls
 
     @pytest.mark.asyncio
-    async def test_discard_force_deletes_branch_and_cleans_safe_worktree(self, tmp_path):
+    async def test_discard_force_deletes_branch_and_cleans_safe_worktree(
+        self, tmp_path
+    ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
         context = await make_context(project)
         runner = RecordingRunner(project, worktree=True)
@@ -472,7 +471,9 @@ class TestSettleFinalization:
         assert "provenance" in skipped[0].payload["reason"]
 
     @pytest.mark.asyncio
-    async def test_discard_aborts_when_head_moved_off_the_feature_branch(self, tmp_path):
+    async def test_discard_aborts_when_head_moved_off_the_feature_branch(
+        self, tmp_path
+    ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
         context = await make_context(project)
         runner = RecordingRunner(project, worktree=True, branch_after="main")
@@ -590,7 +591,9 @@ class TestSettleFinalization:
         assert failed.payload["stdout_truncated"] is True
 
     @pytest.mark.asyncio
-    async def test_report_write_failure_leaves_mapping_unsettled_on_disk(self, tmp_path):
+    async def test_report_write_failure_leaves_mapping_unsettled_on_disk(
+        self, tmp_path
+    ):
         context = await make_context(tmp_path / "project")
         runner = RecordingRunner(context.project_dir)
         report_path = context.project_dir / ".haileris" / "settle" / "feat-1.md"

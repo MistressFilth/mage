@@ -80,11 +80,15 @@ class InscribeAgent:
         existing_scenarios: list,
         mapping: MappingArtifact,
     ) -> InscribeOutput:
-        existing_str = "\n".join(
-            f"- {s.name}: {s.gherkin_body[:80]}..." for s in existing_scenarios
-        ) or "(none)"
+        existing_str = (
+            "\n".join(
+                f"- {s.name}: {s.gherkin_body[:80]}..." for s in existing_scenarios
+            )
+            or "(none)"
+        )
         sibling_names = [
-            e.behavior_name for e in mapping.base_bids
+            e.behavior_name
+            for e in mapping.base_bids
             if e.base_bid != behavior.base_bid
         ]
         prompt = INSCRIBE_PROMPT.format(

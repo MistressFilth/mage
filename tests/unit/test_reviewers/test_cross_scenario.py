@@ -7,11 +7,13 @@ from datetime import UTC, datetime
 
 def test_dimension_classvar():
     from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+
     assert CrossScenarioReviewer.dimension == "cross_scenario"
 
 
 def test_system_prompt_mentions_four_foci():
     from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+
     prompt = CrossScenarioReviewer(system_prompt_only=True)._system_prompt()
     assert "shared state" in prompt.lower()
     assert "ordering" in prompt.lower()
@@ -21,8 +23,9 @@ def test_system_prompt_mentions_four_foci():
 
 def test_run_with_canned_testmodel():
     from pydantic_ai.models.test import TestModel
-    from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+
     from mage.artifacts.verdict import ReviewerVerdict
+    from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
 
     canned = ReviewerVerdict(
         dimension="cross_scenario",

@@ -96,7 +96,9 @@ class DisciplineStage(StageNode):
                 originating_stage=payload.get("originating_stage", "unknown"),
                 timestamp=event.timestamp,
             )
-            await self._emit(EventType.SCENARIO_REVERTED_TO_INSCRIBING, {"sub_bid": sub_bid})
+            await self._emit(
+                EventType.SCENARIO_REVERTED_TO_INSCRIBING, {"sub_bid": sub_bid}
+            )
             await self._emit(EventType.REVERSION_LOGGED, {"sub_bid": sub_bid})
             return
 

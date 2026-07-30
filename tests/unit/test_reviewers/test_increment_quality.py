@@ -12,12 +12,14 @@ class TestIncrementQualityReviewer:
         from mage.verification.reviewers.increment_quality import (
             IncrementQualityReviewer,
         )
+
         assert IncrementQualityReviewer.dimension == "increment_quality"
 
     def test_system_prompt_mentions_three_routes(self):
         from mage.verification.reviewers.increment_quality import (
             IncrementQualityReviewer,
         )
+
         prompt = IncrementQualityReviewer(system_prompt_only=True)._system_prompt()
         assert "spec" in prompt
         assert "code" in prompt
@@ -51,6 +53,7 @@ class TestIncrementQualityReviewer:
         from mage.verification.reviewers.increment_quality import (
             IncrementQualityReviewer,
         )
+
         prompt = IncrementQualityReviewer(system_prompt_only=True)._system_prompt()
         # The prompt names the `route` field as the encoding channel.
         assert "route" in prompt, "prompt must reference the `route` field"
@@ -59,15 +62,11 @@ class TestIncrementQualityReviewer:
         assert "'cosmetic'" in prompt, "prompt must list the 'cosmetic' route"
         assert "'code'" in prompt, "prompt must list the 'code' route"
         # The prompt tells the model NOT to embed route prefixes in suggestion.
-        assert "spec:" not in prompt, (
-            "prompt must not require 'spec:' prefix encoding"
-        )
+        assert "spec:" not in prompt, "prompt must not require 'spec:' prefix encoding"
         assert "cosmetic:" not in prompt, (
             "prompt must not require 'cosmetic:' prefix encoding"
         )
-        assert "code:" not in prompt, (
-            "prompt must not require 'code:' prefix encoding"
-        )
+        assert "code:" not in prompt, "prompt must not require 'code:' prefix encoding"
 
     def test_findings_with_route_field_route_correctly(self):
         """Important 4 regression: the schema must carry route on the finding

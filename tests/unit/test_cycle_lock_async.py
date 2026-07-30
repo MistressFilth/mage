@@ -18,7 +18,9 @@ def _ctx(tmp_path):
         mapping=MappingArtifact(
             project_id="p",
             base_bids=[
-                BaseBIDEntry(base_bid="00000", behavior_name="b", behavior_description="d"),
+                BaseBIDEntry(
+                    base_bid="00000", behavior_name="b", behavior_description="d"
+                ),
             ],
         ),
         events_log=EventsLog(tmp_path / "events.jsonl"),

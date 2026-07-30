@@ -77,6 +77,8 @@ class DecompositionAgent:
         )
         prompt = DECOMPOSITION_PROMPT.format(
             ascertain=ascertain.model_dump_json(indent=2),
-            existing_behaviors=", ".join(existing_names) if existing_names else "(none)",
+            existing_behaviors=", ".join(existing_names)
+            if existing_names
+            else "(none)",
         )
         return (await self._agent.run(prompt)).output

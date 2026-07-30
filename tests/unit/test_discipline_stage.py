@@ -1,7 +1,7 @@
-import pytest
-
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from mage.artifacts.mapping import (
     BaseBIDEntry,

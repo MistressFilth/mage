@@ -61,17 +61,23 @@ class RealizeAgent:
         carry_forward: list,
         cross_scenario_observations: list,
     ) -> str:
-        cf_section = "\n".join(
-            f"  - [{e.severity}/{e.route}] {e.location}: {e.issue} "
-            f"(rationale: {e.rationale})"
-            for e in carry_forward
-        ) or "  (no carry-forward)"
+        cf_section = (
+            "\n".join(
+                f"  - [{e.severity}/{e.route}] {e.location}: {e.issue} "
+                f"(rationale: {e.rationale})"
+                for e in carry_forward
+            )
+            or "  (no carry-forward)"
+        )
 
-        cs_section = "\n".join(
-            f"  - [{e.severity}/{e.route}] {e.location}: {e.issue} "
-            f"(rationale: {e.rationale})"
-            for e in cross_scenario_observations
-        ) or "  (none)"
+        cs_section = (
+            "\n".join(
+                f"  - [{e.severity}/{e.route}] {e.location}: {e.issue} "
+                f"(rationale: {e.rationale})"
+                for e in cross_scenario_observations
+            )
+            or "  (none)"
+        )
 
         return (
             f"You are implementing the next increment of the inner TDD loop.\n\n"

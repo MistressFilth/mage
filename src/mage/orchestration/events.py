@@ -120,7 +120,9 @@ class EventsLog:
         # Ensure the file exists for empty-log reads.
         if not self.log_path.exists():
             self.log_path.touch()
-        self._lock: asyncio.Lock | None = None  # lazy; asyncio.Lock requires a running loop
+        self._lock: asyncio.Lock | None = (
+            None  # lazy; asyncio.Lock requires a running loop
+        )
 
     def _get_lock(self) -> asyncio.Lock:
         """Return the per-instance asyncio.Lock, creating it lazily.

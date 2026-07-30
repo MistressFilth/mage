@@ -36,7 +36,10 @@ class TestPipelineGraph:
     async def test_runs_stages_in_order(self, tmp_project_dir: Path):
         log = EventsLog(tmp_project_dir / "events.jsonl")
         graph = PipelineGraph(
-            stages=[IncrementingStage(events_log=log), IncrementingStage(events_log=log)],
+            stages=[
+                IncrementingStage(events_log=log),
+                IncrementingStage(events_log=log),
+            ],
             events_log=log,
         )
         ctx = PipelineContext(
@@ -93,6 +96,7 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
 
     class HaltingStage(StageNode):
         name = "halting"
+
         async def _run(self, context):
             raise PlanRevisionRequired(
                 reason="Plan ordering is wrong",
@@ -102,6 +106,7 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
 
     class NeverRunStage(StageNode):
         name = "never"
+
         async def _run(self, context):
             raise AssertionError("should not run")
 
@@ -120,7 +125,9 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
         await graph.run(ctx)
     assert exc_info.value.code == 0
 
-    halt_events = [e for e in log.read_all() if e.event_type == EventType.HALT_PERSISTED]
+    halt_events = [
+        e for e in log.read_all() if e.event_type == EventType.HALT_PERSISTED
+    ]
     assert len(halt_events) == 1
     assert halt_events[0].payload["reason"] == "Plan ordering is wrong"
     assert halt_events[0].payload["originating_stage"] == "halting"
@@ -140,13 +147,17 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
 
     class BudgetExhaustedStage(StageNode):
         name = "budget_exhausted"
+
         async def _run(self, context):
             raise ReviewBudgetExhausted(
-                base_bid="00000", scenario_name="authenticate-user", iteration=3,
+                base_bid="00000",
+                scenario_name="authenticate-user",
+                iteration=3,
             )
 
     class NeverRunStage(StageNode):
         name = "never"
+
         async def _run(self, context):
             raise AssertionError("should not run after halt")
 
@@ -184,9 +195,7 @@ class TestPlan4HaltCatching:
             name = "halt-stage"
 
             async def _run(self, context):
-                raise ScenarioInspectHalted(
-                    "spec-route finding for sub-bid 00000-0"
-                )
+                raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         ctx = PipelineContext(
             project_dir=tmp_path,
@@ -222,9 +231,7 @@ class TestPlan4HaltCatching:
             name = "halt-stage"
 
             async def _run(self, context):
-                raise ScenarioInspectHalted(
-                    "spec-route finding for sub-bid 00000-0"
-                )
+                raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         class LaterStage(StageNode):
             name = "later"
@@ -268,9 +275,7 @@ class TestPlan4HaltCatching:
             name = "halt-stage"
 
             async def _run(self, context):
-                raise ScenarioInspectHalted(
-                    "spec-route finding for sub-bid 00000-0"
-                )
+                raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         ctx = PipelineContext(
             project_dir=missing_dir,
@@ -328,7 +333,9 @@ class TestPlan4HaltCatching:
         )
 
         class SpecReviewer:
-            async def run(self, *, increment_diff, new_test, scenario_steps, recent_journal_window):
+            async def run(
+                self, *, increment_diff, new_test, scenario_steps, recent_journal_window
+            ):
                 return ReviewerVerdict(
                     dimension="increment_quality",
                     outcome="fail",
@@ -344,7 +351,9 @@ class TestPlan4HaltCatching:
         class InspectStage(StageNode):
             name = "inspect-loop"
 
-            def __init__(self, events_log, inspect_loop_stage, target, increment, result):
+            def __init__(
+                self, events_log, inspect_loop_stage, target, increment, result
+            ):
                 super().__init__(events_log)
                 self.inspect_loop_stage = inspect_loop_stage
                 self.target = target
@@ -391,7 +400,8 @@ class TestPlan4HaltCatching:
             await graph.run(ctx)
 
         halt_events = [
-            event for event in log.read_all()
+            event
+            for event in log.read_all()
             if event.event_type.value == "halt_persisted"
         ]
         assert len(halt_events) == 1, (
@@ -418,9 +428,7 @@ class TestPlan4HaltCatching:
             name = "halt-stage"
 
             async def _run(self, context):
-                raise ScenarioInspectHalted(
-                    "spec-route finding for sub-bid 00000-0"
-                )
+                raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         ctx = PipelineContext(
             project_dir=tmp_path,
@@ -452,7 +460,9 @@ class TestPlan4HaltCatching:
 
 class TestPlan5HaltCatching:
     @pytest.mark.asyncio
-    async def test_inspect_feature_halt_persists_once_and_terminates_graph(self, tmp_path):
+    async def test_inspect_feature_halt_persists_once_and_terminates_graph(
+        self, tmp_path
+    ):
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import Event, EventsLog, EventType
         from mage.orchestration.graph import PipelineGraph
@@ -500,7 +510,9 @@ class TestPlan5HaltCatching:
         assert exc_info.value.code == 0
         assert later_stage_ran == []
         assert context.mapping.feature_status == "halted"
-        assert MappingArtifact.load(tmp_path / "mapping.yaml").feature_status == "halted"
+        assert (
+            MappingArtifact.load(tmp_path / "mapping.yaml").feature_status == "halted"
+        )
         halt_events = [
             event
             for event in log.read_all()

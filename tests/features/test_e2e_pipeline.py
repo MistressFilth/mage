@@ -222,6 +222,7 @@ async def test_mage_run_dry_run_completes_a_feature(
     _patch_settle_stub_to_settle(monkeypatch)
 
     import threading
+
     rc_box: list[int] = []
     err_box: list[BaseException] = []
 
@@ -284,12 +285,15 @@ async def test_mage_run_resumes_from_persisted_cursor(
 
     with pytest.raises(SystemExit) as exc_info:
         import threading
+
         exc_box: list[BaseException] = []
+
         def _thread_main() -> None:
             try:
                 main(["run", "--dry-run", "--project-dir", str(project_dir)])
             except BaseException as exc:  # noqa: BLE001
                 exc_box.append(exc)
+
         thread = threading.Thread(target=_thread_main)
         thread.start()
         thread.join()
@@ -321,6 +325,7 @@ async def test_mage_run_resumes_from_persisted_cursor(
     _patch_settle_stub_to_settle(monkeypatch)
 
     import threading
+
     rc_box: list[int] = []
     err_box: list[BaseException] = []
 

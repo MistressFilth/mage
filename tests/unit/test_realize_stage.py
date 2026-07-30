@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from datetime import UTC, datetime
 from pathlib import Path
 from subprocess import CompletedProcess
+
+import pytest
 
 from mage.agents.realize import RealizeOutput
 from mage.artifacts.inspect import InspectJournalEntry
@@ -58,9 +58,7 @@ async def test_run_increment_returns_increment_result_with_diff(tmp_path):
     increment = Increment(
         index=0, step="seed", red_test_path="t.py", red_test_code="..."
     )
-    agent = _StubAgent(
-        RealizeOutput(files_changed=["foo.py", "bar.py"], summary="ok")
-    )
+    agent = _StubAgent(RealizeOutput(files_changed=["foo.py", "bar.py"], summary="ok"))
     runner = _RecordingRunner(stdout="diff payload")
     stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
 
@@ -76,7 +74,9 @@ async def test_run_increment_returns_increment_result_with_diff(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_increment_uses_default_runner_when_none_provided(tmp_path, monkeypatch):
+async def test_run_increment_uses_default_runner_when_none_provided(
+    tmp_path, monkeypatch
+):
     """The default runner must exist and be callable; tests don't hit real git."""
     ctx = _context(tmp_path)
     target = ScenarioTarget(
@@ -94,9 +94,7 @@ async def test_run_increment_uses_default_runner_when_none_provided(tmp_path, mo
     def fake_run(command, *, cwd):
         return CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(
-        "mage.orchestration.realize._default_command_runner", fake_run
-    )
+    monkeypatch.setattr("mage.orchestration.realize._default_command_runner", fake_run)
     stage = RealizeStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
@@ -139,7 +137,9 @@ class _RecordingAgent:
         return self._output
 
 
-def _journal_entry(*, sub_bid: str, finding_id: str, route: str = "code", ts: datetime | None = None) -> InspectJournalEntry:
+def _journal_entry(
+    *, sub_bid: str, finding_id: str, route: str = "code", ts: datetime | None = None
+) -> InspectJournalEntry:
     return InspectJournalEntry(
         timestamp=ts or datetime.now(UTC),
         iteration=1,
