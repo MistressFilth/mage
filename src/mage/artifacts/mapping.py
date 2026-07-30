@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -86,6 +87,21 @@ class MappingArtifact(BaseModel):
     feature_cosmetic_queue: list[dict] = Field(default_factory=list)
     # ^ list[CosmeticItem]; typing loose to avoid circular import
     feature_status: str = "pending"  # pending | live_assembling | inspect_pending | inspect_passed | settled | halted
+
+    def __init__(self, **data: object) -> None:
+        super().__init__(**data)
+        self._save_lock: asyncio.Lock | None = None  # lazy; requires running loop
+
+    def _get_save_lock(self) -> asyncio.Lock:
+        """Return the per-instance asyncio.Lock, creating it lazily.
+
+        See `EventsLog._get_lock` for rationale. The lazy pattern avoids
+        constructing the lock during `__init__` because `asyncio.Lock()`
+        requires a running event loop.
+        """
+        if self._save_lock is None:
+            self._save_lock = asyncio.Lock()
+        return self._save_lock
 
     @model_validator(mode="after")
     def _validate_plan4_fields(self) -> "MappingArtifact":
