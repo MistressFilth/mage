@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from mage.agents.etch import EtchAgent
+from mage.agents.etch import EtchAgent, PydanticEtchAgent
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, ScenarioTarget
+from mage.verification.host_overrides import HostConfig
 
 
 class ScenarioInspectHalted(Exception):
@@ -23,9 +24,34 @@ class ScenarioInspectHalted(Exception):
 class EtchStage:
     """One pass through the steps of a scenario, producing one Increment per step."""
 
-    def __init__(self, events_log: EventsLog, agent: EtchAgent) -> None:
+    def __init__(
+        self,
+        events_log: EventsLog,
+        agent: EtchAgent,
+        *,
+        host_config: HostConfig | None = None,
+    ) -> None:
         self.events_log = events_log
         self.agent = agent
+        self.host_config = host_config
+        self._build_agent()
+
+    def _build_agent(self) -> None:
+        """(Re)build self.agent from host_config when needed.
+
+        Plan 9: if `host_config.model` is set and no concrete agent was passed,
+        construct `PydanticEtchAgent(model=host_config.model)`. Otherwise
+        keep the stub that was injected (e.g. `_StubEtchAgent` in --dry-run).
+        """
+        if self.host_config is None or not self.host_config.model:
+            return
+        # Replace any stub with a real Pydantic-AI agent. Existing test setups
+        # that inject their own agent AND host_config are unaffected because
+        # the injection test sets `host_config.model=None`.
+        if isinstance(self.agent, EtchAgent) and not isinstance(
+            self.agent, PydanticEtchAgent
+        ):
+            self.agent = PydanticEtchAgent(model=self.host_config.model)
 
     async def run_scenario(
         self, context: PipelineContext, target: ScenarioTarget
