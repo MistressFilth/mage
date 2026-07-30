@@ -15,12 +15,14 @@ class CosmeticItem(BaseModel):
     `file_path` is project-relative. `line_range` is inclusive on both ends.
     `content_hash` is sha256(replacement_text); used for idempotency when
     `mage cosmetic apply` is re-run.
+    `file_path=None` is reserved for fallback stubs that need manual review
+    (e.g. LLM refinement failure — see CosmeticRefiner).
     """
 
     model_config = ConfigDict(frozen=True)
 
     sub_bid: str
-    file_path: Path
+    file_path: Path | None
     line_range: tuple[int, int]
     replacement_text: str
     rationale: str
