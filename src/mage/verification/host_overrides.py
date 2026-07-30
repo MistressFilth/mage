@@ -41,6 +41,7 @@ class HostConfig(BaseModel):
     )
     base_branch: str = "main"
     model: str | None = None  # Plan 6: agent model identifier; None = pydantic-ai default
+    max_concurrent_llm_calls: int = 7  # Plan 8: asyncio.Semaphore cap for LLM fan-out
 
 
 def default_check_set(
