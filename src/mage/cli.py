@@ -617,6 +617,12 @@ async def cmd_cosmetic_show(args) -> int:
 async def cmd_cosmetic_apply(args) -> int:
     """Refine queue, edit files in place, and commit each item."""
     from mage.agents.cosmetic_refiner import CosmeticRefiner
+    from mage.artifacts.cosmetic_state import (
+        CosmeticApplied,
+        is_already_applied,
+        load_state,
+        save_state,
+    )
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.events import Event, EventsLog, EventType
 
@@ -650,6 +656,7 @@ async def cmd_cosmetic_apply(args) -> int:
         ]
     )
 
+    state = load_state(project_dir)
     now = datetime.now(UTC)
     for item in refined:
         if item.file_path is None:
@@ -658,6 +665,18 @@ async def cmd_cosmetic_apply(args) -> int:
                     timestamp=now,
                     event_type=EventType.COSMETIC_REFINER_FALLBACK,
                     payload={"sub_bid": item.sub_bid, "rationale": item.rationale},
+                )
+            )
+            continue
+        if is_already_applied(state, item.sub_bid, item.content_hash):
+            await log.append(
+                Event(
+                    timestamp=now,
+                    event_type=EventType.COSMETIC_ITEM_SKIPPED,
+                    payload={
+                        "sub_bid": item.sub_bid,
+                        "reason": "already-applied",
+                    },
                 )
             )
             continue
@@ -693,6 +712,13 @@ async def cmd_cosmetic_apply(args) -> int:
                     check=True,
                     timeout=30,
                 )
+                state.applied[item.sub_bid] = CosmeticApplied(
+                    content_hash=item.content_hash,
+                    applied_at=now,
+                    file=item.file_path,  # type: ignore[arg-type]
+                    rationale=item.rationale,
+                )
+                save_state(project_dir, state)
             await log.append(
                 Event(
                     timestamp=now,

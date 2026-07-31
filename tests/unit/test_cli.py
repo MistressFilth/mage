@@ -645,6 +645,156 @@ class TestCosmeticApply:
             f"feat-2 item must not be applied when filtering for feat-1; got: {events!r}"
         )
 
+    @pytest.mark.asyncio
+    async def test_cosmetic_apply_skips_already_applied_with_matching_hash(
+        self, tmp_path, monkeypatch
+    ):
+        """When state file records prior apply with matching hash, emit SKIPPED."""
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        import yaml
+
+        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic_state import (
+            CosmeticApplied,
+            CosmeticAppliedState,
+            save_state,
+        )
+
+        project_dir = tmp_path
+        target = project_dir / "src" / "example.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("line1\nline2\nline3\n")
+
+        (project_dir / "mapping.yaml").write_text(
+            yaml.safe_dump({
+                "schema_version": 2,
+                "project_id": "p",
+                "base_bids": [],
+                "feature_cosmetic_queue": [{
+                    "feature_id": "feat-1",
+                    "sub_bid": "00000-001",
+                    "text": "use a constant",
+                    "location": {"file": "src/example.py", "line": 2},
+                    "proposed_by": "IncrementQualityReviewer",
+                }],
+            })
+        )
+
+        # Use the same replacement_text `_PassthroughRefiner` produces so the
+        # computed hash matches what the SUT will see.
+        item = CosmeticItem(
+            sub_bid="00000-001",
+            file_path=Path("src/example.py"),
+            line_range=(2, 2),
+            replacement_text="x = 42\n",
+            rationale="use a constant",
+            proposed_by="IncrementQualityReviewer",
+        )
+
+        # Pre-seed state with matching hash.
+        prior = CosmeticAppliedState(applied={
+            "00000-001": CosmeticApplied(
+                content_hash=item.content_hash,
+                applied_at=datetime(2026, 7, 30, tzinfo=UTC),
+                file=Path("src/example.py"),
+                rationale="use a constant",
+            ),
+        })
+        save_state(project_dir, prior)
+
+        monkeypatch.setattr(
+            "mage.agents.cosmetic_refiner.CosmeticRefiner",
+            lambda **kw: _PassthroughRefiner(),
+        )
+
+        rc = _run_cli(
+            "cosmetic", "apply", "feat-1", "--project-dir", str(project_dir)
+        )
+        assert rc == 0
+        # File NOT edited (already-applied).
+        assert "x = 42" not in target.read_text()
+        events = list((project_dir / "events.jsonl").read_text().splitlines())
+        assert any("cosmetic_item_skipped" in line for line in events)
+
+    @pytest.mark.asyncio
+    async def test_cosmetic_apply_reapplies_when_hash_differs(
+        self, tmp_path, monkeypatch
+    ):
+        """State record with DIFFERENT hash → fresh apply (replaces content)."""
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        import yaml
+
+        from mage.artifacts.cosmetic_state import (
+            CosmeticApplied,
+            CosmeticAppliedState,
+            save_state,
+        )
+
+        project_dir = tmp_path
+        target = project_dir / "src" / "example.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("line1\nline2\nline3\n")
+
+        (project_dir / "mapping.yaml").write_text(
+            yaml.safe_dump({
+                "schema_version": 2,
+                "project_id": "p",
+                "base_bids": [],
+                "feature_cosmetic_queue": [{
+                    "feature_id": "feat-1",
+                    "sub_bid": "00000-001",
+                    "text": "use a constant",
+                    "location": {"file": "src/example.py", "line": 2},
+                    "proposed_by": "IncrementQualityReviewer",
+                }],
+            })
+        )
+
+        prior = CosmeticAppliedState(applied={
+            "00000-001": CosmeticApplied(
+                content_hash="different-hash-9999",
+                applied_at=datetime(2026, 7, 30, tzinfo=UTC),
+                file=Path("src/example.py"),
+                rationale="prior content",
+            ),
+        })
+        save_state(project_dir, prior)
+
+        monkeypatch.setattr(
+            "mage.agents.cosmetic_refiner.CosmeticRefiner",
+            lambda **kw: _PassthroughRefiner(),
+        )
+
+        recorded: list[tuple] = []
+
+        def fake_run(cmd, **kwargs):
+            recorded.append((cmd, kwargs))
+
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return R()
+
+        # Patch subprocess.run directly: the asyncio.to_thread wrapper in
+        # cli.py preserves the patched function without blocking the LLM
+        # refine fan-out (which also goes through asyncio.to_thread).
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        rc = _run_cli(
+            "cosmetic", "apply", "feat-1", "--project-dir", str(project_dir)
+        )
+        assert rc == 0
+        assert "x = 42" in target.read_text(), "hash mismatch must allow reapply"
+        assert len(recorded) == 1, (
+            f"expected exactly one git commit invocation, got {recorded!r}"
+        )
+
 
 class TestInspectShow:
     @pytest.mark.asyncio
