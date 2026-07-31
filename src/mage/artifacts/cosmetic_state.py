@@ -9,7 +9,6 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-
 _STATE_FILENAME = "cosmetic_applied.yaml"
 _STATE_DIR = ".haileris"
 
