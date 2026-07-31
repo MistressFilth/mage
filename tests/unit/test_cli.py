@@ -16,6 +16,7 @@ class _PassthroughRefiner:
 
     async def refine(self, raw, *, semaphore):
         from pathlib import Path as _P
+
         from mage.artifacts.cosmetic import CosmeticItem
         return CosmeticItem(
             sub_bid=raw["sub_bid"],

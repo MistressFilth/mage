@@ -11,7 +11,7 @@ import pytest
 
 from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.cosmetic_watcher import MappingArtifactWatcher
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 
 
 def _write_mapping(project_dir: Path, *, feature_id: str = "feat-1", sub_bid: str = "00000-001") -> None:
