@@ -99,7 +99,7 @@ No new members; existing 4 (Plan 9): `COSMETIC_ITEM_APPLIED`, `COSMETIC_ITEM_SKI
                 content_hash=item.content_hash, applied_at=now,
                 file=item.file_path, rationale=item.rationale)
             save_state(project_dir, state)
-        emit COSMETIC_ITEM_APPLIED
+        emit COSMETIC_ITEM_APPLIED if not args.dry_run else COSMETIC_ITEM_SKIPPED
     except Exception as e → emit COSMETIC_APPLY_FAILED(reason=str(e),
                                                       error_type=type(e).__name__)
 ```
