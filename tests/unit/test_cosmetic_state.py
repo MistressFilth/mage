@@ -28,11 +28,12 @@ def test_cosmetic_state_load_returns_empty_when_missing(tmp_path):
     assert state.applied == {}
 
 
-def test_cosmetic_state_save_then_load_round_trip(tmp_path):
+@pytest.mark.asyncio
+async def test_cosmetic_state_save_then_load_round_trip(tmp_path):
     state = CosmeticAppliedState(applied={
         "00000-001": _applied(),
     })
-    save_state(tmp_path, state)
+    await save_state(tmp_path, state)
     loaded = load_state(tmp_path)
     assert loaded.applied["00000-001"].content_hash == "abc123"
     assert loaded.applied["00000-001"].file == Path("src/example.py")

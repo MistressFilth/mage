@@ -5,11 +5,9 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field
 
 import yaml
+from pydantic import BaseModel, ConfigDict, Field
 
 
 _STATE_FILENAME = "cosmetic_applied.yaml"
@@ -37,10 +35,6 @@ def _state_path(project_dir: Path) -> Path:
     return project_dir / _STATE_DIR / _STATE_FILENAME
 
 
-def _lock_path(project_dir: Path) -> Path:
-    return project_dir / _STATE_DIR / f".{_STATE_FILENAME}.lock"
-
-
 _GLOBAL_LOCKS: dict[str, asyncio.Lock] = {}
 
 
@@ -64,13 +58,14 @@ def load_state(project_dir: Path) -> CosmeticAppliedState:
         return CosmeticAppliedState()
 
 
-def save_state(project_dir: Path, state: CosmeticAppliedState) -> None:
-    """Atomic write via temp + rename."""
+async def save_state(project_dir: Path, state: CosmeticAppliedState) -> None:
+    """Atomic write via temp + rename. Holds the per-project asyncio.Lock."""
     target = _state_path(project_dir)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(yaml.safe_dump(state.model_dump(mode="json")))
-    tmp.replace(target)
+    async with _get_lock(project_dir):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(yaml.safe_dump(state.model_dump(mode="json")))
+        tmp.replace(target)
 
 
 def is_already_applied(
