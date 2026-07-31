@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         InspectArtifactRef,
         InspectJournalEntry,
     )
+    from mage.orchestration.events import EventsLog
 
 
 class LifecycleStatus(str, Enum):
@@ -253,7 +254,12 @@ class MappingArtifact(BaseModel):
             "cosmetic_queue_size": len(self.feature_cosmetic_queue),
         }
 
-    async def save(self, path: Path) -> None:
+    async def save(
+        self,
+        path: Path,
+        *,
+        events_log: EventsLog | None = None,
+    ) -> None:
         async with self._get_save_lock():
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp_path = path.with_suffix(path.suffix + ".tmp")
@@ -261,6 +267,21 @@ class MappingArtifact(BaseModel):
                 yaml.safe_dump(self.model_dump(mode="json"), sort_keys=False)
             )
             tmp_path.replace(path)
+        if events_log is not None:
+            from datetime import UTC, datetime
+
+            from mage.orchestration.events import Event, EventType
+
+            await events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.MAPPING_SAVED,
+                    payload={
+                        "feature_cosmetic_queue_size": len(self.feature_cosmetic_queue),
+                        "base_bids_count": len(self.base_bids),
+                    },
+                )
+            )
 
     @classmethod
     def load(cls, path: Path) -> MappingArtifact:
