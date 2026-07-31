@@ -29,6 +29,7 @@ class PipelineContext(BaseModel):
     plan_path: Path | None = Field(default=None, validate_default=True)
     automation_cursor: AutomationCursor | None = None
     host_config: HostConfig | None = None
+    feature_id: str = ""
 
     @field_serializer("events_log")
     def _serialize_events_log(self, log: EventsLog) -> str:
