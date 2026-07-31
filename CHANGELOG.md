@@ -37,6 +37,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Plan 10: `PydanticEtchAgent` and `CosmeticRefiner` gain a test-mode passthrough when `model` is unset or set to the string `"test"`. The agent synthesizes a `RedTestSpec` / `CosmeticItem` directly from the call arguments without invoking the LLM. This makes `mage cosmetic apply --model test` and EtchStage runs deterministic in CI without per-call TestModel configuration. The passthrough takes precedence only when no agent has been injected by a test (existing unit tests that monkey-patch `self._agent` still win).
+- Plan 10: `mage cosmetic apply` accepts `--model <id>` to override `HostConfig.model` for a single invocation (mirrors `mage run --model`). Useful for switching the cosmetic refiner between the configured model and the test passthrough without editing `mage.toml`.
+- Plan 10: `mage cosmetic apply` surfaces specific failure `reason` values in `cosmetic_apply_failed` events: `"git-timeout"` when `git commit` exceeds the 30s `subprocess.TimeoutExpired` window, and `"state-save-failed"` when the post-apply idempotency-state write fails. The fallback `reason=str(e)` path is retained for any other unhandled exception.
 - `PipelineGraph.run` and all `StageNode.run` methods are now async coroutines; the CLI wraps execution in `asyncio.run`. `EventsLog.append` and `MappingArtifact.save` are async and serialized via per-instance `asyncio.Lock`. `acquire_cycle_lock` and `release_cycle_lock` are async and use a per-context `asyncio.Lock`.
 - Plan 9: `mage run` no longer requires `--dry-run`. The same stage graph is wired regardless of mode; per-agent stub-vs-real substitution is driven by whether `HostConfig.model` is set (default unset → stub agents; `--model` or config → Pydantic-AI agents).
 - feat(orchestrator): wire StageNodes to DisciplineStage event subscriptions,
