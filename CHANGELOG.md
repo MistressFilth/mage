@@ -14,6 +14,9 @@ All notable changes to this project are documented here. The format follows
 - Plan 9: `CosmeticRefiner` LLM agent converts raw cosmetic-queue dicts into concrete `CosmeticItem` records; falls back to a stub (file_path=None) when the LLM errors.
 - Plan 9: `mage cosmetic show <feature_id>` — refines queue and prints items as a table.
 - Plan 9: `mage cosmetic apply <feature_id> [--dry-run]` — refines queue, atomically edits files, commits per item on the feature branch, and emits 4 new audit events (`COSMETIC_ITEM_APPLIED`, `COSMETIC_ITEM_SKIPPED`, `COSMETIC_APPLY_FAILED`, `COSMETIC_REFINER_FALLBACK`).
+- Plan 10: `MappingArtifact.feature_cosmetic_queue` entries gain a required `feature_id` field (schema_version bumped to 2); `mage cosmetic {show,apply}` filter by feature.
+- Plan 10: `CosmeticAppliedState` persists already-applied items at `.haileris/cosmetic_applied.yaml`; `mage cosmetic apply` re-runs skip already-applied sub_bids (matches by content_hash) and re-applies when content changes.
+- Plan 10: 6 `test_e2e_*` cases from the Plan 9 spec landed: cosmetic apply success/idempotency/missing-file; EtchStage + InspectLoop with real LLM wiring; gated `mage run` no-dry-run smoke.
 - feat(discipline): add Plan 7 Three Practices enforcement for all six Approved
   Gate Scope rules (P1-P6), revision flow, full supersession flow (v1 only),
   and the cosmetic gate.
