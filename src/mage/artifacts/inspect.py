@@ -26,6 +26,8 @@ class InspectJournalEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     timestamp: datetime
+    feature_id: str = ""
+    scenario_id: str = ""
     iteration: int
     dimension: str  # "mechanical" | "increment_quality" | "<reviewer_dimension>"
     severity: Literal["critical", "major", "minor"]
