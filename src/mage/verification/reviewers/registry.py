@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from mage.artifacts.verdict import (
     DimensionSummary,
@@ -30,6 +32,38 @@ def default_reviewer_registry() -> dict[str, type[ReviewerAgent]]:
         "naming_idiom": NamingIdiomReviewer,
         "lifecycle_tags": LifecycleTagsReviewer,
     }
+
+
+def feature_reviewer_registry(
+    *,
+    model: Any | None = None,
+    model_factory: Callable[[], Any] | None = None,
+) -> list[ReviewerAgent]:
+    """Build the end-of-feature reviewer set with an injected model.
+
+    Exactly one of ``model`` or ``model_factory`` is required. A factory is useful
+    for providers that require an independent model instance per agent. Reviewers
+    are rebuilt on every call so host/model changes cannot be hidden by process-wide
+    cached agents.
+    """
+    if (model is None) == (model_factory is None):
+        raise ValueError("provide exactly one of model or model_factory")
+
+    from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+
+    def next_model() -> Any:
+        return model_factory() if model_factory is not None else model
+
+    return [
+        SpecComplianceReviewer(model=next_model()),
+        ScenarioClarityReviewer(model=next_model()),
+        StepGrammarReviewer(model=next_model()),
+        TestabilityReviewer(model=next_model()),
+        DeterminismReviewer(model=next_model()),
+        NamingIdiomReviewer(model=next_model()),
+        LifecycleTagsReviewer(model=next_model()),
+        CrossScenarioReviewer(model=next_model()),
+    ]
 
 
 def aggregate_verdicts(
@@ -61,7 +95,8 @@ def aggregate_verdicts(
 
     decision = "needs_refactor" if any_fail else "approved"
     reasoning = (
-        f"all 7 dimensions passed" if decision == "approved"
+        "all 7 dimensions passed"
+        if decision == "approved"
         else f"at least one dimension failed; iteration={iteration}"
     )
 

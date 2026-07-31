@@ -41,6 +41,23 @@ class CheckResult(BaseModel):
     detail: str | None = None
 
 
+class MechanicalFinding(BaseModel):
+    """A single finding emitted by mechanical verification.
+
+    Parallel to ReviewerFinding, but tagged with the originating `check`
+    name (instead of a free-form `id`) so callers can group/route findings
+    back to the specific check that raised them.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    check: str
+    severity: Literal["critical", "major", "minor"]
+    location: str
+    issue: str
+    rationale: str
+
+
 class MechanicalCheck(ABC):
     """Abstract base for mechanical checks.
 
@@ -58,8 +75,7 @@ class MechanicalCheck(ABC):
         return self._run(draft, mapping)
 
     @abstractmethod
-    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
-        ...
+    def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult: ...
 
 
 class MechanicalVerifier:
@@ -68,8 +84,24 @@ class MechanicalVerifier:
     def __init__(self, checks: list[MechanicalCheck]) -> None:
         self.checks = list(checks)
 
-    def verify(self, draft: ScenarioDraft, mapping: MappingArtifact) -> list[CheckResult]:
-        """Run all registered checks. Returns one CheckResult per check."""
+    def verify(
+        self,
+        draft: ScenarioDraft | None = None,
+        mapping: MappingArtifact | None = None,
+        *,
+        scope: str | None = None,
+    ) -> list[CheckResult]:
+        """Run all registered checks. Returns one CheckResult per check.
+
+        Plan 1 callers pass (draft, mapping) positionally. Plan 4's
+        InspectLoopStage calls verify(scope="increment") as a per-increment
+        hook — when called that way, no draft is wired yet and the verifier
+        returns an empty list (Plan 4's per-increment checks are caller-
+        supplied stubs; this method exists as a stable API surface so the
+        graph can wire the verifier in without an AttributeError).
+        """
+        if scope is not None or draft is None:
+            return []
         return [check.run(draft, mapping) for check in self.checks]
 
     def all_passed(self, results: list[CheckResult]) -> bool:
@@ -189,7 +221,9 @@ class LifecycleStatusTagPresentCheck(MechanicalCheck):
                 outcome="fail",
                 detail="missing lifecycle status tag (e.g. @status-inscribing)",
             )
-        invalid = [t for t in lifecycle_tags if t[len(self.PREFIX):] not in self.VALID_VALUES]
+        invalid = [
+            t for t in lifecycle_tags if t[len(self.PREFIX) :] not in self.VALID_VALUES
+        ]
         if invalid:
             return CheckResult(
                 name=self.name,
@@ -237,10 +271,7 @@ class CrossBehaviorTagsValidCheck(MechanicalCheck):
         if not cross_tags:
             return CheckResult(name=self.name, outcome="pass", detail=None)
         existing = {entry.base_bid for entry in mapping.base_bids}
-        dangling = [
-            t for t in cross_tags
-            if t[len(self.PREFIX):] not in existing
-        ]
+        dangling = [t for t in cross_tags if t[len(self.PREFIX) :] not in existing]
         if dangling:
             return CheckResult(
                 name=self.name,

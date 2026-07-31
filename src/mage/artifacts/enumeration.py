@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml as _yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 
 
 class BehaviorSpec(BaseModel):
@@ -84,7 +84,7 @@ def _topological_sort(
     return result
 
 
-def enumerate_behaviors(
+async def enumerate_behaviors(
     behavior_specs: list[BehaviorSpec],
     mapping: MappingArtifact,
     project_dir: Path | None = None,
@@ -175,6 +175,7 @@ def enumerate_behaviors(
 
     if project_dir is None:
         return entries
+    assert events_log is not None
 
     project_dir = Path(project_dir)
 
@@ -187,7 +188,7 @@ def enumerate_behaviors(
     behaviors_data = {
         "schema_version": 1,
         "feature_id": feature_id,
-        "enumerated_at": datetime.now(timezone.utc).isoformat(),
+        "enumerated_at": datetime.now(UTC).isoformat(),
         "behaviors": [
             {
                 "id": e.base_bid,
@@ -207,11 +208,11 @@ def enumerate_behaviors(
     tmp.replace(behaviors_path)
 
     # Write updated mapping atomically.
-    updated_mapping.save(project_dir / "mapping.yaml")
+    await updated_mapping.save(project_dir / "mapping.yaml")
 
-    events_log.append(
+    await events_log.append(
         Event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             event_type=EventType.BEHAVIORS_ENUMERATED,
             payload={
                 "count": len(entries),
