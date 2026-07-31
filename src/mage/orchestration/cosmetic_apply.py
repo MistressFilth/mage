@@ -148,6 +148,7 @@ async def apply_for_feature(
                             },
                         )
                     )
+                    continue
             await log.append(
                 Event(
                     timestamp=now,
