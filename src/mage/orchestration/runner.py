@@ -99,11 +99,13 @@ class FeatureRunner:
         realize: _RealizeLike,
         inspect_loop: _InspectLike,
         per_loop_max_iterations: int,
+        feature_id: str = "",
     ) -> None:
         self.etch = etch
         self.realize = realize
         self.inspect_loop = inspect_loop
         self.per_loop_max_iterations = per_loop_max_iterations
+        self.feature_id = feature_id
         self.cursor: AutomationCursor | None = None
 
     async def run(
@@ -113,6 +115,7 @@ class FeatureRunner:
         *,
         cursor: AutomationCursor | None = None,
     ) -> list[ScenarioOutcome]:
+        context.feature_id = self.feature_id
         outcomes: list[ScenarioOutcome] = []
         # Skip scenarios preceding the cursor.
         if cursor is not None:
