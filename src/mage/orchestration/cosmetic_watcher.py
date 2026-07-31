@@ -49,7 +49,12 @@ class MappingArtifactWatcher:
         """Long-running loop. Returns on `stop()`."""
         log_path = self.events_log.log_path
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        offset = log_path.stat().st_size if log_path.exists() else 0
+        # Emit the STARTED event first, then snapshot the file size and
+        # catch up on any MAPPING_SAVED that landed *before* the watcher
+        # was ready. The previous order — offset-before-STARTED — could
+        # race with a concurrent `mage mapping save` and silently drop
+        # the event (the file-size snapshot would already include the
+        # MAPPING_SAVED bytes, so the poll loop would skip past them).
         await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
@@ -60,6 +65,8 @@ class MappingArtifactWatcher:
                 },
             )
         )
+        await self._handle_mapping_saved()
+        offset = log_path.stat().st_size if log_path.exists() else 0
         try:
             while not self._stop:
                 await asyncio.sleep(self.poll_interval_ms / 1000)
