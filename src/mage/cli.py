@@ -589,10 +589,20 @@ async def cmd_cosmetic_show(args) -> int:
     host_config = load_host_config(project_dir)
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
+    queue = [
+        q for q in mapping.feature_cosmetic_queue
+        if q.get("feature_id") == args.feature_id
+    ]
+    if not queue:
+        print(
+            f"mage cosmetic show: no items for feature_id={args.feature_id}",
+            file=sys.stderr,
+        )
+        return 0
     refined = await asyncio.gather(
         *[
             refiner.refine(q, semaphore=semaphore)
-            for q in mapping.feature_cosmetic_queue
+            for q in queue
         ]
     )
     for item in refined:
@@ -623,10 +633,20 @@ async def cmd_cosmetic_apply(args) -> int:
     host_config = load_host_config(project_dir)
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
+    queue = [
+        q for q in mapping.feature_cosmetic_queue
+        if q.get("feature_id") == args.feature_id
+    ]
+    if not queue:
+        print(
+            f"mage cosmetic apply: no items for feature_id={args.feature_id}",
+            file=sys.stderr,
+        )
+        return 0
     refined = await asyncio.gather(
         *[
             refiner.refine(q, semaphore=semaphore)
-            for q in mapping.feature_cosmetic_queue
+            for q in queue
         ]
     )
 
