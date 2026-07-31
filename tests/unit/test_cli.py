@@ -11,6 +11,22 @@ import pytest
 from mage import cli
 
 
+class _PassthroughRefiner:
+    """Refines raw queue dicts into CosmeticItem objects verbatim."""
+
+    async def refine(self, raw, *, semaphore):
+        from pathlib import Path as _P
+        from mage.artifacts.cosmetic import CosmeticItem
+        return CosmeticItem(
+            sub_bid=raw["sub_bid"],
+            file_path=_P(raw["location"]["file"]),
+            line_range=(raw["location"]["line"] - 1, raw["location"]["line"] + 1),
+            replacement_text="x = 42\n",
+            rationale=raw["text"],
+            proposed_by=raw["proposed_by"],
+        )
+
+
 class TestCli:
     def test_help_exits_zero(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
@@ -408,6 +424,60 @@ class TestCosmeticShow:
         assert "src/example.py" in captured.out
         assert "00000-001" in captured.out
 
+    @pytest.mark.asyncio
+    async def test_cosmetic_show_filters_by_feature_id(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        import yaml
+
+        project_dir = tmp_path
+        mapping_path = project_dir / "mapping.yaml"
+        mapping_path.parent.mkdir(parents=True, exist_ok=True)
+        mapping_path.write_text(
+            yaml.safe_dump(
+                {
+                    "schema_version": 2,
+                    "project_id": "p",
+                    "base_bids": [],
+                    "feature_cosmetic_queue": [
+                        {
+                            "feature_id": "feat-1",
+                            "sub_bid": "00000-001",
+                            "text": "match",
+                            "location": {"file": "src/match.py", "line": 5},
+                            "proposed_by": "IncrementQualityReviewer",
+                        },
+                        {
+                            "feature_id": "feat-2",
+                            "sub_bid": "00000-002",
+                            "text": "other",
+                            "location": {"file": "src/other.py", "line": 7},
+                            "proposed_by": "IncrementQualityReviewer",
+                        },
+                    ],
+                }
+            )
+        )
+
+        monkeypatch.setattr(
+            "mage.agents.cosmetic_refiner.CosmeticRefiner",
+            lambda **kw: _PassthroughRefiner(),
+        )
+
+        rc = _run_cli(
+            "cosmetic",
+            "show",
+            "feat-1",
+            "--project-dir",
+            str(project_dir),
+        )
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "src/match.py" in captured.out
+        assert "src/other.py" not in captured.out
+        assert "00000-001" in captured.out
+        assert "00000-002" not in captured.out
+
 
 class TestCosmeticApply:
     @pytest.mark.asyncio
@@ -498,6 +568,82 @@ class TestCosmeticApply:
             "dry-run must not emit COSMETIC_ITEM_APPLIED"
         )
         assert all("cosmetic_refiner_fallback" not in line for line in events)
+
+    @pytest.mark.asyncio
+    async def test_cosmetic_apply_filters_by_feature_id(
+        self, tmp_path, monkeypatch
+    ):
+        import yaml
+
+        project_dir = tmp_path
+        target_match = project_dir / "src" / "match.py"
+        target_match.parent.mkdir(parents=True, exist_ok=True)
+        target_match.write_text("line1\nline2\nline3\nline4\nline5\n")
+        target_other = project_dir / "src" / "other.py"
+        target_other.write_text("line1\nline2\nline3\nline4\nline5\n")
+
+        (project_dir / "mapping.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "schema_version": 2,
+                    "project_id": "p",
+                    "base_bids": [],
+                    "feature_cosmetic_queue": [
+                        {
+                            "feature_id": "feat-1",
+                            "sub_bid": "00000-001",
+                            "text": "match",
+                            "location": {"file": "src/match.py", "line": 3},
+                            "proposed_by": "IncrementQualityReviewer",
+                        },
+                        {
+                            "feature_id": "feat-2",
+                            "sub_bid": "00000-002",
+                            "text": "other",
+                            "location": {"file": "src/other.py", "line": 3},
+                            "proposed_by": "IncrementQualityReviewer",
+                        },
+                    ],
+                }
+            )
+        )
+
+        monkeypatch.setattr(
+            "mage.agents.cosmetic_refiner.CosmeticRefiner",
+            lambda **kw: _PassthroughRefiner(),
+        )
+
+        # Stub subprocess so we don't try to git-commit.
+        recorded: list[tuple] = []
+
+        def fake_run(cmd, **kwargs):
+            recorded.append((cmd, kwargs))
+
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return R()
+
+        monkeypatch.setattr("mage.cli.subprocess.run", fake_run)
+        rc = _run_cli(
+            "cosmetic",
+            "apply",
+            "feat-1",
+            "--dry-run",
+            "--project-dir",
+            str(project_dir),
+        )
+        assert rc == 0
+        # Filter narrows event log to the matching feature only.
+        events = list((project_dir / "events.jsonl").read_text().splitlines())
+        assert any("src/match.py" in line for line in events), (
+            f"feat-1 item must be in event log, got: {events!r}"
+        )
+        assert not any("src/other.py" in line for line in events), (
+            f"feat-2 item must not be applied when filtering for feat-1; got: {events!r}"
+        )
 
 
 class TestInspectShow:
