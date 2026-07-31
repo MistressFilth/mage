@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import signal
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -147,6 +148,32 @@ def build_parser() -> argparse.ArgumentParser:
             "Override the LLM model identifier (use 'test' for the "
             "Pydantic-AI TestModel stub)"
         ),
+    )
+
+    # mage cosmetic watch
+    cosmetic_watch_parser = cosmetic_subparsers.add_parser(
+        "watch",
+        help="Long-running daemon that auto-applies cosmetic queue items",
+    )
+    cosmetic_watch_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_watch_parser.add_argument(
+        "--poll-interval-ms", type=int, default=250
+    )
+
+    # mage mapping
+    mapping_parser = subparsers.add_parser(
+        "mapping", help="Mapping artifact operations"
+    )
+    mapping_subparsers = mapping_parser.add_subparsers(
+        dest="mapping_command", required=True
+    )
+    mapping_save_parser = mapping_subparsers.add_parser(
+        "save", help="Re-save mapping.yaml and emit MAPPING_SAVED"
+    )
+    mapping_save_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
     )
 
     return parser
@@ -633,6 +660,49 @@ async def cmd_cosmetic_apply(args) -> int:
     )
 
 
+async def cmd_mapping_save(args) -> int:
+    """Re-save mapping.yaml and emit MAPPING_SAVED.
+
+    Used by E2E tests and external hooks that want to trigger the
+    cosmetic watcher without modifying the mapping content.
+    """
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    log = EventsLog(project_dir / "events.jsonl")
+    mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml", events_log=log)
+    return 0
+
+
+async def cmd_cosmetic_watch(args) -> int:
+    """Long-running daemon: auto-apply cosmetic queue items on MAPPING_SAVED."""
+    from mage.orchestration.cosmetic_watcher import MappingArtifactWatcher
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    poll_interval_ms: int = getattr(args, "poll_interval_ms", 250)
+    watcher = MappingArtifactWatcher(
+        project_dir,
+        poll_interval_ms=poll_interval_ms,
+    )
+
+    loop = asyncio.get_running_loop()
+
+    def _request_stop() -> None:
+        watcher.stop()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _request_stop)
+        except (NotImplementedError, RuntimeError):
+            # Windows or non-main thread: skip signal handlers.
+            pass
+
+    await watcher.run()
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -689,6 +759,10 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_cosmetic_show(args)
     if args.command == "cosmetic" and args.cosmetic_command == "apply":
         return await cmd_cosmetic_apply(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "watch":
+        return await cmd_cosmetic_watch(args)
+    if args.command == "mapping" and args.mapping_command == "save":
+        return await cmd_mapping_save(args)
     parser.print_help()
     raise SystemExit(1)
 
