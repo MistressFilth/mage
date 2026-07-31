@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import subprocess
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -622,162 +620,17 @@ async def cmd_cosmetic_show(args) -> int:
 
 
 async def cmd_cosmetic_apply(args) -> int:
-    """Refine queue, edit files in place, and commit each item."""
-    from mage.agents.cosmetic_refiner import CosmeticRefiner
-    from mage.artifacts.cosmetic_state import (
-        CosmeticApplied,
-        is_already_applied,
-        load_state,
-        save_state,
-    )
-    from mage.artifacts.mapping import MappingArtifact
-    from mage.orchestration.events import Event, EventsLog, EventType
+    """CLI shim: delegate to apply_for_feature."""
+    from mage.orchestration.cosmetic_apply import apply_for_feature
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    log = EventsLog(project_dir / "events.jsonl")
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic apply: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
-    host_config = load_host_config(project_dir)
-    if getattr(args, "model", None):
-        host_config = host_config.model_copy(update={"model": args.model})
-    refiner = CosmeticRefiner(model=host_config.model)
-    semaphore = asyncio.Semaphore(7)
-    queue = [
-        q for q in mapping.feature_cosmetic_queue
-        if q.get("feature_id") == args.feature_id
-    ]
-    if not queue:
-        print(
-            f"mage cosmetic apply: no items for feature_id={args.feature_id}",
-            file=sys.stderr,
-        )
-        return 0
-    refined = await asyncio.gather(
-        *[
-            refiner.refine(q, semaphore=semaphore)
-            for q in queue
-        ]
+    model = getattr(args, "model", None)
+    return await apply_for_feature(
+        project_dir,
+        args.feature_id,
+        dry_run=getattr(args, "dry_run", False),
+        model=model,
     )
-
-    state = load_state(project_dir)
-    now = datetime.now(UTC)
-    for item in refined:
-        if item.file_path is None:
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_REFINER_FALLBACK,
-                    payload={"sub_bid": item.sub_bid, "rationale": item.rationale},
-                )
-            )
-            continue
-        if is_already_applied(state, item.sub_bid, item.content_hash):
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_SKIPPED,
-                    payload={
-                        "sub_bid": item.sub_bid,
-                        "reason": "already-applied",
-                    },
-                )
-            )
-            continue
-        target = project_dir / item.file_path
-        if not target.exists():
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_APPLY_FAILED,
-                    payload={"sub_bid": item.sub_bid, "reason": "file-missing"},
-                )
-            )
-            continue
-        try:
-            lines = target.read_text().splitlines()
-            new_lines = (
-                lines[: item.line_range[0] - 1]
-                + item.replacement_text.splitlines()
-                + lines[item.line_range[1] :]
-            )
-            applied = not args.dry_run
-            if applied:
-                target.write_text("\n".join(new_lines) + "\n")
-                try:
-                    await asyncio.to_thread(
-                        subprocess.run,
-                        [
-                            "git",
-                            "commit",
-                            "-am",
-                            f"cosmetic({item.sub_bid}): {item.rationale}",
-                        ],
-                        cwd=str(project_dir),
-                        check=True,
-                        timeout=30,
-                    )
-                except subprocess.TimeoutExpired:
-                    await log.append(
-                        Event(
-                            timestamp=now,
-                            event_type=EventType.COSMETIC_APPLY_FAILED,
-                            payload={
-                                "sub_bid": item.sub_bid,
-                                "reason": "git-timeout",
-                                "error_type": "TimeoutExpired",
-                            },
-                        )
-                    )
-                    continue
-                state.applied[item.sub_bid] = CosmeticApplied(
-                    content_hash=item.content_hash,
-                    applied_at=now,
-                    file=item.file_path,  # type: ignore[arg-type]
-                    rationale=item.rationale,
-                )
-                try:
-                    await save_state(project_dir, state)
-                except Exception:
-                    await log.append(
-                        Event(
-                            timestamp=now,
-                            event_type=EventType.COSMETIC_APPLY_FAILED,
-                            payload={
-                                "sub_bid": item.sub_bid,
-                                "reason": "state-save-failed",
-                                "error_type": "Exception",
-                            },
-                        )
-                    )
-                    continue
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_APPLIED
-                    if applied
-                    else EventType.COSMETIC_ITEM_SKIPPED,
-                    payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
-                )
-            )
-        except Exception as e:  # surface any failure as an audit event
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_APPLY_FAILED,
-                    payload={
-                        "sub_bid": item.sub_bid,
-                        "reason": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                )
-            )
-    return 0
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
