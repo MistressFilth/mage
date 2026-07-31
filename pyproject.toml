@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mage"
 version = "0.3.0"
-description = "HAILERIS v2 execution engine: spec-driven development pipeline"
+description = "mage execution engine: spec-driven development pipeline"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.6",
