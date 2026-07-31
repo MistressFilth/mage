@@ -71,6 +71,10 @@ class EventType(str, Enum):
     INSPECT_LOOP_PASSED = "inspect_loop_passed"
     INSPECT_LOOP_FAILED = "inspect_loop_failed"
     INSPECT_LOOP_COMPLETED = "inspect_loop_completed"
+
+    # Plan 12 — InspectLoop feature_id threading
+    INSPECT_LOOP_FEATURE_RESOLVED = "inspect_loop_feature_resolved"
+
     INSPECT_JOURNAL_APPENDED = "inspect_journal_appended"
     SCENARIO_HALT_PERSISTED = "scenario_halt_persisted"
 
