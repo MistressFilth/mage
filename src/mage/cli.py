@@ -243,7 +243,12 @@ class _StubStageNode(StageNode):
         return context
 
 
-def _make_dry_run_runner(log, host_config) -> FeatureRunner:
+def _make_dry_run_runner(
+    log,
+    host_config,
+    *,
+    feature_id: str = "",
+) -> FeatureRunner:
     """Construct a FeatureRunner wired with stub agents for --dry-run mode."""
     from mage.orchestration.etch import EtchStage
     from mage.orchestration.inspect_loop import InspectLoopStage
@@ -263,6 +268,7 @@ def _make_dry_run_runner(log, host_config) -> FeatureRunner:
         realize=realize,
         inspect_loop=inspect,
         per_loop_max_iterations=host_config.per_loop_max_iterations,
+        feature_id=feature_id,
     )
 
 
