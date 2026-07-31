@@ -10,3 +10,4 @@ build/
 mapping.yaml
 events.jsonl
 pipeline-state.yaml
+docs/superpowers/
