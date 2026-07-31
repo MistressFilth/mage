@@ -96,4 +96,6 @@ def parse_ascertain(path: Path) -> AscertainOutput:
     try:
         return AscertainOutput(**frontmatter, body=body)
     except Exception as e:
-        raise AscertainSchemaError(f"Ascertain frontmatter validation failed: {e}") from e
+        raise AscertainSchemaError(
+            f"Ascertain frontmatter validation failed: {e}"
+        ) from e

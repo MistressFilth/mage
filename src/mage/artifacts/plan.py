@@ -10,7 +10,7 @@ import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
 
 
 class PlanError(Exception):
@@ -61,7 +61,8 @@ class PlanArtifact:
     ) -> Event | None:
         plan_path_str = str(plan_path)
         candidates = [
-            e for e in events_log.read_all()
+            e
+            for e in events_log.read_all()
             if e.event_type in event_types
             and e.payload.get("plan_path") == plan_path_str
         ]
@@ -70,7 +71,7 @@ class PlanArtifact:
         return max(candidates, key=lambda e: e.timestamp)
 
     @classmethod
-    def finalize(
+    async def finalize(
         cls, plan_path: Path, content: str, events_log: EventsLog
     ) -> str:
         """Write Plan atomically, compute SHA256, emit PLAN_FINALIZED.
@@ -99,7 +100,7 @@ class PlanArtifact:
         tmp_path.write_text(content, encoding="utf-8")
         tmp_path.replace(plan_path)
 
-        events_log.append(
+        await events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.PLAN_FINALIZED,
@@ -110,7 +111,7 @@ class PlanArtifact:
         return digest
 
     @classmethod
-    def load(cls, plan_path: Path, events_log: EventsLog) -> str:
+    async def load(cls, plan_path: Path, events_log: EventsLog) -> str:
         """Read Plan with digest verification.
 
         Returns content on success. Raises PlanDigestMismatchError if on-disk
@@ -127,9 +128,7 @@ class PlanArtifact:
                 f"refusing to read unverified Plan content."
             )
 
-        recorded_digest = (
-            _recorded_digest(event)
-        )
+        recorded_digest = _recorded_digest(event)
 
         if not plan_path.exists():
             raise PlanNotFinalizedError(
@@ -141,7 +140,7 @@ class PlanArtifact:
 
         if computed_digest != recorded_digest:
             # Emit diagnostic event before raising
-            events_log.append(
+            await events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,
@@ -162,7 +161,7 @@ class PlanArtifact:
         return content
 
     @classmethod
-    def revise(
+    async def revise(
         cls,
         plan_path: Path,
         content: str,
@@ -186,11 +185,7 @@ class PlanArtifact:
         existing = cls._latest_event_for_path(
             events_log, plan_path, (EventType.PLAN_FINALIZED, EventType.PLAN_REVISED)
         )
-        old_digest = (
-            _recorded_digest(existing)
-            if existing is not None
-            else None
-        )
+        old_digest = _recorded_digest(existing) if existing is not None else None
 
         # Atomic write
         plan_path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,7 +193,7 @@ class PlanArtifact:
         tmp_path.write_text(content, encoding="utf-8")
         tmp_path.replace(plan_path)
 
-        events_log.append(
+        await events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.PLAN_REVISED,

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from mage.artifacts.mapping import MappingArtifact
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.runner import AutomationCursor
+from mage.verification.host_overrides import HostConfig
 
 
 class PipelineContext(BaseModel):
@@ -24,6 +27,8 @@ class PipelineContext(BaseModel):
     current_sub_bid: str | None = None
     iteration: int = 0
     plan_path: Path | None = Field(default=None, validate_default=True)
+    automation_cursor: AutomationCursor | None = None
+    host_config: HostConfig | None = None
 
     @field_serializer("events_log")
     def _serialize_events_log(self, log: EventsLog) -> str:
@@ -48,11 +53,25 @@ class PipelineContext(BaseModel):
                 return project_dir / "plan.md"
         return value
 
+    def __init__(self, **data: object) -> None:
+        super().__init__(**data)
+        self._cycle_lock: asyncio.Lock | None = None  # lazy; requires running loop
+
+    def _get_cycle_lock(self) -> asyncio.Lock:
+        """Return the per-context asyncio.Lock, creating it lazily.
+
+        Mirrors `EventsLog._get_lock` and `MappingArtifact._get_save_lock`.
+        Lazy because `asyncio.Lock()` requires a running event loop.
+        """
+        if self._cycle_lock is None:
+            self._cycle_lock = asyncio.Lock()
+        return self._cycle_lock
+
 
 class StageNode(ABC):
     """Abstract base for all pipeline stages.
 
-    Subclasses must define `name` and implement `run()`. The base class
+    Subclasses must define `name` and implement async `_run()`. The base class
     emits STAGE_STARTED and STAGE_COMPLETED events around each run.
     """
 
@@ -63,27 +82,23 @@ class StageNode(ABC):
             raise ValueError(f"{type(self).__name__} must define `name`")
         self.events_log = events_log
 
-    def run(self, context: PipelineContext) -> PipelineContext:
+    async def run(self, context: PipelineContext) -> PipelineContext:
         """Execute the stage, emitting start/complete events."""
-        self._emit(EventType.STAGE_STARTED)
-        try:
-            result = self._run(context)
-            self._emit(EventType.STAGE_COMPLETED)
-            return result
-        except Exception:
-            # Don't emit COMPLETED on failure; let the exception propagate.
-            raise
+        await self._emit(EventType.STAGE_STARTED)
+        result = await self._run(context)
+        await self._emit(EventType.STAGE_COMPLETED)
+        return result
 
     @abstractmethod
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         """Stage-specific execution. Must be implemented by subclasses."""
         ...
 
-    def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
+    async def _emit(self, event_type: EventType, payload: dict | None = None) -> None:
         """Emit an event to the log."""
         event = Event(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             event_type=event_type,
             payload={"stage": self.name, **(payload or {})},
         )
-        self.events_log.append(event)
+        await self.events_log.append(event)

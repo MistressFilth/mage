@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -12,11 +13,11 @@ from mage.agents.inscribe import InscribeAgent
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import (
     LifecycleStatus,
-    MappingArtifact,
     ScenarioEntry,
 )
 from mage.artifacts.verdict import VerdictArtifact
-from mage.orchestration.events import Event, EventType, EventsLog
+from mage.orchestration.discipline.policy import acquire_cycle_lock, release_cycle_lock
+from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
 from mage.verification.mechanical import MechanicalVerifier, ScenarioDraft
@@ -56,11 +57,11 @@ class InscribeStage(StageNode):
         self.reviewers = reviewers
         self.mechanical_verifier = mechanical_verifier or MechanicalVerifier(checks=[])
 
-    def _run(self, context: PipelineContext) -> PipelineContext:
+    async def _run(self, context: PipelineContext) -> PipelineContext:
         project_dir: Path = context.project_dir
 
         # Emit INSCRIBE_STARTED
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_STARTED,
@@ -85,7 +86,7 @@ class InscribeStage(StageNode):
         for beh in behavior_specs:
             base_bid = beh["id"]
             behavior_name = beh["name"]
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.BEHAVIOR_INSCRIBE_STARTED,
@@ -113,14 +114,16 @@ class InscribeStage(StageNode):
             while iteration < self.host_config.max_iterations and not approved:
                 iteration += 1
                 # Draft scenarios
-                output = self.agent.run(
-                    behavior=entry, existing_scenarios=existing_scenarios, mapping=mapping
+                output = await self.agent.run(
+                    behavior=entry,
+                    existing_scenarios=existing_scenarios,
+                    mapping=mapping,
                 )
 
                 # For each scenario, run mechanical pre-check, then 7 reviewers + aggregate
                 approved = True  # assume all approved; revise if any fail
                 for scenario_idx, scenario in enumerate(output.scenarios):
-                    self.events_log.append(
+                    await self.events_log.append(
                         Event(
                             timestamp=datetime.now(UTC),
                             event_type=EventType.SCENARIO_DRAFTED,
@@ -139,7 +142,10 @@ class InscribeStage(StageNode):
                     # SubBidAssignedCheck still validates Base85 alphabet,
                     # but the pre-check is best-effort at draft time.
                     draft_for_precheck = ScenarioDraft(
-                        feature_path=project_dir / "scenarios" / base_bid / f"{scenario.name}.feature",
+                        feature_path=project_dir
+                        / "scenarios"
+                        / base_bid
+                        / f"{scenario.name}.feature",
                         scenario_name=scenario.name,
                         gherkin_text=scenario.gherkin_body,
                         tags=list(scenario.tags),
@@ -150,9 +156,11 @@ class InscribeStage(StageNode):
                     precheck_results = self.mechanical_verifier.verify(
                         draft_for_precheck, mapping
                     )
-                    precheck_passed = self.mechanical_verifier.all_passed(precheck_results)
+                    precheck_passed = self.mechanical_verifier.all_passed(
+                        precheck_results
+                    )
                     if precheck_passed:
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.MECHANICAL_PRECHECK_PASSED,
@@ -166,7 +174,7 @@ class InscribeStage(StageNode):
                         )
                     else:
                         failed = [r for r in precheck_results if r.outcome == "fail"]
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.MECHANICAL_PRECHECK_FAILED,
@@ -181,7 +189,7 @@ class InscribeStage(StageNode):
                         )
                         # Pre-check failure → treat as needs_refactor.
                         approved = False
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
@@ -218,30 +226,54 @@ class InscribeStage(StageNode):
                     )
 
                     # Run each enabled reviewer; verdicts stored alongside aggregate.
-                    per_dimension_verdicts = {}
-                    for reviewer in reviewers_to_run:
-                        verdict_path = verdicts_dir / f"{reviewer.dimension}.yaml"
-                        verdict = reviewer.run(
-                            draft=scenario,
-                            spec_context=spec_context,
-                            mapping=mapping,
-                            events_log=self.events_log,
-                            verdict_path=verdict_path,
-                        )
-                        per_dimension_verdicts[reviewer.dimension] = verdict
+                    semaphore = asyncio.Semaphore(
+                        self.host_config.max_concurrent_llm_calls
+                    )
+
+                    async def run_one(
+                        reviewer,
+                        *,
+                        _semaphore=semaphore,
+                        _verdicts_dir=verdicts_dir,
+                        _scenario=scenario,
+                        _spec_context=spec_context,
+                        _mapping=mapping,
+                    ):
+                        async with _semaphore:
+                            verdict_path = _verdicts_dir / f"{reviewer.dimension}.yaml"
+                            return (
+                                reviewer.dimension,
+                                await reviewer.run(
+                                    draft=_scenario,
+                                    spec_context=_spec_context,
+                                    mapping=_mapping,
+                                    events_log=self.events_log,
+                                    verdict_path=verdict_path,
+                                ),
+                            )
+
+                    results = await asyncio.gather(
+                        *[run_one(r) for r in reviewers_to_run]
+                    )
+                    per_dimension_verdicts = dict(results)
 
                     # Aggregate (registry builds reviewer_verdict_ref as
                     # `.haileris/verdicts/{draft_hash}/{dimension}.yaml`).
-                    aggregate = aggregate_verdicts(per_dimension_verdicts, iteration=iteration)
+                    aggregate = aggregate_verdicts(
+                        per_dimension_verdicts, iteration=iteration
+                    )
                     aggregate_path = verdicts_dir / "aggregate.yaml"
                     # C4: VerdictArtifact.finalize already emits REVIEW_AGGREGATE_RECORDED;
                     # do NOT manually re-emit it here.
-                    VerdictArtifact.finalize(aggregate_path, aggregate, self.events_log)
+                    await VerdictArtifact.finalize(
+                        aggregate_path, aggregate, self.events_log
+                    )
 
                     if aggregate.decision == "approved":
                         # Assign sub-BID
                         parent_bid = Base85BID(value=base_bid)
                         sub_bid = Base85BID.derive(parent_bid, scenario_idx)
+                        await acquire_cycle_lock(context, sub_bid.value)
                         scenario_text_hash = hashlib.sha256(
                             scenario.gherkin_body.encode("utf-8")
                         ).hexdigest()
@@ -256,9 +288,12 @@ class InscribeStage(StageNode):
                         scenario_dir = project_dir / "scenarios" / base_bid
                         scenario_dir.mkdir(parents=True, exist_ok=True)
                         scenario_path = scenario_dir / f"{scenario.name}.feature"
-                        scenario_path.write_text(scenario.gherkin_body, encoding="utf-8")
+                        scenario_path.write_text(
+                            scenario.gherkin_body, encoding="utf-8"
+                        )
 
-                        self.events_log.append(
+                        await release_cycle_lock(context)
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_APPROVED,
@@ -272,17 +307,20 @@ class InscribeStage(StageNode):
                     else:
                         # needs_refactor: loop
                         approved = False
-                        self.events_log.append(
+                        await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
                                 event_type=EventType.SCENARIO_NEEDS_REFACTOR,
-                                payload={"base_bid": base_bid, "scenario_name": scenario.name},
+                                payload={
+                                    "base_bid": base_bid,
+                                    "scenario_name": scenario.name,
+                                },
                             )
                         )
 
             if not approved:
                 # Budget exhausted: emit halt event and raise.
-                self.events_log.append(
+                await self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
                         event_type=EventType.REVIEW_HALT_PERSISTED,
@@ -304,7 +342,7 @@ class InscribeStage(StageNode):
                     iteration=iteration,
                 )
 
-            self.events_log.append(
+            await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.BEHAVIOR_INSCRIBE_COMPLETED,
@@ -313,18 +351,16 @@ class InscribeStage(StageNode):
             )
 
         # Persist updated mapping
-        mapping.save(project_dir / "mapping.yaml")
+        await mapping.save(project_dir / "mapping.yaml")
 
         # Emit INSCRIBE_COMPLETED
-        self.events_log.append(
+        await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_COMPLETED,
                 payload={
                     "feature_id": "unknown",
-                    "scenario_count": sum(
-                        len(e.scenarios) for e in mapping.base_bids
-                    ),
+                    "scenario_count": sum(len(e.scenarios) for e in mapping.base_bids),
                     "iteration": iteration,
                 },
             )

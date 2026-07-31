@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mage"
-version = "0.1.0"
+version = "0.2.0"
 description = "HAILERIS v2 execution engine: spec-driven development pipeline"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,6 +18,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
+    "pyright>=1.1.350",
     "ruff>=0.4",
 ]
 
@@ -30,3 +31,8 @@ packages = ["src/mage"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.4.0",
+]
