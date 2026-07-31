@@ -95,10 +95,12 @@ def test_e2e_cosmetic_apply_writes_files_and_commits(tmp_path: Path) -> None:
         ]
     )
     assert rc == 0
-    # File was modified: the original "def f():\n    return 42\n" is gone.
+    # The test-mode passthrough writes raw["text"] + "\n" as the
+    # replacement. We assert the file content actually contains that
+    # marker — not merely "different from the original".
     edited = target.read_text()
-    assert edited != "def f():\n    return 42\n", (
-        f"target file must be modified by cosmetic apply; got: {edited!r}"
+    assert "extract constant" in edited, (
+        f"target file must contain the cosmetic text via test-mode passthrough; got: {edited!r}"
     )
     log = subprocess.run(
         ["git", "log", "--oneline"],
