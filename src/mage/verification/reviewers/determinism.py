@@ -19,7 +19,7 @@ class DeterminismReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the determinism reviewer for HAILERIS v2.\n\n"
+            "You are the determinism reviewer for mage.\n\n"
             "Evaluate whether the Given/When/Then scenario is deterministic and replayable.\n"
             "Check:\n"
             "1. No unseeded randomness (random.choice, random.random without seed).\n"

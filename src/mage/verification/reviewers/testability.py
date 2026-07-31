@@ -19,7 +19,7 @@ class TestabilityReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the testability reviewer for HAILERIS v2.\n\n"
+            "You are the testability reviewer for mage.\n\n"
             "Evaluate whether the Given/When/Then scenario can be implemented as "
             "a red/green unit test.\n"
             "Check:\n"
