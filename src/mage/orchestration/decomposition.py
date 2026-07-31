@@ -61,7 +61,7 @@ class DecompositionStage(StageNode):
         # 4. Write decomposition.yaml
         decomposition_path = project_dir / "decomposition.yaml"
         decomposition_data = {
-            "schema_version": 2,
+            "schema_version": 1,
             "feature_id": ascertain.feature_id,
             "architecture": agent_output.architecture.model_dump(),
             "behaviors_input": [b.model_dump() for b in agent_output.behaviors],
