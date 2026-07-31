@@ -27,27 +27,57 @@ class CosmeticRefiner:
     On LLM failure, returns a stub CosmeticItem with file_path=None so the
     caller can decide how to surface the failure (see COSMETIC_REFINER_FALLBACK
     event).
+
+    Test mode (model is None or the string ``"test"``): bypasses the LLM
+    entirely. The refiner synthesizes a CosmeticItem directly from the raw
+    queue entry's ``location`` field (``file_path``, ``line_range``) and
+    ``text`` (``replacement_text``, ``rationale``). This makes the CLI
+    deterministic in ``--model test`` E2E flows without needing per-call
+    TestModel configuration.
     """
 
     def __init__(self, *, model: Any = None) -> None:
-        self._agent: Agent[None, dict[str, Any]] = Agent(
-            model=model or "test",
-            deps_type=type(None),
-            output_type=dict,
-            system_prompt=_SYSTEM_PROMPT,
-        )
+        self._is_test_mode = model is None or model == "test"
+        if self._is_test_mode:
+            # Skip Agent construction; refine() builds CosmeticItem directly.
+            self._agent: Agent[None, dict[str, Any]] | None = None
+        else:
+            self._agent = Agent(
+                model=model,
+                deps_type=type(None),
+                output_type=dict,
+                system_prompt=_SYSTEM_PROMPT,
+            )
 
     async def refine(
         self, raw: dict, *, semaphore: asyncio.Semaphore
     ) -> Any:  # returns CosmeticItem; Any here to avoid runtime cycle
         """Refine one raw queue entry into a CosmeticItem.
 
-        Acquires the semaphore first (caller controls fan-out cap). On LLM
-        failure returns a stub item with file_path=None.
+        Acquires the semaphore first (caller controls fan-out cap). In
+        test mode builds the CosmeticItem from raw["location"] without
+        an LLM call. On real-LLM failure returns a stub item with
+        file_path=None.
         """
         from mage.artifacts.cosmetic import CosmeticItem
 
         async with semaphore:
+            # Test-mode passthrough only fires when no agent has been
+            # injected (existing unit tests monkey-patch ``self._agent`` to
+            # stub the LLM; that injection must still take precedence).
+            if self._is_test_mode and self._agent is None:
+                location = raw.get("location") or {}
+                file_path = location.get("file")
+                line = int(location.get("line", 1))
+                text = raw.get("text", "")
+                return CosmeticItem(
+                    sub_bid=raw["sub_bid"],
+                    file_path=Path(file_path) if file_path else None,
+                    line_range=(max(1, line - 1), line + 1),
+                    replacement_text=text + "\n",
+                    rationale=text,
+                    proposed_by=raw.get("proposed_by", "unknown"),
+                )
             try:
                 prompt = (
                     f"sub_bid={raw.get('sub_bid')!r}\n"
@@ -55,7 +85,7 @@ class CosmeticRefiner:
                     f"location={raw.get('location')!r}\n"
                     f"proposed_by={raw.get('proposed_by')!r}"
                 )
-                result = await self._agent.run(prompt)
+                result = await self._agent.run(prompt)  # type: ignore[union-attr]
                 data = result.output
                 return CosmeticItem(
                     sub_bid=raw["sub_bid"],

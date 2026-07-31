@@ -143,6 +143,13 @@ def build_parser() -> argparse.ArgumentParser:
     cosmetic_apply_parser.add_argument(
         "--dry-run", action="store_true", help="Skip file writes + commits"
     )
+    cosmetic_apply_parser.add_argument(
+        "--model",
+        help=(
+            "Override the LLM model identifier (use 'test' for the "
+            "Pydantic-AI TestModel stub)"
+        ),
+    )
 
     return parser
 
@@ -637,6 +644,8 @@ async def cmd_cosmetic_apply(args) -> int:
         return 1
     mapping = MappingArtifact.load(mapping_path)
     host_config = load_host_config(project_dir)
+    if getattr(args, "model", None):
+        host_config = host_config.model_copy(update={"model": args.model})
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(7)
     queue = [
