@@ -28,7 +28,7 @@ class DecompositionOutput(BaseModel):
     behaviors: list[BehaviorSpec]
 
 
-DECOMPOSITION_PROMPT = """You are the Decomposition agent for HAILERIS v2.
+DECOMPOSITION_PROMPT = """You are the Decomposition agent for mage.
 
 Given an Ascertain session's resolved scope, ambiguities, and Three Amigos perspectives,
 produce:
