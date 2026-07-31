@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from mage.cli import main
-
 
 def _write_minimal_project(project: Path) -> None:
     (project / "mapping.yaml").write_text(
@@ -22,7 +18,6 @@ def test_e2e_etch_stage_with_real_llm_wiring(tmp_path):
     project.mkdir()
     _write_minimal_project(project)
     from mage.agents.etch import PydanticEtchAgent
-    from mage.verification.host_overrides import HostConfig
 
     agent = PydanticEtchAgent(model="test")
     # Smoke test: agent can run a prompt via TestModel.
