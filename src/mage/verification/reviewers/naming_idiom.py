@@ -19,7 +19,7 @@ class NamingIdiomReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the naming_idiom reviewer for HAILERIS v2.\n\n"
+            "You are the naming_idiom reviewer for mage.\n\n"
             "Evaluate whether scenario names and tags follow host project conventions.\n"
             "Check:\n"
             "1. Scenario name uses kebab-case or snake_case as appropriate.\n"

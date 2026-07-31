@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Plan 11: `mage cosmetic watch` long-running daemon. Tails `events.jsonl` for `MAPPING_SAVED` events; diffs the `feature_cosmetic_queue` against the last seen snapshot and auto-applies new entries per feature. Reuses Plan 10's `CosmeticAppliedState` for idempotency.
+- Plan 11: `MappingArtifact.save(path, *, events_log=None)` emits `EventType.MAPPING_SAVED` when an `EventsLog` is supplied.
+- Plan 11: 5 new EventTypes — `MAPPING_SAVED`, `COSMETIC_WATCHER_STARTED`, `COSMETIC_WATCHER_STOPPED`, `COSMETIC_WATCHER_APPLIED_FEATURE`, `COSMETIC_WATCHER_FAILED`.
+- Plan 11: `apply_for_feature(project_dir, feature_id)` extracted to `mage.orchestration.cosmetic_apply`; reused by the watcher.
+- Plan 11: `mage mapping save --project-dir PATH` CLI for explicit save-event emission (used by E2E and external hooks).
 - Plan 8: asyncio concurrency for LLM-bound operations. `HostConfig.max_concurrent_llm_calls` (default 7) caps fan-out via `asyncio.Semaphore`. Inscribe reviewers run concurrently via `asyncio.gather`; InspectFeature dispatches across scenarios concurrently. Cosmetic-queue per-item parallelism is deferred to Plan 9 (no per-item LLM processing exists today).
 - Plan 9: `PydanticEtchAgent` concrete implementation mirroring `PydanticRealizeAgent` plumbing; `EtchStage` swaps its injected stub for the real agent whenever `HostConfig.model` is set.
 - Plan 9: `CosmeticItem` schema (sub_bid, file_path, line_range, replacement_text, rationale, proposed_by, applied_at, content_hash with sha256 idempotency hash).

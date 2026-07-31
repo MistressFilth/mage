@@ -18,7 +18,7 @@ class StepGrammarReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the step_grammar reviewer for HAILERIS v2.\n\n"
+            "You are the step_grammar reviewer for mage.\n\n"
             "Evaluate the Given/When/Then steps for declarative phrasing.\n"
             "Check:\n"
             "1. No imperative verbs (click, type, drag, hover) unless the scenario "

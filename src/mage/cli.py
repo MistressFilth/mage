@@ -1,12 +1,11 @@
-"""CLI entry point for HAILERIS v2."""
+"""CLI entry point for the mage spec-driven development pipeline."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import subprocess
+import signal
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
         prog="mage",
-        description="HAILERIS v2: spec-driven development pipeline",
+        description="mage: spec-driven development pipeline",
     )
     parser.add_argument(
         "--project-dir",
@@ -149,6 +148,32 @@ def build_parser() -> argparse.ArgumentParser:
             "Override the LLM model identifier (use 'test' for the "
             "Pydantic-AI TestModel stub)"
         ),
+    )
+
+    # mage cosmetic watch
+    cosmetic_watch_parser = cosmetic_subparsers.add_parser(
+        "watch",
+        help="Long-running daemon that auto-applies cosmetic queue items",
+    )
+    cosmetic_watch_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_watch_parser.add_argument(
+        "--poll-interval-ms", type=int, default=250
+    )
+
+    # mage mapping
+    mapping_parser = subparsers.add_parser(
+        "mapping", help="Mapping artifact operations"
+    )
+    mapping_subparsers = mapping_parser.add_subparsers(
+        dest="mapping_command", required=True
+    )
+    mapping_save_parser = mapping_subparsers.add_parser(
+        "save", help="Re-save mapping.yaml and emit MAPPING_SAVED"
+    )
+    mapping_save_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
     )
 
     return parser
@@ -595,7 +620,7 @@ async def cmd_cosmetic_show(args) -> int:
     mapping = MappingArtifact.load(mapping_path)
     host_config = load_host_config(project_dir)
     refiner = CosmeticRefiner(model=host_config.model)
-    semaphore = asyncio.Semaphore(7)
+    semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     queue = [
         q for q in mapping.feature_cosmetic_queue
         if q.get("feature_id") == args.feature_id
@@ -622,161 +647,59 @@ async def cmd_cosmetic_show(args) -> int:
 
 
 async def cmd_cosmetic_apply(args) -> int:
-    """Refine queue, edit files in place, and commit each item."""
-    from mage.agents.cosmetic_refiner import CosmeticRefiner
-    from mage.artifacts.cosmetic_state import (
-        CosmeticApplied,
-        is_already_applied,
-        load_state,
-        save_state,
-    )
-    from mage.artifacts.mapping import MappingArtifact
-    from mage.orchestration.events import Event, EventsLog, EventType
+    """CLI shim: delegate to apply_for_feature."""
+    from mage.orchestration.cosmetic_apply import apply_for_feature
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    log = EventsLog(project_dir / "events.jsonl")
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic apply: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
-    host_config = load_host_config(project_dir)
-    if getattr(args, "model", None):
-        host_config = host_config.model_copy(update={"model": args.model})
-    refiner = CosmeticRefiner(model=host_config.model)
-    semaphore = asyncio.Semaphore(7)
-    queue = [
-        q for q in mapping.feature_cosmetic_queue
-        if q.get("feature_id") == args.feature_id
-    ]
-    if not queue:
-        print(
-            f"mage cosmetic apply: no items for feature_id={args.feature_id}",
-            file=sys.stderr,
-        )
-        return 0
-    refined = await asyncio.gather(
-        *[
-            refiner.refine(q, semaphore=semaphore)
-            for q in queue
-        ]
+    model = getattr(args, "model", None)
+    return await apply_for_feature(
+        project_dir,
+        args.feature_id,
+        dry_run=getattr(args, "dry_run", False),
+        model=model,
     )
 
-    state = load_state(project_dir)
-    now = datetime.now(UTC)
-    for item in refined:
-        if item.file_path is None:
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_REFINER_FALLBACK,
-                    payload={"sub_bid": item.sub_bid, "rationale": item.rationale},
-                )
-            )
-            continue
-        if is_already_applied(state, item.sub_bid, item.content_hash):
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_SKIPPED,
-                    payload={
-                        "sub_bid": item.sub_bid,
-                        "reason": "already-applied",
-                    },
-                )
-            )
-            continue
-        target = project_dir / item.file_path
-        if not target.exists():
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_APPLY_FAILED,
-                    payload={"sub_bid": item.sub_bid, "reason": "file-missing"},
-                )
-            )
-            continue
+
+async def cmd_mapping_save(args) -> int:
+    """Re-save mapping.yaml and emit MAPPING_SAVED.
+
+    Used by E2E tests and external hooks that want to trigger the
+    cosmetic watcher without modifying the mapping content.
+    """
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.orchestration.events import EventsLog
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    log = EventsLog(project_dir / "events.jsonl")
+    mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    await mapping.save(project_dir / "mapping.yaml", events_log=log)
+    return 0
+
+
+async def cmd_cosmetic_watch(args) -> int:
+    """Long-running daemon: auto-apply cosmetic queue items on MAPPING_SAVED."""
+    from mage.orchestration.cosmetic_watcher import MappingArtifactWatcher
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    poll_interval_ms: int = getattr(args, "poll_interval_ms", 250)
+    watcher = MappingArtifactWatcher(
+        project_dir,
+        poll_interval_ms=poll_interval_ms,
+    )
+
+    loop = asyncio.get_running_loop()
+
+    def _request_stop() -> None:
+        watcher.stop()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
         try:
-            lines = target.read_text().splitlines()
-            new_lines = (
-                lines[: item.line_range[0] - 1]
-                + item.replacement_text.splitlines()
-                + lines[item.line_range[1] :]
-            )
-            applied = not args.dry_run
-            if applied:
-                target.write_text("\n".join(new_lines) + "\n")
-                try:
-                    await asyncio.to_thread(
-                        subprocess.run,
-                        [
-                            "git",
-                            "commit",
-                            "-am",
-                            f"cosmetic({item.sub_bid}): {item.rationale}",
-                        ],
-                        cwd=str(project_dir),
-                        check=True,
-                        timeout=30,
-                    )
-                except subprocess.TimeoutExpired:
-                    await log.append(
-                        Event(
-                            timestamp=now,
-                            event_type=EventType.COSMETIC_APPLY_FAILED,
-                            payload={
-                                "sub_bid": item.sub_bid,
-                                "reason": "git-timeout",
-                                "error_type": "TimeoutExpired",
-                            },
-                        )
-                    )
-                    continue
-                state.applied[item.sub_bid] = CosmeticApplied(
-                    content_hash=item.content_hash,
-                    applied_at=now,
-                    file=item.file_path,  # type: ignore[arg-type]
-                    rationale=item.rationale,
-                )
-                try:
-                    await save_state(project_dir, state)
-                except Exception:
-                    await log.append(
-                        Event(
-                            timestamp=now,
-                            event_type=EventType.COSMETIC_APPLY_FAILED,
-                            payload={
-                                "sub_bid": item.sub_bid,
-                                "reason": "state-save-failed",
-                                "error_type": "Exception",
-                            },
-                        )
-                    )
-                    continue
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_ITEM_APPLIED
-                    if applied
-                    else EventType.COSMETIC_ITEM_SKIPPED,
-                    payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
-                )
-            )
-        except Exception as e:  # surface any failure as an audit event
-            await log.append(
-                Event(
-                    timestamp=now,
-                    event_type=EventType.COSMETIC_APPLY_FAILED,
-                    payload={
-                        "sub_bid": item.sub_bid,
-                        "reason": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                )
-            )
+            loop.add_signal_handler(sig, _request_stop)
+        except (NotImplementedError, RuntimeError):
+            # Windows or non-main thread: skip signal handlers.
+            pass
+
+    await watcher.run()
     return 0
 
 
@@ -836,6 +759,10 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_cosmetic_show(args)
     if args.command == "cosmetic" and args.cosmetic_command == "apply":
         return await cmd_cosmetic_apply(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "watch":
+        return await cmd_cosmetic_watch(args)
+    if args.command == "mapping" and args.mapping_command == "save":
+        return await cmd_mapping_save(args)
     parser.print_help()
     raise SystemExit(1)
 
