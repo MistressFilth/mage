@@ -49,6 +49,7 @@ class InspectLoopStage:
         self.mechanical_verifier = mechanical_verifier
         self.increment_quality_reviewer = increment_quality_reviewer
         self.host_config = host_config
+        self._emitted_feature_resolved = False
 
     async def inspect_increment(
         self,
@@ -65,6 +66,19 @@ class InspectLoopStage:
             "code" — the runner re-loops with this finding in carry-forward.
             None   — clean OR cosmetic-only (cosmetic is queued, not re-looped).
         """
+        if not self._emitted_feature_resolved and context.feature_id:
+            self._emitted_feature_resolved = True
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.INSPECT_LOOP_FEATURE_RESOLVED,
+                    payload={
+                        "feature_id": context.feature_id,
+                        "scenario_id": target.scenario_name,
+                        "iteration": context.iteration,
+                    },
+                )
+            )
         await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
@@ -109,6 +123,8 @@ class InspectLoopStage:
                 InspectJournalEntry(
                     timestamp=datetime.now(UTC),
                     iteration=iteration,
+                    feature_id=context.feature_id,
+                    scenario_id=target.scenario_name,
                     dimension="mechanical",
                     severity=getattr(f, "severity", "minor"),
                     route="code",
@@ -149,7 +165,7 @@ class InspectLoopStage:
                 code_count += 1
             elif route == "cosmetic":
                 context.mapping = context.mapping.append_cosmetic(
-                    "unknown",
+                    context.feature_id,
                     CosmeticItem(
                         sub_bid=target.sub_bid,
                         scenario_name=target.scenario_name,
@@ -181,6 +197,8 @@ class InspectLoopStage:
                 InspectJournalEntry(
                     timestamp=datetime.now(UTC),
                     iteration=iteration,
+                    feature_id=context.feature_id,
+                    scenario_id=target.scenario_name,
                     dimension=getattr(verdict, "dimension", "increment_quality"),
                     severity=f.severity,
                     route=route,
