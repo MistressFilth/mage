@@ -53,6 +53,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Plan 12: thread real `feature_id` from `mage inspect show` through `PipelineContext`, `InspectLoopStage`, and `InspectJournalEntry`. Cosmetic queue entries no longer carry the hardcoded `"unknown"` placeholder, so `mage cosmetic apply <feature-id>` and the cosmetic watcher can now correlate to the actual feature.
+- Plan 12: new `INSPECT_LOOP_FEATURE_RESOLVED` event emitted on first iteration carrying `feature_id` + `scenario_id`.
 - fix(discipline): make revision, supersession, and live-event handling
   idempotent and correlate approval lock release with the approved scenario.
 - A failing post-merge test run no longer leaves the merge on the base branch:
