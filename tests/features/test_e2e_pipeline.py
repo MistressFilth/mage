@@ -66,7 +66,7 @@ async def _plant_fixture(
     )
 
     mapping = MappingArtifact(
-        schema_version=1,
+        schema_version=2,
         project_id=project_dir.name,
         base_bids=[
             BaseBIDEntry(

@@ -127,7 +127,7 @@ async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "f",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [

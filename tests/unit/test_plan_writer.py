@@ -10,7 +10,7 @@ behavior_ids:
 behaviors:
 {behaviors_yaml}
 project_id: {project_id}
-schema_version: 1
+schema_version: 2
 ---
 
 # Implementation Plan — {feature_name}

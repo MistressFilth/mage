@@ -15,7 +15,7 @@ class TestPipelineContext:
     def test_minimal_context(self, tmp_project_dir: Path):
         ctx = PipelineContext(
             project_dir=tmp_project_dir,
-            mapping=MappingArtifact(schema_version=1, project_id="test", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
             events_log=EventsLog(tmp_project_dir / "events.jsonl"),
         )
         assert ctx.project_dir == tmp_project_dir
@@ -43,7 +43,7 @@ class TestStageNode:
         stage = SimpleStage(events_log=log)
         ctx = PipelineContext(
             project_dir=tmp_project_dir,
-            mapping=MappingArtifact(schema_version=1, project_id="test", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
             events_log=log,
         )
         await stage.run(ctx)
@@ -67,7 +67,7 @@ class TestStageNode:
         stage = FailingStage(events_log=log)
         ctx = PipelineContext(
             project_dir=tmp_project_dir,
-            mapping=MappingArtifact(schema_version=1, project_id="test", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
             events_log=log,
         )
         with pytest.raises(RuntimeError, match="simulated failure"):
@@ -81,7 +81,7 @@ class TestStageNode:
 def test_pipeline_context_plan_path_default(tmp_path):
     from mage.orchestration.nodes import PipelineContext
 
-    mapping = MappingArtifact(schema_version=1, project_id="test", base_bids=[])
+    mapping = MappingArtifact(schema_version=2, project_id="test", base_bids=[])
     events_log = EventsLog(tmp_path / "events.jsonl")
     ctx = PipelineContext(
         project_dir=tmp_path,
@@ -97,7 +97,7 @@ def test_pipeline_context_plan_path_overridable(tmp_path):
     custom = tmp_path / "custom-plan.md"
     ctx = PipelineContext(
         project_dir=tmp_path,
-        mapping=MappingArtifact(schema_version=1, project_id="test", base_bids=[]),
+        mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
         events_log=EventsLog(tmp_path / "events.jsonl"),
         plan_path=custom,
     )
@@ -110,7 +110,7 @@ def test_pipeline_context_carries_automation_cursor(tmp_path):
 
     ctx = PipelineContext(
         project_dir=tmp_path,
-        mapping=MappingArtifact(schema_version=1, project_id="p", base_bids=[]),
+        mapping=MappingArtifact(schema_version=2, project_id="p", base_bids=[]),
         events_log=EventsLog(tmp_path / "events.jsonl"),
         iteration=0,
     )

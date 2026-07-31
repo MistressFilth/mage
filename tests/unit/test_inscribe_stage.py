@@ -91,7 +91,7 @@ def _write_behaviors_yaml(project_dir: Path, feature_id: str = "feat-1") -> Path
     path.write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": feature_id,
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [
@@ -180,7 +180,7 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "f",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [

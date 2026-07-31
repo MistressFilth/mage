@@ -65,7 +65,7 @@ def _write_behaviors_yaml(project_dir: Path) -> None:
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "feat-1",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [

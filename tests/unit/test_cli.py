@@ -39,7 +39,7 @@ class TestCli:
         from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
 
         mapping = MappingArtifact(
-            schema_version=1,
+            schema_version=2,
             project_id="cli-test",
             base_bids=[
                 BaseBIDEntry(
@@ -239,7 +239,7 @@ def test_mage_run_dry_run_completes_on_empty_project(tmp_path):
     project = tmp_path / "proj"
     project.mkdir()
     (project / "mapping.yaml").write_text(
-        "schema_version: 1\nproject_id: p\nbase_bids: []\n"
+        "schema_version: 2\nproject_id: p\nbase_bids: []\n"
     )
     rc = main(["run", "--dry-run", "--project-dir", str(project)])
     assert rc == 0
@@ -252,7 +252,7 @@ def test_mage_run_dry_run_does_not_raise_systemexit(tmp_path):
     project = tmp_path / "proj"
     project.mkdir()
     (project / "mapping.yaml").write_text(
-        "schema_version: 1\nproject_id: p\nbase_bids: []\n"
+        "schema_version: 2\nproject_id: p\nbase_bids: []\n"
     )
     # The halt scenario is covered in Task 14. This test pins the
     # no-op contract: empty project with --dry-run returns cleanly.
@@ -268,7 +268,7 @@ def test_mage_run_model_flag_overrides_host_config(tmp_path, monkeypatch):
     project = tmp_path / "proj"
     project.mkdir()
     (project / "mapping.yaml").write_text(
-        "schema_version: 1\nproject_id: p\nbase_bids: []\n"
+        "schema_version: 2\nproject_id: p\nbase_bids: []\n"
     )
 
     captured: dict = {}
@@ -367,6 +367,7 @@ class TestCosmeticShow:
                     "base_bids": [],
                     "feature_cosmetic_queue": [
                         {
+                            "feature_id": "feat-1",
                             "sub_bid": "00000-001",
                             "text": "use a constant",
                             "location": {"file": "src/example.py", "line": 5},
@@ -432,6 +433,7 @@ class TestCosmeticApply:
                     "base_bids": [],
                     "feature_cosmetic_queue": [
                         {
+                            "feature_id": "feat-1",
                             "sub_bid": "00000-001",
                             "text": "use a constant",
                             "location": {"file": "src/example.py", "line": 3},

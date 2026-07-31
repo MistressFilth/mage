@@ -379,7 +379,7 @@ async def cmd_run(args):
         mapping = MappingArtifact.load(mapping_path)
     else:
         mapping = MappingArtifact(
-            schema_version=1, project_id=project_dir.name, base_bids=[]
+            schema_version=2, project_id=project_dir.name, base_bids=[]
         )
 
     persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
@@ -514,7 +514,7 @@ async def cmd_settle_run(args):
         mapping = MappingArtifact.load(mapping_path)
     else:
         mapping = MappingArtifact(
-            schema_version=1,
+            schema_version=2,
             project_id=project_dir.name,
             base_bids=[],
         )
@@ -705,7 +705,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         MappingArtifact.load(project_dir / "mapping.yaml")
         if (project_dir / "mapping.yaml").exists()
         else MappingArtifact(
-            schema_version=1, project_id=project_dir.name, base_bids=[]
+            schema_version=2, project_id=project_dir.name, base_bids=[]
         )
     )
     # For Plan 1, we run with empty registries (host project can configure later).

@@ -22,7 +22,7 @@ from mage.verification.host_overrides import HostConfig
 
 def _make_mapping(tmp_path, scenarios: list[ScenarioEntry]) -> MappingArtifact:
     return MappingArtifact(
-        schema_version=1,
+        schema_version=2,
         project_id="p",
         base_bids=[
             BaseBIDEntry(
