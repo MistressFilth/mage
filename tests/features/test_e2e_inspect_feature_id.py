@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-import time
 from pathlib import Path
-
-import pytest
 
 import yaml
 
@@ -99,7 +96,7 @@ def test_e2e_cosmetic_apply_filters_by_feature_id(tmp_path: Path):
         ["git", "commit", "-q", "-m", "seed"], cwd=project, check=True
     )
 
-    result = subprocess.run(
+    subprocess.run(
         [
             "mage",
             "cosmetic",
@@ -112,11 +109,13 @@ def test_e2e_cosmetic_apply_filters_by_feature_id(tmp_path: Path):
         capture_output=True,
         text=True,
         timeout=10,
+        check=False,
     )
     log = subprocess.run(
         ["cat", str(project / "events.jsonl")],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert "00000-001" in log.stdout, (
         "feat-1's sub_bid (00000-001) should appear in events.jsonl"
