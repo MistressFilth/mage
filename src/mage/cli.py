@@ -709,25 +709,53 @@ async def cmd_cosmetic_apply(args) -> int:
             applied = not args.dry_run
             if applied:
                 target.write_text("\n".join(new_lines) + "\n")
-                await asyncio.to_thread(
-                    subprocess.run,
-                    [
-                        "git",
-                        "commit",
-                        "-am",
-                        f"cosmetic({item.sub_bid}): {item.rationale}",
-                    ],
-                    cwd=str(project_dir),
-                    check=True,
-                    timeout=30,
-                )
+                try:
+                    await asyncio.to_thread(
+                        subprocess.run,
+                        [
+                            "git",
+                            "commit",
+                            "-am",
+                            f"cosmetic({item.sub_bid}): {item.rationale}",
+                        ],
+                        cwd=str(project_dir),
+                        check=True,
+                        timeout=30,
+                    )
+                except subprocess.TimeoutExpired:
+                    await log.append(
+                        Event(
+                            timestamp=now,
+                            event_type=EventType.COSMETIC_APPLY_FAILED,
+                            payload={
+                                "sub_bid": item.sub_bid,
+                                "reason": "git-timeout",
+                                "error_type": "TimeoutExpired",
+                            },
+                        )
+                    )
+                    continue
                 state.applied[item.sub_bid] = CosmeticApplied(
                     content_hash=item.content_hash,
                     applied_at=now,
                     file=item.file_path,  # type: ignore[arg-type]
                     rationale=item.rationale,
                 )
-                save_state(project_dir, state)
+                try:
+                    await save_state(project_dir, state)
+                except Exception:
+                    await log.append(
+                        Event(
+                            timestamp=now,
+                            event_type=EventType.COSMETIC_APPLY_FAILED,
+                            payload={
+                                "sub_bid": item.sub_bid,
+                                "reason": "state-save-failed",
+                                "error_type": "Exception",
+                            },
+                        )
+                    )
+                    continue
             await log.append(
                 Event(
                     timestamp=now,

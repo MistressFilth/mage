@@ -702,7 +702,7 @@ class TestCosmeticApply:
                 rationale="use a constant",
             ),
         })
-        save_state(project_dir, prior)
+        await save_state(project_dir, prior)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
@@ -762,7 +762,7 @@ class TestCosmeticApply:
                 rationale="prior content",
             ),
         })
-        save_state(project_dir, prior)
+        await save_state(project_dir, prior)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
