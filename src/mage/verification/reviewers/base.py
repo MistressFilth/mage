@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from datetime import UTC, datetime
 import hashlib
 import json
+from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -49,19 +49,34 @@ class ReviewerAgent(ABC):
         """Return the dimension-specific rubric and examples."""
         ...
 
-    def _compute_draft_hash(self, draft: ScenarioSpec, spec_context: dict[str, Any]) -> str:
+    def _compute_draft_hash(
+        self, draft: ScenarioSpec, spec_context: dict[str, Any]
+    ) -> str:
         return compute_draft_hash(draft, spec_context)
 
-    def run(self, *, draft: ScenarioSpec, spec_context: dict[str, Any], mapping: MappingArtifact,
-            events_log: EventsLog, verdict_path: Path) -> ReviewerVerdict:
+    async def run(
+        self,
+        *,
+        draft: ScenarioSpec,
+        spec_context: dict[str, Any],
+        mapping: MappingArtifact,
+        events_log: EventsLog,
+        verdict_path: Path,
+    ) -> ReviewerVerdict:
         draft_hash = self._compute_draft_hash(draft, spec_context)
-        prompt = (f"Draft scenario:\n{draft.model_dump_json(indent=2)}\n\n"
-                  f"Spec context:\n{json.dumps(spec_context, indent=2, default=str)}")
-        result = self._agent.run_sync(prompt).output
+        prompt = (
+            f"Draft scenario:\n{draft.model_dump_json(indent=2)}\n\n"
+            f"Spec context:\n{json.dumps(spec_context, indent=2, default=str)}"
+        )
+        result = (await self._agent.run(prompt)).output
 
         result_dict = result.model_dump()
-        result_dict.update(dimension=self.dimension, draft_hash=draft_hash,
-                           reviewed_at=datetime.now(UTC), reviewer_id=f"{self.dimension}@v1")
+        result_dict.update(
+            dimension=self.dimension,
+            draft_hash=draft_hash,
+            reviewed_at=datetime.now(UTC),
+            reviewer_id=f"{self.dimension}@v1",
+        )
         finalized = ReviewerVerdict.model_validate(result_dict)
-        VerdictArtifact.finalize(verdict_path, finalized, events_log)
+        await VerdictArtifact.finalize(verdict_path, finalized, events_log)
         return finalized

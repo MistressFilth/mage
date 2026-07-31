@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+if TYPE_CHECKING:
+    from mage.orchestration.events import EventsLog
+
+# Routing for Inspect loop. Defined locally to avoid pulling
+# mage.orchestration.inspect_loop into the artifact layer (cycle) and to
+# keep the dependency direction: artifacts -> nothing internal.
+InspectRoute = Literal["spec", "code", "cosmetic"]
 
 
 class ReviewerFinding(BaseModel):
@@ -20,6 +28,12 @@ class ReviewerFinding(BaseModel):
     rationale: str
     suggestion: str = ""
     citations: list[str] = Field(default_factory=list)
+    # Route is meaningful only for the per-loop Inspect reviewer
+    # (IncrementQualityReviewer). The default keeps the standard 7-reviewer
+    # Inscribe findings backward-compatible: findings carry the code route
+    # unless the reviewer explicitly sets spec/cosmetic. InspectLoopStage
+    # reads this field directly — no more suggestion-prefix parsing.
+    route: InspectRoute = "code"
 
     @field_validator("rationale")
     @classmethod
@@ -84,31 +98,36 @@ class VerdictArtifact:
     @staticmethod
     def _compute_digest(content: str) -> str:
         import hashlib
+
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _latest_event_for_path(
-        events_log: "EventsLog", path, event_types: tuple,
+        events_log: EventsLog,
+        path,
+        event_types: tuple,
     ):
         path_str = str(path)
         candidates = [
-            e for e in events_log.read_all()
-            if e.event_type in event_types
-            and e.payload.get("verdict_path") == path_str
+            e
+            for e in events_log.read_all()
+            if e.event_type in event_types and e.payload.get("verdict_path") == path_str
         ]
         if not candidates:
             return None
         return max(candidates, key=lambda e: e.timestamp)
 
     @classmethod
-    def finalize(cls, path, model: BaseModel, events_log) -> str:
+    async def finalize(cls, path, model: BaseModel, events_log) -> str:
         """Write verdict/aggregate to YAML at `path`, compute SHA256, emit event.
 
         For ReviewerVerdict → emits REVIEWER_VERDICT_RECORDED.
         For ReviewerAggregate → emits REVIEW_AGGREGATE_RECORDED.
         """
+        from datetime import UTC, datetime
+
         import yaml
-        from datetime import datetime, UTC
+
         from mage.orchestration.events import Event  # local import to avoid cycle
 
         content = yaml.safe_dump(model.model_dump(mode="json"), sort_keys=False)
@@ -125,8 +144,9 @@ class VerdictArtifact:
             event_type_value = "reviewer_verdict_recorded"
 
         from mage.orchestration.events import EventType
+
         event_type = EventType(event_type_value)
-        events_log.append(
+        await events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
                 event_type=event_type,
@@ -134,24 +154,26 @@ class VerdictArtifact:
                     "verdict_path": str(path),
                     "verdict_sha256": digest,
                     "dimension": getattr(model, "dimension", None),
-                    "outcome": getattr(model, "outcome", None) or getattr(model, "decision", None),
+                    "outcome": getattr(model, "outcome", None)
+                    or getattr(model, "decision", None),
                 },
             )
         )
         return digest
 
     @classmethod
-    def load(cls, path, events_log) -> BaseModel:
+    async def load(cls, path, events_log) -> BaseModel:
         """Load verdict/aggregate with digest verification against the most recent event.
 
         Returns the original Pydantic model (ReviewerVerdict or ReviewerAggregate).
         """
         import yaml
-        from mage.orchestration.events import EventType
-        from mage.orchestration.events import Event
+
+        from mage.orchestration.events import Event, EventType
 
         event = cls._latest_event_for_path(
-            events_log, path,
+            events_log,
+            path,
             (EventType.REVIEWER_VERDICT_RECORDED, EventType.REVIEW_AGGREGATE_RECORDED),
         )
         if event is None:
@@ -170,9 +192,11 @@ class VerdictArtifact:
         computed = cls._compute_digest(content)
 
         if computed != recorded_digest:
-            events_log.append(
+            await events_log.append(
                 Event(
-                    timestamp=__import__("datetime").datetime.now(__import__("datetime").UTC),
+                    timestamp=__import__("datetime").datetime.now(
+                        __import__("datetime").UTC
+                    ),
                     event_type=EventType.PLAN_DIGEST_MISMATCH,  # reuse existing event type
                     payload={
                         "verdict_path": str(path),

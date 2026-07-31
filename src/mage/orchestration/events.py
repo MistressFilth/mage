@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -53,6 +54,58 @@ class EventType(str, Enum):
     SCENARIO_NEEDS_REFACTOR = "scenario_needs_refactor"
     REVIEW_HALT_PERSISTED = "review_halt_persisted"
 
+    # Plan 4 — Etch stage
+    ETCH_STARTED = "etch_started"
+    ETCH_RED_CONFIRMED = "etch_red_confirmed"
+    ETCH_COMPLETED = "etch_completed"
+
+    # Plan 4 — Realize stage
+    REALIZE_STARTED = "realize_started"
+    REALIZE_INCREMENT_DONE = "realize_increment_done"
+    REALIZE_COMPLETED = "realize_completed"
+    SCENARIO_OUTER_GREEN = "scenario_outer_green"
+    SCENARIO_LIVE = "scenario_live"
+
+    # Plan 4 — Inspect-loop stage
+    INSPECT_LOOP_STARTED = "inspect_loop_started"
+    INSPECT_LOOP_PASSED = "inspect_loop_passed"
+    INSPECT_LOOP_FAILED = "inspect_loop_failed"
+    INSPECT_LOOP_COMPLETED = "inspect_loop_completed"
+    INSPECT_JOURNAL_APPENDED = "inspect_journal_appended"
+    SCENARIO_HALT_PERSISTED = "scenario_halt_persisted"
+
+    # Plan 5 placeholder members (kept here so events log schema is stable)
+    INSPECT_FEATURE_STARTED = "inspect_feature_started"
+    INSPECT_FEATURE_FINALIZED = "inspect_feature_finalized"
+
+    # Plan 5 — InspectFeature stage (full set)
+    INSPECT_FEATURE_PASSED = "inspect_feature_passed"
+    INSPECT_FEATURE_HALT_PERSISTED = "inspect_feature_halt_persisted"
+    INSPECT_FEATURE_COMPLETED = "inspect_feature_completed"
+    FIX_WAVE_DISPATCHED = "fix_wave_dispatched"
+
+    # Plan 5 — SettleFeature stage
+    SETTLE_FEATURE_STARTED = "settle_feature_started"
+    SETTLE_COSMETIC_QUEUED = "settle_cosmetic_queued"
+    SETTLE_TESTS_FAILED = "settle_tests_failed"
+    SETTLE_FEATURE_FINALIZED = "settle_feature_finalized"
+    SETTLE_FEATURE_COMPLETED = "settle_feature_completed"
+    SETTLE_BRANCH_DISCARDED = "settle_branch_discarded"
+    SETTLE_MERGE_ROLLED_BACK = "settle_merge_rolled_back"
+    SETTLE_CLEANUP_SKIPPED = "settle_cleanup_skipped"
+
+    # Plan 7 — Discipline enforcement
+    SCENARIO_REVERTED_TO_INSCRIBING = "scenario_reverted_to_inscribing"
+    SCENARIO_REVISION_REQUESTED = "scenario_revision_requested"
+    SCENARIO_SUPERSESSION_REQUESTED = "scenario_supersession_requested"
+    SCENARIO_DEPRECATED = "scenario_deprecated"
+
+    # Plan 9 — Cosmetic apply pipeline
+    COSMETIC_ITEM_APPLIED = "cosmetic_item_applied"
+    COSMETIC_ITEM_SKIPPED = "cosmetic_item_skipped"
+    COSMETIC_APPLY_FAILED = "cosmetic_apply_failed"
+    COSMETIC_REFINER_FALLBACK = "cosmetic_refiner_fallback"
+
 
 class Event(BaseModel):
     """One event in the log."""
@@ -73,12 +126,29 @@ class EventsLog:
         # Ensure the file exists for empty-log reads.
         if not self.log_path.exists():
             self.log_path.touch()
+        self._lock: asyncio.Lock | None = (
+            None  # lazy; asyncio.Lock requires a running loop
+        )
 
-    def append(self, event: Event) -> None:
-        """Append a single event to the log (JSONL format, one event per line)."""
+    def _get_lock(self) -> asyncio.Lock:
+        """Return the per-instance asyncio.Lock, creating it lazily.
+
+        Lazy initialization is required because `asyncio.Lock()` raises
+        `RuntimeError: no running event loop` if constructed outside a loop.
+        The double-check pattern handles concurrent first-touch (e.g. from
+        multiple threads in tests); for in-loop first-touch the GIL plus
+        the single-attribute write is sufficient.
+        """
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def append(self, event: Event) -> None:
+        """Append one event while serializing writes to the JSONL log."""
         line = event.model_dump_json()
-        with self.log_path.open("a") as f:
-            f.write(line + "\n")
+        async with self._get_lock():
+            with self.log_path.open("a") as f:
+                f.write(line + "\n")
 
     def read_all(self) -> list[Event]:
         """Read all events from the log in order."""

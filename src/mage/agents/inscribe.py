@@ -29,7 +29,7 @@ class InscribeOutput(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    scenarios: list[ScenarioSpec]  # noqa: RUF012
+    scenarios: list[ScenarioSpec]
 
 
 INSCRIBE_PROMPT = """You are the Inscribe agent for HAILERIS v2.
@@ -73,18 +73,22 @@ class InscribeAgent:
             system_prompt="Inscribe agent: draft scenarios from behavior spec.",
         )
 
-    def run(
+    async def run(
         self,
         *,
         behavior: BaseBIDEntry,
         existing_scenarios: list,
         mapping: MappingArtifact,
     ) -> InscribeOutput:
-        existing_str = "\n".join(
-            f"- {s.name}: {s.gherkin_body[:80]}..." for s in existing_scenarios
-        ) or "(none)"
+        existing_str = (
+            "\n".join(
+                f"- {s.name}: {s.gherkin_body[:80]}..." for s in existing_scenarios
+            )
+            or "(none)"
+        )
         sibling_names = [
-            e.behavior_name for e in mapping.base_bids
+            e.behavior_name
+            for e in mapping.base_bids
             if e.base_bid != behavior.base_bid
         ]
         prompt = INSCRIBE_PROMPT.format(
@@ -92,4 +96,4 @@ class InscribeAgent:
             existing_scenarios=existing_str,
             sibling_behaviors=", ".join(sibling_names) if sibling_names else "(none)",
         )
-        return self._agent.run_sync(prompt).output
+        return (await self._agent.run(prompt)).output
