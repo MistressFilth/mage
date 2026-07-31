@@ -91,7 +91,7 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "feat-auth",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [
@@ -181,7 +181,7 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "f",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [
@@ -265,7 +265,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "f",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [
@@ -351,7 +351,7 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "feature_id": "f",
                 "enumerated_at": "2026-07-27T00:00:00Z",
                 "behaviors": [

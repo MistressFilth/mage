@@ -314,7 +314,7 @@ class TestPlan4MappingMethods:
             text="Rephrase",
             proposed_by="increment_quality",
         )
-        m2 = m.append_cosmetic(item)
+        m2 = m.append_cosmetic("feat-1", item)
         assert len(m2.feature_cosmetic_queue) == 1
         assert m2.feature_cosmetic_queue[0]["text"] == "Rephrase"
 
@@ -432,7 +432,7 @@ class TestMappingArtifactValidation:
         m = MappingArtifact(
             project_id="p1",
             inspect_journal={"00000-0": [{"route": "code", "dimension": "mechanical"}]},
-            feature_cosmetic_queue=[{"text": "rephrase"}],
+            feature_cosmetic_queue=[{"feature_id": "feat-1", "text": "rephrase"}],
         )
         path = tmp_path / "mapping.yaml"
         await m.save(path)
@@ -440,7 +440,9 @@ class TestMappingArtifactValidation:
         assert loaded.inspect_journal == {
             "00000-0": [{"route": "code", "dimension": "mechanical"}]
         }
-        assert loaded.feature_cosmetic_queue == [{"text": "rephrase"}]
+        assert loaded.feature_cosmetic_queue == [
+            {"feature_id": "feat-1", "text": "rephrase"}
+        ]
 
     def test_save_rejects_malformed_journal(self, tmp_path: Path):
         """The save() path also goes through model construction; manual

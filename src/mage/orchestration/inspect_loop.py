@@ -149,13 +149,14 @@ class InspectLoopStage:
                 code_count += 1
             elif route == "cosmetic":
                 context.mapping = context.mapping.append_cosmetic(
+                    "unknown",
                     CosmeticItem(
                         sub_bid=target.sub_bid,
                         scenario_name=target.scenario_name,
                         location=f.location,
                         text=f.suggestion,
                         proposed_by="increment_quality",
-                    )
+                    ),
                 )
 
             await self.events_log.append(

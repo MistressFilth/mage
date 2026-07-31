@@ -60,7 +60,7 @@ class TestMechanicalVerifier:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x", "When y", "Then z"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         results = verifier.verify(draft, mapping)
         assert results == []
 
@@ -75,7 +75,7 @@ class TestMechanicalVerifier:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         results = verifier.verify(draft, mapping)
         assert all(r.outcome == "pass" for r in results)
         assert len(results) == 2
@@ -93,7 +93,7 @@ class TestMechanicalVerifier:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         results = verifier.verify(draft, mapping)
         assert len(results) == 3
         outcomes = [r.outcome for r in results]
@@ -112,7 +112,7 @@ class TestGherkinSyntaxCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given a precondition", "When an action", "Then a result"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -127,7 +127,7 @@ class TestGherkinSyntaxCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given a precondition", "Then a result"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "When" in (result.detail or "")
@@ -143,7 +143,7 @@ class TestGherkinSyntaxCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=[],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
 
@@ -164,7 +164,7 @@ class TestScenarioNameUniqueCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -183,7 +183,7 @@ class TestScenarioNameUniqueCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "duplicate" in (result.detail or "").lower()
@@ -201,7 +201,7 @@ class TestTagsRegisteredCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -216,7 +216,7 @@ class TestTagsRegisteredCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -231,7 +231,7 @@ class TestTagsRegisteredCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "@unknown_tag" in (result.detail or "")
@@ -256,7 +256,7 @@ class TestStepDefinitionsResolvableCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given a precondition", "When an action", "Then a result"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -273,7 +273,7 @@ class TestStepDefinitionsResolvableCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given a precondition", "When undefined action"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "undefined action" in (result.detail or "")
@@ -294,7 +294,7 @@ class TestLifecycleStatusTagPresentCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -309,7 +309,7 @@ class TestLifecycleStatusTagPresentCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "lifecycle" in (result.detail or "").lower()
@@ -325,7 +325,7 @@ class TestLifecycleStatusTagPresentCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
 
@@ -347,7 +347,7 @@ class TestSubBidAssignedCheck:
             step_texts=["Given x"],
         )
         mapping = MappingArtifact(
-            schema_version=1,
+            schema_version=2,
             project_id="t",
             base_bids=[
                 BaseBIDEntry(
@@ -375,7 +375,7 @@ class TestSubBidAssignedCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
 
@@ -390,7 +390,7 @@ class TestSubBidAssignedCheck:
             parent_base_bid=Base85BID(value="00099"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "00099" in (result.detail or "")
@@ -411,7 +411,7 @@ class TestCrossBehaviorTagsValidCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "pass"
 
@@ -427,7 +427,7 @@ class TestCrossBehaviorTagsValidCheck:
             step_texts=["Given x"],
         )
         mapping = MappingArtifact(
-            schema_version=1,
+            schema_version=2,
             project_id="t",
             base_bids=[
                 BaseBIDEntry(
@@ -455,7 +455,7 @@ class TestCrossBehaviorTagsValidCheck:
             parent_base_bid=Base85BID(value="00000"),
             step_texts=["Given x"],
         )
-        mapping = MappingArtifact(schema_version=1, project_id="t", base_bids=[])
+        mapping = MappingArtifact(schema_version=2, project_id="t", base_bids=[])
         result = check.run(draft, mapping)
         assert result.outcome == "fail"
         assert "00099" in (result.detail or "")

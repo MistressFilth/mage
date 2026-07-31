@@ -44,7 +44,7 @@ class TestPipelineGraph:
         )
         ctx = PipelineContext(
             project_dir=tmp_project_dir,
-            mapping=MappingArtifact(schema_version=1, project_id="t", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
             events_log=log,
         )
         result = await graph.run(ctx)
@@ -59,7 +59,7 @@ class TestPipelineGraph:
         )
         ctx = PipelineContext(
             project_dir=tmp_project_dir,
-            mapping=MappingArtifact(schema_version=1, project_id="t", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
             events_log=log,
         )
         await graph.run(ctx)
@@ -78,7 +78,7 @@ class TestPipelineGraph:
         graph = PipelineGraph(stages=[], events_log=log)
         ctx = PipelineContext(
             project_dir=tmp_project_dir,
-            mapping=MappingArtifact(schema_version=1, project_id="t", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
             events_log=log,
         )
         result = await graph.run(ctx)
@@ -117,7 +117,7 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
 
     ctx = PipelineContext(
         project_dir=tmp_path,
-        mapping=MappingArtifact(schema_version=1, project_id="t", base_bids=[]),
+        mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
         events_log=log,
     )
 
@@ -168,7 +168,7 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
 
     ctx = PipelineContext(
         project_dir=tmp_path,
-        mapping=MappingArtifact(schema_version=1, project_id="t", base_bids=[]),
+        mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
         events_log=log,
     )
 

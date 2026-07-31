@@ -76,7 +76,7 @@ class BaseBIDEntry(BaseModel):
 
 class MappingArtifact(BaseModel):
     model_config = ConfigDict(frozen=True)
-    schema_version: int = 1
+    schema_version: int = 2
     project_id: str
     base_bids: list[BaseBIDEntry] = Field(default_factory=list)
 
@@ -153,6 +153,12 @@ class MappingArtifact(BaseModel):
                     f"MappingArtifact.feature_cosmetic_queue[{i}] must be a "
                     f"dict; got {type(item).__name__}"
                 )
+            feature_id = item.get("feature_id")
+            if not isinstance(feature_id, str) or not feature_id:
+                raise ValueError(
+                    f"MappingArtifact.feature_cosmetic_queue[{i}] must have a non-empty "
+                    f"string 'feature_id' field; got {feature_id!r}"
+                )
         # Validate feature_inspect (None or a dict).
         if self.feature_inspect is not None and not isinstance(
             self.feature_inspect, dict
@@ -219,13 +225,16 @@ class MappingArtifact(BaseModel):
         """Return a new MappingArtifact with feature_inspect set to ref."""
         return self.model_copy(update={"feature_inspect": ref.model_dump(mode="json")})
 
-    def append_cosmetic(self, item: CosmeticItem) -> MappingArtifact:
-        """Return a new MappingArtifact with item appended to feature_cosmetic_queue."""
+    def append_cosmetic(self, feature_id: str, item: CosmeticItem) -> MappingArtifact:
+        """Return a new MappingArtifact with item appended to feature_cosmetic_queue
+        under the given feature_id."""
+        new_dict = item.model_dump(mode="python")
+        new_dict["feature_id"] = feature_id
         return self.model_copy(
             update={
                 "feature_cosmetic_queue": [
                     *self.feature_cosmetic_queue,
-                    item.model_dump(mode="json"),
+                    new_dict,
                 ]
             }
         )
