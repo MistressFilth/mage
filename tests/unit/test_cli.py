@@ -16,6 +16,7 @@ class _PassthroughRefiner:
 
     async def refine(self, raw, *, semaphore):
         from pathlib import Path as _P
+
         from mage.artifacts.cosmetic import CosmeticItem
         return CosmeticItem(
             sub_bid=raw["sub_bid"],
@@ -545,7 +546,7 @@ class TestCosmeticApply:
 
             return R()
 
-        monkeypatch.setattr("mage.cli.subprocess.run", fake_run)
+        monkeypatch.setattr("subprocess.run", fake_run)
         rc = _run_cli(
             "cosmetic",
             "apply",
@@ -626,7 +627,7 @@ class TestCosmeticApply:
 
             return R()
 
-        monkeypatch.setattr("mage.cli.subprocess.run", fake_run)
+        monkeypatch.setattr("subprocess.run", fake_run)
         rc = _run_cli(
             "cosmetic",
             "apply",

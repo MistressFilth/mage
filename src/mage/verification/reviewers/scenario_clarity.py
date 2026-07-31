@@ -19,7 +19,7 @@ class ScenarioClarityReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the scenario_clarity reviewer for HAILERIS v2.\n\n"
+            "You are the scenario_clarity reviewer for mage.\n\n"
             "Evaluate the Given/When/Then scenario for clarity and single intent.\n"
             "Check:\n"
             "1. Each step is short, unambiguous, and free of pronouns with unclear antecedents.\n"
