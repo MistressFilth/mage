@@ -19,7 +19,7 @@ class LifecycleTagsReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the lifecycle_tags reviewer for HAILERIS v2.\n\n"
+            "You are the lifecycle_tags reviewer for mage.\n\n"
             "Evaluate whether required lifecycle tags are present and well-formed.\n"
             "Check:\n"
             "1. @status tag present (inscribing/approved/live/deprecated/retired).\n"

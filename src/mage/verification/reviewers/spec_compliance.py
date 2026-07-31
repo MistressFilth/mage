@@ -19,7 +19,7 @@ class SpecComplianceReviewer(ReviewerAgent):
 
     def _system_prompt(self) -> str:
         return (
-            "You are the spec_compliance reviewer for HAILERIS v2.\n\n"
+            "You are the spec_compliance reviewer for mage.\n\n"
             "Evaluate whether the drafted scenario implements the parent behavior spec.\n"
             "Check:\n"
             "1. The Given/When/Then covers the behavior's description.\n"
