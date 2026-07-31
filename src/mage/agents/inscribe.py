@@ -32,7 +32,7 @@ class InscribeOutput(BaseModel):
     scenarios: list[ScenarioSpec]
 
 
-INSCRIBE_PROMPT = """You are the Inscribe agent for HAILERIS v2.
+INSCRIBE_PROMPT = """You are the Inscribe agent for mage.
 
 Given a behavior spec, draft scenarios that fully cover the behavior's description.
 

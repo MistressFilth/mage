@@ -1,4 +1,4 @@
-"""CLI entry point for HAILERIS v2."""
+"""CLI entry point for the mage spec-driven development pipeline."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
         prog="mage",
-        description="HAILERIS v2: spec-driven development pipeline",
+        description="mage: spec-driven development pipeline",
     )
     parser.add_argument(
         "--project-dir",
@@ -620,7 +620,7 @@ async def cmd_cosmetic_show(args) -> int:
     mapping = MappingArtifact.load(mapping_path)
     host_config = load_host_config(project_dir)
     refiner = CosmeticRefiner(model=host_config.model)
-    semaphore = asyncio.Semaphore(7)
+    semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     queue = [
         q for q in mapping.feature_cosmetic_queue
         if q.get("feature_id") == args.feature_id
