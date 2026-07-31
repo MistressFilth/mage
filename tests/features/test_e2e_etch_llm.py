@@ -34,12 +34,11 @@ def test_e2e_etch_stage_with_real_llm_wiring(tmp_path):
     assert "def " in red.test_code
 
 
-def test_e2e_inspect_loop_runs_after_etch(tmp_path):
-    """After Etch, the InspectLoop mechanical pre-check still passes (smoke)."""
+def test_events_log_empty_for_blank_project(tmp_path):
+    """A blank project with no events yet has an empty EventsLog."""
     project = tmp_path / "proj"
     project.mkdir()
     _write_minimal_project(project)
-    # No scenario to inspect; assert EventsLog records nothing broken.
     from mage.orchestration.events import EventsLog
     log = EventsLog(project / "events.jsonl")
     assert log.read_all() == []
