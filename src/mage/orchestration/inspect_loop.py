@@ -49,6 +49,7 @@ class InspectLoopStage:
         self.mechanical_verifier = mechanical_verifier
         self.increment_quality_reviewer = increment_quality_reviewer
         self.host_config = host_config
+        self._emitted_feature_resolved = False
 
     async def inspect_increment(
         self,
@@ -65,7 +66,8 @@ class InspectLoopStage:
             "code" — the runner re-loops with this finding in carry-forward.
             None   — clean OR cosmetic-only (cosmetic is queued, not re-looped).
         """
-        if context.iteration == 0 and context.feature_id:
+        if not self._emitted_feature_resolved and context.feature_id:
+            self._emitted_feature_resolved = True
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
@@ -73,7 +75,7 @@ class InspectLoopStage:
                     payload={
                         "feature_id": context.feature_id,
                         "scenario_id": target.scenario_name,
-                        "iteration": 0,
+                        "iteration": context.iteration,
                     },
                 )
             )
