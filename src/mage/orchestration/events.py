@@ -106,6 +106,13 @@ class EventType(str, Enum):
     COSMETIC_APPLY_FAILED = "cosmetic_apply_failed"
     COSMETIC_REFINER_FALLBACK = "cosmetic_refiner_fallback"
 
+    # Plan 11 — Mapping save signal + cosmetic watcher lifecycle
+    MAPPING_SAVED = "mapping_saved"
+    COSMETIC_WATCHER_STARTED = "cosmetic_watcher_started"
+    COSMETIC_WATCHER_STOPPED = "cosmetic_watcher_stopped"
+    COSMETIC_WATCHER_APPLIED_FEATURE = "cosmetic_watcher_applied_feature"
+    COSMETIC_WATCHER_FAILED = "cosmetic_watcher_failed"
+
 
 class Event(BaseModel):
     """One event in the log."""
