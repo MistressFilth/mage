@@ -76,7 +76,7 @@ class TestFileStatePersistence:
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
             project_dir=tmp_path,
-            mapping=MappingArtifact(schema_version=1, project_id="rt", base_bids=[]),
+            mapping=MappingArtifact(schema_version=2, project_id="rt", base_bids=[]),
             events_log=log,
             iteration=42,
             current_stage="test_stage",

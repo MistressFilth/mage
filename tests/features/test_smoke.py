@@ -40,7 +40,7 @@ class TestFoundationEndToEnd:
     async def test_full_flow(self, tmp_project_dir: Path):
         # 1. Mapping artifact: create with one base BID.
         mapping = MappingArtifact(
-            schema_version=1,
+            schema_version=2,
             project_id="smoke",
             base_bids=[
                 BaseBIDEntry(

@@ -258,13 +258,14 @@ class TestSettleFinalization:
     async def test_keep_writes_reports_and_atomically_settles_mapping(self, tmp_path):
         context = await make_context(tmp_path / "project")
         context.mapping = context.mapping.append_cosmetic(
+            "feat-1",
             CosmeticItem(
                 sub_bid="000000",
                 scenario_name="happy",
                 location="Given step",
                 text="Rephrase for clarity",
                 proposed_by="scenario_clarity",
-            )
+            ),
         )
         runner = RecordingRunner(context.project_dir)
         stage = SettleFeatureStage(context.events_log, command_runner=runner)
