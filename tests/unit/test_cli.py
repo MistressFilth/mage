@@ -18,6 +18,7 @@ class _PassthroughRefiner:
         from pathlib import Path as _P
 
         from mage.artifacts.cosmetic import CosmeticItem
+
         return CosmeticItem(
             sub_bid=raw["sub_bid"],
             file_path=_P(raw["location"]["file"]),
@@ -571,9 +572,7 @@ class TestCosmeticApply:
         assert all("cosmetic_refiner_fallback" not in line for line in events)
 
     @pytest.mark.asyncio
-    async def test_cosmetic_apply_filters_by_feature_id(
-        self, tmp_path, monkeypatch
-    ):
+    async def test_cosmetic_apply_filters_by_feature_id(self, tmp_path, monkeypatch):
         import yaml
 
         project_dir = tmp_path
@@ -669,18 +668,22 @@ class TestCosmeticApply:
         target.write_text("line1\nline2\nline3\n")
 
         (project_dir / "mapping.yaml").write_text(
-            yaml.safe_dump({
-                "schema_version": 2,
-                "project_id": "p",
-                "base_bids": [],
-                "feature_cosmetic_queue": [{
-                    "feature_id": "feat-1",
-                    "sub_bid": "00000-001",
-                    "text": "use a constant",
-                    "location": {"file": "src/example.py", "line": 2},
-                    "proposed_by": "IncrementQualityReviewer",
-                }],
-            })
+            yaml.safe_dump(
+                {
+                    "schema_version": 2,
+                    "project_id": "p",
+                    "base_bids": [],
+                    "feature_cosmetic_queue": [
+                        {
+                            "feature_id": "feat-1",
+                            "sub_bid": "00000-001",
+                            "text": "use a constant",
+                            "location": {"file": "src/example.py", "line": 2},
+                            "proposed_by": "IncrementQualityReviewer",
+                        }
+                    ],
+                }
+            )
         )
 
         # Use the same replacement_text `_PassthroughRefiner` produces so the
@@ -695,14 +698,16 @@ class TestCosmeticApply:
         )
 
         # Pre-seed state with matching hash.
-        prior = CosmeticAppliedState(applied={
-            "00000-001": CosmeticApplied(
-                content_hash=item.content_hash,
-                applied_at=datetime(2026, 7, 30, tzinfo=UTC),
-                file=Path("src/example.py"),
-                rationale="use a constant",
-            ),
-        })
+        prior = CosmeticAppliedState(
+            applied={
+                "00000-001": CosmeticApplied(
+                    content_hash=item.content_hash,
+                    applied_at=datetime(2026, 7, 30, tzinfo=UTC),
+                    file=Path("src/example.py"),
+                    rationale="use a constant",
+                ),
+            }
+        )
         await save_state(project_dir, prior)
 
         monkeypatch.setattr(
@@ -710,9 +715,7 @@ class TestCosmeticApply:
             lambda **kw: _PassthroughRefiner(),
         )
 
-        rc = _run_cli(
-            "cosmetic", "apply", "feat-1", "--project-dir", str(project_dir)
-        )
+        rc = _run_cli("cosmetic", "apply", "feat-1", "--project-dir", str(project_dir))
         assert rc == 0
         # File NOT edited (already-applied).
         assert "x = 42" not in target.read_text()
@@ -741,28 +744,34 @@ class TestCosmeticApply:
         target.write_text("line1\nline2\nline3\n")
 
         (project_dir / "mapping.yaml").write_text(
-            yaml.safe_dump({
-                "schema_version": 2,
-                "project_id": "p",
-                "base_bids": [],
-                "feature_cosmetic_queue": [{
-                    "feature_id": "feat-1",
-                    "sub_bid": "00000-001",
-                    "text": "use a constant",
-                    "location": {"file": "src/example.py", "line": 2},
-                    "proposed_by": "IncrementQualityReviewer",
-                }],
-            })
+            yaml.safe_dump(
+                {
+                    "schema_version": 2,
+                    "project_id": "p",
+                    "base_bids": [],
+                    "feature_cosmetic_queue": [
+                        {
+                            "feature_id": "feat-1",
+                            "sub_bid": "00000-001",
+                            "text": "use a constant",
+                            "location": {"file": "src/example.py", "line": 2},
+                            "proposed_by": "IncrementQualityReviewer",
+                        }
+                    ],
+                }
+            )
         )
 
-        prior = CosmeticAppliedState(applied={
-            "00000-001": CosmeticApplied(
-                content_hash="different-hash-9999",
-                applied_at=datetime(2026, 7, 30, tzinfo=UTC),
-                file=Path("src/example.py"),
-                rationale="prior content",
-            ),
-        })
+        prior = CosmeticAppliedState(
+            applied={
+                "00000-001": CosmeticApplied(
+                    content_hash="different-hash-9999",
+                    applied_at=datetime(2026, 7, 30, tzinfo=UTC),
+                    file=Path("src/example.py"),
+                    rationale="prior content",
+                ),
+            }
+        )
         await save_state(project_dir, prior)
 
         monkeypatch.setattr(
@@ -787,9 +796,7 @@ class TestCosmeticApply:
         # refine fan-out (which also goes through asyncio.to_thread).
         monkeypatch.setattr("subprocess.run", fake_run)
 
-        rc = _run_cli(
-            "cosmetic", "apply", "feat-1", "--project-dir", str(project_dir)
-        )
+        rc = _run_cli("cosmetic", "apply", "feat-1", "--project-dir", str(project_dir))
         assert rc == 0
         assert "x = 42" in target.read_text(), "hash mismatch must allow reapply"
         assert len(recorded) == 1, (
