@@ -58,6 +58,7 @@ class ScenarioEntry(BaseModel):
     lifecycle_status: LifecycleStatus
     supersedes: str | None = None
     superseded_by: str | None = None
+    feature_id: str | None = None  # Plan 14: optional, legacy default=None
     tests: list[str] = Field(default_factory=list)
     derivations: list[str] = Field(default_factory=list)
 

@@ -483,14 +483,6 @@ class SettleFeatureStage(StageNode):
         disposition: str,
     ) -> None:
         """Finalize one merge-ready feature using the selected disposition."""
-        # TODO(plan8): wire supersession detection. When Settle identifies that
-        # the merging feature supersedes a previously live scenario, this is
-        # the site that must emit a SCENARIO_SUPERSESSION_REQUESTED event so
-        # the DisciplineStage handler can call begin_supersession. The event
-        # is intentionally NOT emitted today because supersession detection
-        # itself is stubbed: firing unconditionally would corrupt the
-        # mapping whenever a feature is settled. The placeholder below
-        # documents the required payload shape and is a no-op.
         if disposition not in _VALID_DISPOSITIONS:
             raise ValueError(
                 f"invalid disposition {disposition!r}; "
@@ -500,6 +492,30 @@ class SettleFeatureStage(StageNode):
         report_path = context.project_dir / ".haileris" / "settle" / f"{feature_id}.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         await self._load_ready_inspect(context, feature_id)
+
+        # Plan 14: request supersession for every scenario in this feature
+        # whose `supersedes` field is set. The already-wired
+        # discipline/stage.py handler at the SCENARIO_SUPERSESSION_REQUESTED
+        # branch calls begin_supersession. Skipped on disposition=discarded.
+        if disposition != "discarded":
+            for entry in context.mapping.base_bids:
+                for scenario in entry.scenarios:
+                    if scenario.feature_id != feature_id:
+                        continue
+                    if scenario.supersedes is None:
+                        continue
+                    await self.events_log.append(
+                        Event(
+                            timestamp=datetime.now(UTC),
+                            event_type=EventType.SCENARIO_SUPERSESSION_REQUESTED,
+                            payload={
+                                "new_sub_bid": scenario.sub_bid,
+                                "old_sub_bid": scenario.supersedes,
+                                "reason": "",
+                                "originating_stage": "settle",
+                            },
+                        )
+                    )
 
         queue = context.mapping.feature_cosmetic_queue
         await self.events_log.append(
