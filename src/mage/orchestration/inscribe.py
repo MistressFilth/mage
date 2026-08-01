@@ -359,7 +359,7 @@ class InscribeStage(StageNode):
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_COMPLETED,
                 payload={
-                    "feature_id": "unknown",
+                    "feature_id": context.feature_id,
                     "scenario_count": sum(len(e.scenarios) for e in mapping.base_bids),
                     "iteration": iteration,
                 },

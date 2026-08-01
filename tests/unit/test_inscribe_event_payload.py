@@ -35,16 +35,7 @@ def _seed_project(tmp_path: Path) -> Path:
                 "schema_version": 2,
                 "feature_id": "feat-1",
                 "enumerated_at": "2026-07-27T00:00:00Z",
-                "behaviors": [
-                    {
-                        "id": "00000",
-                        "name": "authenticate-user",
-                        "description": "User logs in",
-                        "depends_on": [],
-                        "notes": "",
-                        "cross_behavior_links": [],
-                    },
-                ],
+                "behaviors": [],
             }
         )
     )
@@ -172,5 +163,79 @@ async def test_inscribe_started_event_empty_when_context_feature_id_empty(tmp_pa
     ]
     assert started
     payload = started[0]["payload"]
+    assert payload["feature_id"] == ""
+    assert payload["feature_id"] != "unknown"
+
+
+@pytest.mark.asyncio
+async def test_inscribe_completed_event_carries_context_feature_id(tmp_path):
+    """INSCRIBE_COMPLETED payload's feature_id == context.feature_id (NOT 'unknown')."""
+    project = _seed_project(tmp_path)
+    events_log_path = project / "events.jsonl"
+    events_log = EventsLog(events_log_path)
+
+    mapping = MappingArtifact(schema_version=2, project_id="p", base_bids=[])
+    await mapping.save(project / "mapping.yaml")
+
+    context = PipelineContext(
+        project_dir=project,
+        mapping=mapping,
+        events_log=events_log,
+        plan_path=project / "plan.md",
+        feature_id="feat-Y",
+    )
+
+    stage = _make_inscribe_stage(events_log)
+
+    try:
+        await stage._run(context)
+    except BaseException:  # noqa: BLE001, S110
+        pass
+
+    lines = events_log_path.read_text().strip().splitlines()
+    completed = [
+        json.loads(line)
+        for line in lines
+        if json.loads(line).get("event_type") == "inscribe_completed"
+    ]
+    assert completed, "expected INSCRIBE_COMPLETED event in events.jsonl"
+    payload = completed[-1]["payload"]
+    assert payload["feature_id"] == "feat-Y"
+    assert payload["feature_id"] != "unknown"
+
+
+@pytest.mark.asyncio
+async def test_inscribe_completed_event_empty_when_context_feature_id_empty(tmp_path):
+    """Default empty feature_id propagates as '' (not 'unknown')."""
+    project = _seed_project(tmp_path)
+    events_log_path = project / "events.jsonl"
+    events_log = EventsLog(events_log_path)
+
+    mapping = MappingArtifact(schema_version=2, project_id="p", base_bids=[])
+    await mapping.save(project / "mapping.yaml")
+
+    context = PipelineContext(
+        project_dir=project,
+        mapping=mapping,
+        events_log=events_log,
+        plan_path=project / "plan.md",
+        feature_id="",
+    )
+
+    stage = _make_inscribe_stage(events_log)
+
+    try:
+        await stage._run(context)
+    except BaseException:  # noqa: BLE001, S110
+        pass
+
+    lines = events_log_path.read_text().strip().splitlines()
+    completed = [
+        json.loads(line)
+        for line in lines
+        if json.loads(line).get("event_type") == "inscribe_completed"
+    ]
+    assert completed
+    payload = completed[-1]["payload"]
     assert payload["feature_id"] == ""
     assert payload["feature_id"] != "unknown"
