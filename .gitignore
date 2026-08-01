@@ -11,3 +11,6 @@ mapping.yaml
 events.jsonl
 pipeline-state.yaml
 docs/superpowers/
+
+# mage runtime state (Plan 15 — approval gate marker lives here)
+.mage/

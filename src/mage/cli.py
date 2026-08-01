@@ -158,9 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
     cosmetic_watch_parser.add_argument(
         "--project-dir", type=Path, default=argparse.SUPPRESS
     )
-    cosmetic_watch_parser.add_argument(
-        "--poll-interval-ms", type=int, default=250
-    )
+    cosmetic_watch_parser.add_argument("--poll-interval-ms", type=int, default=250)
 
     # mage mapping
     mapping_parser = subparsers.add_parser(
@@ -628,7 +626,8 @@ async def cmd_cosmetic_show(args) -> int:
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     queue = [
-        q for q in mapping.feature_cosmetic_queue
+        q
+        for q in mapping.feature_cosmetic_queue
         if q.get("feature_id") == args.feature_id
     ]
     if not queue:
@@ -638,10 +637,7 @@ async def cmd_cosmetic_show(args) -> int:
         )
         return 0
     refined = await asyncio.gather(
-        *[
-            refiner.refine(q, semaphore=semaphore)
-            for q in queue
-        ]
+        *[refiner.refine(q, semaphore=semaphore) for q in queue]
     )
     for item in refined:
         fp = str(item.file_path) if item.file_path else "<unresolved>"

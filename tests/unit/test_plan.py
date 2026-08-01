@@ -190,3 +190,19 @@ async def test_load_after_revise_succeeds_with_new_digest(tmp_path):
 
     loaded = await PlanArtifact.load(plan_path, log)
     assert loaded == "# v2\n"
+
+
+def test_compute_plan_digest_matches_private_method():
+    from mage.artifacts.plan import PlanArtifact, compute_plan_digest
+
+    content = "# plan content\n"
+    assert compute_plan_digest(content) == PlanArtifact._compute_digest(content)
+
+
+def test_compute_plan_digest_is_sha256_hex():
+    import re
+
+    from mage.artifacts.plan import compute_plan_digest
+
+    digest = compute_plan_digest("anything")
+    assert re.fullmatch(r"[0-9a-f]{64}", digest)

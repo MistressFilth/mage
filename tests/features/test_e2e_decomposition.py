@@ -191,7 +191,9 @@ async def test_halt_and_resume_cycle(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_approval_gate_required_emits_warning(tmp_path):
+async def test_approval_gate_required_halts_on_first_run(tmp_path):
+    from mage.orchestration.exceptions import StageHalted
+
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -209,13 +211,15 @@ async def test_approval_gate_required_emits_warning(tmp_path):
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
     ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
 
-    import warnings
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+    with pytest.raises(StageHalted):
         await stage.run(ctx)
-        approval_warnings = [x for x in w if "require_plan_approval" in str(x.message)]
-        assert len(approval_warnings) >= 1
+
+    types = [e.event_type for e in log.read_all()]
+    assert EventType.APPROVAL_REQUESTED in types
+    assert EventType.APPROVAL_GRANTED not in types
+    marker = project_dir / ".mage" / "approval_pending.json"
+    assert marker.exists()
+    assert not (project_dir / "plan.md").exists()
 
 
 @pytest.mark.asyncio
@@ -237,10 +241,87 @@ async def test_approval_gate_disabled_runs_silently(tmp_path):
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
     ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
 
-    import warnings
+    await stage.run(ctx)
 
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+    types = [e.event_type for e in log.read_all()]
+    assert EventType.APPROVAL_REQUESTED not in types
+    assert EventType.APPROVAL_GRANTED not in types
+    assert not (project_dir / ".mage" / "approval_pending.json").exists()
+    assert (project_dir / "plan.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_e2e_approval_resume_after_marker_cleared(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
+
+    log = EventsLog(project_dir / "events.jsonl")
+    mapping = MappingArtifact(project_id="feat-001")
+
+    agent = MagicMock(spec=DecompositionAgent)
+    agent.run.return_value = DecompositionOutput(
+        architecture=ArchitectureSpec(parts=[], components=[], layers=[]),
+        behaviors=[BehaviorSpec(name="auth", description="Login")],
+    )
+
+    host_config = HostConfig(require_plan_approval=True)
+    stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
+    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+
+    # First run: halts and writes marker.
+    from mage.orchestration.exceptions import StageHalted
+
+    with pytest.raises(StageHalted):
         await stage.run(ctx)
-        approval_warnings = [x for x in w if "require_plan_approval" in str(x.message)]
-        assert len(approval_warnings) == 0
+    assert (project_dir / ".mage" / "approval_pending.json").exists()
+
+    # Operator clears marker (no plan edit).
+    (project_dir / ".mage" / "approval_pending.json").unlink()
+
+    # Second run: grants and finalizes.
+    await stage.run(ctx)
+    types = [e.event_type for e in log.read_all()]
+    assert types.count(EventType.APPROVAL_GRANTED) == 1
+    assert (project_dir / "plan.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_e2e_approval_rehalts_on_plan_edit_after_approval(tmp_path):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
+
+    log = EventsLog(project_dir / "events.jsonl")
+    mapping = MappingArtifact(project_id="feat-001")
+
+    agent = MagicMock(spec=DecompositionAgent)
+    agent.run.return_value = DecompositionOutput(
+        architecture=ArchitectureSpec(parts=[], components=[], layers=[]),
+        behaviors=[BehaviorSpec(name="auth", description="Login")],
+    )
+
+    host_config = HostConfig(require_plan_approval=True)
+    stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
+    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+
+    from mage.orchestration.exceptions import StageHalted
+
+    with pytest.raises(StageHalted):
+        await stage.run(ctx)
+
+    # Operator edits plan between runs (write the same file shape that the
+    # second run would render; we simulate by triggering a different render).
+    # Use a fresh agent that returns a different plan content on the second run.
+    agent2 = MagicMock(spec=DecompositionAgent)
+    agent2.run.return_value = DecompositionOutput(
+        architecture=ArchitectureSpec(
+            parts=["api"], components=["auth"], layers=["http"]
+        ),
+        behaviors=[BehaviorSpec(name="auth", description="Login (revised)")],
+    )
+    stage2 = DecompositionStage(events_log=log, agent=agent2, host_config=host_config)
+
+    with pytest.raises(StageHalted) as exc_info:
+        await stage2.run(ctx)
+    assert exc_info.value.reason == "plan_approval_stale"

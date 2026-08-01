@@ -48,6 +48,15 @@ def _recorded_digest(event: Event) -> str | None:
     return event.payload.get("plan_sha256") or event.payload.get("new_sha256")
 
 
+def compute_plan_digest(content: str) -> str:
+    """Return the SHA256 hex digest of plan content.
+
+    Mirrors `PlanArtifact._compute_digest` so external callers (e.g. the
+    Plan 15 approval gate) can compute the digest before finalize() runs.
+    """
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 class PlanArtifact:
     """Digest-pinned Plan operations."""
 

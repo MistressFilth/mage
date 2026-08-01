@@ -15,16 +15,10 @@ def _init_minimal_project(project: Path) -> None:
     (project / "plan.md").write_text("# plan\n")
     (project / ".haileris").mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "e2e@mage"], cwd=project, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "e2e"], cwd=project, check=True
-    )
+    subprocess.run(["git", "config", "user.email", "e2e@mage"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.name", "e2e"], cwd=project, check=True)
     subprocess.run(["git", "add", "-A"], cwd=project, check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "-m", "init"], cwd=project, check=True
-    )
+    subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=project, check=True)
 
 
 def test_e2e_inspect_journal_schema_supports_feature_id(tmp_path: Path):
@@ -51,9 +45,7 @@ def test_e2e_inspect_journal_schema_supports_feature_id(tmp_path: Path):
     (src / "example.py").write_text("x = 1\n")
     (project / "mapping.yaml").write_text(yaml.safe_dump(mapping))
     subprocess.run(["git", "add", "-A"], cwd=project, check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "-m", "seed"], cwd=project, check=True
-    )
+    subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=project, check=True)
 
     mapping = yaml.safe_load((project / "mapping.yaml").read_text())
     for entry in mapping.get("feature_cosmetic_queue", []):
@@ -92,9 +84,7 @@ def test_e2e_cosmetic_apply_filters_by_feature_id(tmp_path: Path):
     }
     (project / "mapping.yaml").write_text(yaml.safe_dump(mapping))
     subprocess.run(["git", "add", "-A"], cwd=project, check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "-m", "seed"], cwd=project, check=True
-    )
+    subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=project, check=True)
 
     subprocess.run(
         [
