@@ -155,7 +155,10 @@ class DecompositionStage(StageNode):
         marker = project_dir / ".mage" / "approval_pending.json"
         pending = self._read_marker(marker)
 
-        if pending is not None and pending["plan_digest"] != plan_digest:
+        if pending is not None and (
+            pending.get("_malformed") is True
+            or pending.get("plan_digest") != plan_digest
+        ):
             # Stale or malformed marker: overwrite and re-halt.
             self._write_marker(
                 marker,
@@ -238,7 +241,12 @@ class DecompositionStage(StageNode):
 
     @staticmethod
     def _read_marker(marker: Path) -> dict | None:
-        """Read the approval marker file, returning None if absent or malformed."""
+        """Read the approval marker file.
+
+        Returns None when absent, a sentinel dict {"_malformed": True} when
+        present but unparseable (so the gate treats it as stale), or the
+        parsed payload when valid.
+        """
         if not marker.exists():
             return None
         import json
@@ -246,7 +254,7 @@ class DecompositionStage(StageNode):
         try:
             return json.loads(marker.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return None
+            return {"_malformed": True}
 
     @staticmethod
     def _write_marker(

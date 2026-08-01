@@ -208,13 +208,14 @@ async def test_approval_gate_treats_malformed_marker_as_stale(tmp_path):
     marker = project_dir / ".mage" / "approval_pending.json"
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("not-json{", encoding="utf-8")
-    with pytest.raises(StageHalted):
+    with pytest.raises(StageHalted) as exc_info:
         await stage._approval_gate(
             plan_content="# plan\n",
             plan_path=project_dir / "plan.md",
             feature_id="feat-001",
             project_dir=project_dir,
         )
+    assert exc_info.value.reason == "plan_approval_stale"
     payload = json.loads(marker.read_text())
     assert payload["plan_digest"] == compute_plan_digest("# plan\n")
     types = [e.event_type for e in log.read_all()]
