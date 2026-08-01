@@ -82,8 +82,12 @@ def test_static_guard_no_plan8_todo_in_source() -> None:
         check=False,
         cwd=Path(__file__).resolve().parents[2],  # mage/ repo root
     )
-    assert result.returncode != 0, (
+    # grep returns 0 = matches found (regression), 1 = no matches (clean),
+    # 2 = error. Asserting == 1 surfaces both the regression case AND any
+    # grep invocation error rather than silently treating them as the same.
+    assert result.returncode == 1, (
         f"Static guard failed: TODO(plan8) reappeared in source.\n"
+        f"grep exit code: {result.returncode}\n"
         f"grep output:\n{result.stdout}"
     )
 

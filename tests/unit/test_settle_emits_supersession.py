@@ -131,8 +131,13 @@ async def test_settle_skips_emission_when_disposition_is_discarded(
 
     await stage.run_settle(context, feature_id="feat-X", disposition="discarded")
 
-    if not events_log_path.exists():
-        return  # truly no events → nothing to check
+    # Settle must always write SOMETHING to events.jsonl (e.g. SETTLE_FEATURE_STARTED).
+    # Silent paths indicate a regression where the stage swallowed its work; this
+    # assertion fails loud instead of silently returning.
+    assert events_log_path.exists(), (
+        "Settle wrote no events for disposition=discarded; expected at least "
+        "SETTLE_FEATURE_STARTED"
+    )
     events = [json.loads(l) for l in events_log_path.read_text().splitlines() if l]
     supersession = [
         e for e in events if e["event_type"] == "scenario_supersession_requested"
@@ -156,8 +161,10 @@ async def test_settle_skips_scenarios_with_wrong_feature_id(tmp_path, stubbed_st
 
     await stage.run_settle(context, feature_id="feat-X", disposition="merged")
 
-    if not events_log_path.exists():
-        return
+    assert events_log_path.exists(), (
+        "Settle wrote no events; expected at least SETTLE_FEATURE_STARTED "
+        "even when no scenario supersedes"
+    )
     events = [json.loads(l) for l in events_log_path.read_text().splitlines() if l]
     supersession = [
         e for e in events if e["event_type"] == "scenario_supersession_requested"
