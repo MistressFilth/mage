@@ -11,6 +11,7 @@ import pytest
 
 from mage.artifacts.verdict import ReviewerVerdict
 from mage.orchestration.inspect_feature import InspectFeatureStage
+from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
 
 
@@ -19,7 +20,7 @@ class CleanMechanicalVerifier:
         return []
 
 
-def make_context(tmp_path) -> object:
+def make_context(tmp_path) -> PipelineContext:
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
