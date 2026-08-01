@@ -24,7 +24,7 @@ binary, so the test is fast and isolated.
 
 from __future__ import annotations
 
-import subprocess
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -57,9 +57,15 @@ from mage.verification.reviewers.testability import TestabilityReviewer
 # Plan 13 banned exactly two patterns in the inspect-feature and inscribe
 # paths. The sub_bid/scenario_name "unknown" fallbacks are explicitly out of
 # scope per the spec and MUST NOT be flagged by this guard.
+#
+# Patterns are evaluated via Python ``re.search`` so the guard catches both
+# the single-line ``append_cosmetic("unknown", ...)`` form AND a future
+# regression that wraps the call across lines like
+# ``append_cosmetic(\n    "unknown", ...``. ``re.DOTALL`` lets whitespace
+# match newlines.
 _BANNED_PATTERNS: tuple[str, ...] = (
-    '"feature_id": "unknown"',
-    'append_cosmetic("unknown"',
+    r'"feature_id"\s*:\s*"unknown"',
+    r'append_cosmetic\s*\(\s*"unknown"',
 )
 
 
@@ -74,26 +80,35 @@ def _banned_patterns_target_files() -> tuple[str, ...]:
 def test_static_guard_no_unknown_feature_id_in_inspect_or_inscribe_source() -> None:
     """The banished sentinel patterns stay gone after the Plan 13 cleanup.
 
-    Catches the two patterns the plan explicitly banned:
+    Catches the two patterns the plan explicitly banned, regardless of
+    surrounding whitespace (including across newlines):
     - ``"feature_id": "unknown"`` as a payload/dict value
     - ``append_cosmetic("unknown"`` as the first positional argument
+      (also wrapped-across-lines form)
 
     Sub_bid/scenario_name ``"unknown"`` fallbacks are intentionally out of
     scope and are NOT flagged here.
     """
     target_files = _banned_patterns_target_files()
+
+    offenders: list[tuple[str, str, int, str]] = []  # (pattern, file, lineno, line)
     for pattern in _BANNED_PATTERNS:
-        result = subprocess.run(
-            ["grep", "-rn", "-F", "--", pattern, *target_files],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode != 0, (
-            f"Static guard failed: banned sentinel {pattern!r} reappeared in "
-            f"inspect_feature.py or inscribe.py.\n"
-            f"grep output:\n{result.stdout}"
-        )
+        compiled = re.compile(pattern, re.DOTALL)
+        for path_str in target_files:
+            path = Path(path_str)
+            text = path.read_text()
+            match = compiled.search(text)
+            if match is None:
+                continue
+            line_no = text.count("\n", 0, match.start()) + 1
+            line = text.splitlines()[line_no - 1]
+            offenders.append((pattern, str(path), line_no, line))
+
+    assert not offenders, (
+        "Static guard failed: banned sentinel reappeared in inspect_feature.py "
+        "or inscribe.py:\n"
+        + "\n".join(f"{p}  {f}:{n}: {l!r}" for (p, f, n, l) in offenders)
+    )
 
 
 # ---------------------------------------------------------------------------
