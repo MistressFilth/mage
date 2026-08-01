@@ -66,7 +66,7 @@ class InscribeStage(StageNode):
                 timestamp=datetime.now(UTC),
                 event_type=EventType.INSCRIBE_STARTED,
                 payload={
-                    "feature_id": "unknown",  # Plan 3 spec: emit but don't enforce
+                    "feature_id": context.feature_id,
                     "reviewer_count": len(self.reviewers),
                     "iteration": context.iteration,
                 },
