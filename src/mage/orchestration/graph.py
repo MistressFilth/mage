@@ -13,6 +13,7 @@ from mage.orchestration.discipline.policy import (
 from mage.orchestration.discipline.stage import DisciplineStage
 from mage.orchestration.etch import ScenarioInspectHalted
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.exceptions import StageHalted
 from mage.orchestration.inspect_feature import InspectFeatureHalted
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.persistence import FileStatePersistence
@@ -107,6 +108,30 @@ class PipelineGraph:
                 raise SystemExit(0) from e
             except PlanRevisionRequired as e:
                 await self._persist_halt(context, e)
+                last_seen_count = await self._dispatch_new_events(
+                    context, discipline, last_seen_count
+                )
+                raise SystemExit(0) from e
+            except StageHalted as e:
+                # Plan 15 approval gate halt. Emit HALT_PERSISTED with the
+                # carried reason, save mapping in halted state, exit cleanly.
+                # No .haileris/state write — the marker file is the persistence.
+                context.mapping = context.mapping.model_copy(
+                    update={"feature_status": "halted"}
+                )
+                if context.project_dir is not None and context.project_dir.exists():
+                    await context.mapping.save(context.project_dir / "mapping.yaml")
+                halt_event = Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.HALT_PERSISTED,
+                    payload={
+                        "reason": e.reason,
+                        "originating_stage": e.originating_stage,
+                        "affected_behaviors": e.affected_behaviors,
+                        "context_snapshot": {**e.context, "stage": stage.name},
+                    },
+                )
+                await context.events_log.append(halt_event)
                 last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
