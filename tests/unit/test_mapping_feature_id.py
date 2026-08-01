@@ -78,11 +78,16 @@ def test_feature_cosmetic_queue_accepts_empty_feature_id_string():
 
 def test_feature_cosmetic_queue_empty_feature_id_round_trips(tmp_path):
     """load() preserves an empty-string feature_id (no fallback to 'unknown', no raise)."""
-    m = MappingArtifact(schema_version=2, project_id="p", feature_cosmetic_queue=[
-        {"feature_id": "", "sub_bid": "00000-001", "text": "use a constant"}
-    ])
+    m = MappingArtifact(
+        schema_version=2,
+        project_id="p",
+        feature_cosmetic_queue=[
+            {"feature_id": "", "sub_bid": "00000-001", "text": "use a constant"}
+        ],
+    )
     path = tmp_path / "mapping.yaml"
     import asyncio
+
     asyncio.run(m.save(path))
     loaded = MappingArtifact.load(path)
     assert loaded.feature_cosmetic_queue[0]["feature_id"] == ""

@@ -17,16 +17,10 @@ def _write_minimal_project(project: Path) -> None:
     )
     (project / ".haileris").mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "e2e@mage"], cwd=project, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "e2e"], cwd=project, check=True
-    )
+    subprocess.run(["git", "config", "user.email", "e2e@mage"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.name", "e2e"], cwd=project, check=True)
     subprocess.run(["git", "add", "-A"], cwd=project, check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "-m", "init"], cwd=project, check=True
-    )
+    subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=project, check=True)
 
 
 def _seed_mapping(project: Path, feature_id: str, sub_bid: str) -> None:

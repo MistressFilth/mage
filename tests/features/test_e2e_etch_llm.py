@@ -22,6 +22,7 @@ def test_e2e_etch_stage_with_real_llm_wiring(tmp_path):
     agent = PydanticEtchAgent(model="test")
     # Smoke test: agent can run a prompt via TestModel.
     import asyncio
+
     red = asyncio.run(
         agent.run(step="save a file", scenario_context={"scenario_name": "s"})
     )
@@ -35,5 +36,6 @@ def test_events_log_empty_for_blank_project(tmp_path):
     project.mkdir()
     _write_minimal_project(project)
     from mage.orchestration.events import EventsLog
+
     log = EventsLog(project / "events.jsonl")
     assert log.read_all() == []
