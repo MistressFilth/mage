@@ -117,6 +117,10 @@ class EventType(str, Enum):
     COSMETIC_WATCHER_APPLIED_FEATURE = "cosmetic_watcher_applied_feature"
     COSMETIC_WATCHER_FAILED = "cosmetic_watcher_failed"
 
+    # Plan 15 — Plan approval gate
+    APPROVAL_REQUESTED = "approval_requested"
+    APPROVAL_GRANTED = "approval_granted"
+
 
 class Event(BaseModel):
     """One event in the log."""

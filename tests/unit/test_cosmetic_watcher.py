@@ -14,7 +14,9 @@ from mage.orchestration.cosmetic_watcher import MappingArtifactWatcher
 from mage.orchestration.events import Event, EventsLog, EventType
 
 
-def _write_mapping(project_dir: Path, *, feature_id: str = "feat-1", sub_bid: str = "00000-001") -> None:
+def _write_mapping(
+    project_dir: Path, *, feature_id: str = "feat-1", sub_bid: str = "00000-001"
+) -> None:
     import yaml
 
     mapping = {
@@ -124,9 +126,7 @@ async def test_watcher_stop_emits_stopped_event(tmp_path: Path):
     watcher.stop()
     await watcher.run()
     events = log.read_all()
-    assert any(
-        e.event_type == EventType.COSMETIC_WATCHER_STOPPED for e in events
-    )
+    assert any(e.event_type == EventType.COSMETIC_WATCHER_STOPPED for e in events)
 
 
 @pytest.mark.asyncio

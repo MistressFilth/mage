@@ -360,4 +360,3 @@ async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
             f"expected {feature_id!r}"
         )
         assert entry.get("feature_id") != "unknown"
-
