@@ -54,3 +54,35 @@ def test_feature_cosmetic_queue_round_trips_via_save_load(tmp_path):
     asyncio.run(m2.save(path))
     loaded = MappingArtifact.load(path)
     assert loaded.feature_cosmetic_queue[0]["feature_id"] == "feat-9"
+
+
+def test_feature_cosmetic_queue_accepts_empty_feature_id_string():
+    """Plan 13: empty-string feature_id is a valid (back-compat) value, distinct from the key being omitted.
+
+    The "key omitted" case still raises via Plan 10's strict validator. An explicit
+    empty-string value is the documented Plan 12 default when the caller's
+    feature_id is unset, so load() must accept it.
+    """
+    MappingArtifact(
+        schema_version=2,
+        project_id="p",
+        feature_cosmetic_queue=[
+            {
+                "feature_id": "",
+                "sub_bid": "00000-001",
+                "text": "use a constant",
+            }
+        ],
+    )  # no raise
+
+
+def test_feature_cosmetic_queue_empty_feature_id_round_trips(tmp_path):
+    """load() preserves an empty-string feature_id (no fallback to 'unknown', no raise)."""
+    m = MappingArtifact(schema_version=2, project_id="p", feature_cosmetic_queue=[
+        {"feature_id": "", "sub_bid": "00000-001", "text": "use a constant"}
+    ])
+    path = tmp_path / "mapping.yaml"
+    import asyncio
+    asyncio.run(m.save(path))
+    loaded = MappingArtifact.load(path)
+    assert loaded.feature_cosmetic_queue[0]["feature_id"] == ""

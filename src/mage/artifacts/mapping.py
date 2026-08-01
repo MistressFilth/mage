@@ -155,10 +155,10 @@ class MappingArtifact(BaseModel):
                     f"dict; got {type(item).__name__}"
                 )
             feature_id = item.get("feature_id")
-            if not isinstance(feature_id, str) or not feature_id:
+            if not isinstance(feature_id, str):
                 raise ValueError(
-                    f"MappingArtifact.feature_cosmetic_queue[{i}] must have a non-empty "
-                    f"string 'feature_id' field; got {feature_id!r}"
+                    f"MappingArtifact.feature_cosmetic_queue[{i}] must have a string "
+                    f"'feature_id' field (empty string allowed; Plan 13 default); got {feature_id!r}"
                 )
         # Validate feature_inspect (None or a dict).
         if self.feature_inspect is not None and not isinstance(
