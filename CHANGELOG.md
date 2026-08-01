@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `InspectFeatureStage._run_reviewers` now honors `HostConfig.enabled_reviewers`.
+  Previously the field was inert on the inspect path; the filter now excludes
+  both scenario and cross-scenario reviewers not listed in the config. Semantics
+  match `InscribeStage`: `None` = all enabled, `[]` = none, explicit list =
+  subset. Fixes the inert-field gap tracked in the TODO backlog.
 - Approval gate placeholder closed: `require_plan_approval=True` now halts the
   pipeline via `APPROVAL_REQUESTED` + `StageHalted`, persists a digest-bound
   marker at `.mage/approval_pending.json`, and finalizes the plan on the next

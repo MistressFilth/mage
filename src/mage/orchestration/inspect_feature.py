@@ -289,6 +289,21 @@ class InspectFeatureStage(StageNode):
             if getattr(reviewer, "dimension", "") == "cross_scenario"
         ]
 
+        # Honor HostConfig.enabled_reviewers (Plan 16). Same predicate as
+        # InscribeStage: None = all, [] = none, list = subset.
+        if self.host_config.enabled_reviewers is not None:
+            enabled_set = set(self.host_config.enabled_reviewers)
+            scenario_reviewers = [
+                reviewer
+                for reviewer in scenario_reviewers
+                if reviewer.dimension in enabled_set
+            ]
+            cross_reviewers = [
+                reviewer
+                for reviewer in cross_reviewers
+                if reviewer.dimension in enabled_set
+            ]
+
         semaphore = asyncio.Semaphore(self.host_config.max_concurrent_llm_calls)
 
         async def run_scenario_block(
