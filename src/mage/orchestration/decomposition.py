@@ -10,8 +10,9 @@ import yaml
 from mage.agents.decomposition import DecompositionAgent
 from mage.artifacts.ascertain import parse_ascertain
 from mage.artifacts.enumeration import enumerate_behaviors
-from mage.artifacts.plan import PlanArtifact
+from mage.artifacts.plan import PlanArtifact, compute_plan_digest
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.exceptions import StageHalted
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.plan_writer import render_plan
 from mage.verification.host_overrides import HostConfig
@@ -101,14 +102,13 @@ class DecompositionStage(StageNode):
         )
 
         # 7. Approval gate (if required)
-        if self.host_config.require_plan_approval:
-            # Deferred-tool pause (placeholder — real impl in Plan 6)
-            import warnings
-
-            warnings.warn(
-                "require_plan_approval=True: deferred-tool prompt not yet wired in Plan 2; "
-                "auto-approving for now."
-            )
+        assert context.plan_path is not None
+        await self._approval_gate(
+            plan_content=plan_content,
+            plan_path=context.plan_path,
+            feature_id=ascertain.feature_id,
+            project_dir=project_dir,
+        )
 
         # 8. Finalize Plan
         assert context.plan_path is not None
@@ -129,3 +129,159 @@ class DecompositionStage(StageNode):
 
         # 10. Return updated context
         return context.model_copy(update={"mapping": updated_mapping})
+
+    async def _approval_gate(
+        self,
+        *,
+        plan_content: str,
+        plan_path: Path,
+        feature_id: str,
+        project_dir: Path,
+    ) -> None:
+        """Halt the pipeline until the operator clears the approval marker.
+
+        No-op when require_plan_approval is False. Otherwise:
+        - First halt: emit APPROVAL_REQUESTED, write marker, raise StageHalted.
+        - Marker present + matching digest: emit APPROVAL_GRANTED, delete marker.
+        - Marker absent + prior APPROVAL_REQUESTED in events for current digest:
+          emit APPROVAL_GRANTED (operator cleared marker after reviewing).
+        - Stale or malformed marker: overwrite with new digest, re-halt.
+        """
+        if not self.host_config.require_plan_approval:
+            return
+
+        plan_digest = compute_plan_digest(plan_content)
+        plan_path_rel = plan_path.relative_to(project_dir)
+        marker = project_dir / ".mage" / "approval_pending.json"
+        pending = self._read_marker(marker)
+
+        if pending is not None and pending["plan_digest"] != plan_digest:
+            # Stale or malformed marker: overwrite and re-halt.
+            self._write_marker(
+                marker,
+                feature_id=feature_id,
+                plan_digest=plan_digest,
+                plan_path=plan_path_rel,
+            )
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.APPROVAL_REQUESTED,
+                    payload={
+                        "feature_id": feature_id,
+                        "plan_digest": plan_digest,
+                        "plan_path": str(plan_path_rel),
+                    },
+                )
+            )
+            raise StageHalted(
+                reason="plan_approval_stale",
+                feature_id=feature_id,
+                plan_digest=plan_digest,
+            )
+
+        if pending is not None:
+            # Marker present, digest matches: grant + clear marker.
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.APPROVAL_GRANTED,
+                    payload={
+                        "feature_id": feature_id,
+                        "plan_digest": plan_digest,
+                        "approved_by": "human",
+                    },
+                )
+            )
+            marker.unlink()
+            return
+
+        # No marker: check if a prior APPROVAL_REQUESTED matches current digest.
+        prior = self._last_requested_digest(feature_id, plan_digest)
+        if prior is not None:
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.APPROVAL_GRANTED,
+                    payload={
+                        "feature_id": feature_id,
+                        "plan_digest": plan_digest,
+                        "approved_by": "human",
+                    },
+                )
+            )
+            return
+
+        # First halt.
+        self._write_marker(
+            marker,
+            feature_id=feature_id,
+            plan_digest=plan_digest,
+            plan_path=plan_path_rel,
+        )
+        await self.events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.APPROVAL_REQUESTED,
+                payload={
+                    "feature_id": feature_id,
+                    "plan_digest": plan_digest,
+                    "plan_path": str(plan_path_rel),
+                },
+            )
+        )
+        raise StageHalted(
+            reason="plan_approval",
+            feature_id=feature_id,
+            plan_digest=plan_digest,
+        )
+
+    @staticmethod
+    def _read_marker(marker: Path) -> dict | None:
+        """Read the approval marker file, returning None if absent or malformed."""
+        if not marker.exists():
+            return None
+        import json
+
+        try:
+            return json.loads(marker.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    @staticmethod
+    def _write_marker(
+        marker: Path,
+        *,
+        feature_id: str,
+        plan_digest: str,
+        plan_path: Path,
+    ) -> None:
+        """Atomically write the approval marker file."""
+        import json
+        import os
+
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "feature_id": feature_id,
+            "plan_digest": plan_digest,
+            "plan_path": str(plan_path),
+            "requested_at": datetime.now(UTC).isoformat(),
+        }
+        tmp = marker.with_suffix(marker.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, marker)
+
+    def _last_requested_digest(self, feature_id: str, plan_digest: str) -> str | None:
+        """Return plan_digest if any APPROVAL_REQUESTED matches; else None.
+
+        Looks across the whole events log; the gate runs at most once per
+        DecompositionStage run so volume is bounded.
+        """
+        for event in self.events_log.read_all():
+            if (
+                event.event_type == EventType.APPROVAL_REQUESTED
+                and event.payload.get("feature_id") == feature_id
+                and event.payload.get("plan_digest") == plan_digest
+            ):
+                return plan_digest
+        return None
