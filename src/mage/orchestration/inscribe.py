@@ -282,6 +282,7 @@ class InscribeStage(StageNode):
                             sub_bid=sub_bid.value,
                             scenario_text_hash=scenario_text_hash,
                             lifecycle_status=LifecycleStatus.APPROVED,
+                            feature_id=context.feature_id,
                         )
                         mapping = mapping.append_scenario(base_bid, scenario_entry)
                         # Write scenario file
