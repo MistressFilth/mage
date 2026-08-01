@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Plan 13 (feature_id sentinel cleanup): removed the three remaining hardcoded `feature_id="unknown"` literals that Plan 12 left at `inspect_feature.py:377`, `inscribe.py:69`, and `inscribe.py:362`. `InspectFeatureStage._append_cosmetics` now accepts a `feature_id` kwarg threaded from `_run_iteration`; `InscribeStage._run` reads `context.feature_id` for both `INSCRIBE_STARTED` and `INSCRIBE_COMPLETED` payload values. Empty-string default is preserved (Plan 12 default); no `"unknown"` fallback is ever substituted. `MappingArtifact._validate_cosmetic_queue` now accepts an empty-string `feature_id` on load (Plan 13 invariant that empty-string values round-trip without raising). The strict "key omitted" validation from Plan 10 is preserved — only the empty-string case was relaxed. New `tests/features/test_e2e_feature_id_sentinel_cleanup.py` adds a Python-regex static guard (catches single-line and wrapped-across-lines regressions) and an end-to-end driver that asserts no emitted event or cosmetic-queue entry ever carries the sentinel.
+
 ### Added
 
 - Plan 11: `mage cosmetic watch` long-running daemon. Tails `events.jsonl` for `MAPPING_SAVED` events; diffs the `feature_cosmetic_queue` against the last seen snapshot and auto-applies new entries per feature. Reuses Plan 10's `CosmeticAppliedState` for idempotency.

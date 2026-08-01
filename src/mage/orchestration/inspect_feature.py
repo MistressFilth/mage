@@ -358,6 +358,8 @@ class InspectFeatureStage(StageNode):
         context: PipelineContext,
         findings: list[tuple[ReviewerFinding, str, dict | None]],
         scenarios: list[dict],
+        *,
+        feature_id: str,
     ) -> None:
         by_sub_bid = {
             self._scenario_sub_bid(scenario): scenario for scenario in scenarios
@@ -374,7 +376,7 @@ class InspectFeatureStage(StageNode):
                 self._scenario_name(scenario) if scenario is not None else "unknown"
             )
             context.mapping = context.mapping.append_cosmetic(
-                "unknown",
+                feature_id,
                 CosmeticItem(
                     sub_bid=sub_bid,
                     scenario_name=scenario_name,
@@ -528,7 +530,7 @@ class InspectFeatureStage(StageNode):
                 finalized_at=datetime.now(UTC),
             )
         )
-        self._append_cosmetics(context, minor, scenarios)
+        self._append_cosmetics(context, minor, scenarios, feature_id=feature_id)
         context.mapping = context.mapping.model_copy(
             update={
                 "feature_status": (
