@@ -214,6 +214,44 @@ def test_verify_worktrees_accepts_sibling_layout(tmp_path: Path) -> None:
     assert verify_worktrees(tmp_path, [worktree]) == []
 
 
+def test_verify_worktrees_skips_bare_common_dir_entry(tmp_path: Path) -> None:
+    """The bare common dir itself appears in porcelain with no branch."""
+    from verify_repository import BARE_DIR_NAME
+
+    bare = tmp_path.parent / BARE_DIR_NAME
+    worktree = Worktree(
+        path=bare,
+        branch="",
+        upstream="",
+    )
+    assert verify_worktrees(tmp_path, [worktree]) == []
+
+
+def test_verify_worktrees_skips_locked_worktree(tmp_path: Path) -> None:
+    """Active agents hold a locked worktree that cannot be moved."""
+    nested = tmp_path / ".claude" / "worktrees" / "agent-x"
+    nested.mkdir(parents=True)
+    worktree = Worktree(
+        path=nested,
+        branch="worktree-agent-x",
+        upstream="",
+        locked=True,
+    )
+    assert verify_worktrees(tmp_path, [worktree]) == []
+
+
+def test_verify_worktrees_skips_upstream_when_no_remote_ref(tmp_path: Path) -> None:
+    """Branches without origin/<branch> are exempt from the upstream check."""
+    sibling = tmp_path.parent / "plan-99-local-only"
+    worktree = Worktree(
+        path=sibling,
+        branch="plan-99-local-only",
+        upstream="",
+        has_remote=False,
+    )
+    assert verify_worktrees(tmp_path, [worktree]) == []
+
+
 def test_verify_calls_worktree_discovery(tmp_path: Path) -> None:
     """``verify`` must call ``list_worktrees`` and surface its diagnostics."""
     write_valid_repository_fixture(tmp_path)
@@ -239,7 +277,7 @@ def test_parse_worktree_porcelain_handles_typical_output(tmp_path: Path) -> None
         "branch refs/heads/feature-x\n"
         "\n"
     )
-    parsed = _parse_worktree_porcelain(output)
+    parsed = _parse_worktree_porcelain(output, frozenset({"main", "feature-x"}))
     assert parsed == (
         Worktree(
             path=Path("/home/dev/mage/main"),
@@ -254,6 +292,52 @@ def test_parse_worktree_porcelain_handles_typical_output(tmp_path: Path) -> None
     )
 
 
+def test_parse_worktree_porcelain_marks_branches_without_remote(tmp_path: Path) -> None:
+    output = (
+        "worktree /home/dev/mage/main\n"
+        "HEAD abcdef0123456789\n"
+        "branch refs/heads/main\n"
+        "\n"
+        "worktree /home/dev/mage/plan-99-local-only\n"
+        "HEAD 0011223344556677\n"
+        "branch refs/heads/plan-99-local-only\n"
+        "\n"
+    )
+    parsed = _parse_worktree_porcelain(output, frozenset({"main"}))
+    assert parsed == (
+        Worktree(
+            path=Path("/home/dev/mage/main"),
+            branch="main",
+            upstream="origin/main",
+        ),
+        Worktree(
+            path=Path("/home/dev/mage/plan-99-local-only"),
+            branch="plan-99-local-only",
+            upstream="",
+            has_remote=False,
+        ),
+    )
+
+
+def test_parse_worktree_porcelain_records_locked_worktree(tmp_path: Path) -> None:
+    output = (
+        "worktree /home/dev/mage/main\n"
+        "HEAD abcdef0123456789\n"
+        "branch refs/heads/main\n"
+        "locked agent aaa\n"
+        "\n"
+    )
+    parsed = _parse_worktree_porcelain(output, frozenset({"main"}))
+    assert parsed == (
+        Worktree(
+            path=Path("/home/dev/mage/main"),
+            branch="main",
+            upstream="origin/main",
+            locked=True,
+        ),
+    )
+
+
 def test_parse_worktree_porcelain_handles_unborn_records(tmp_path: Path) -> None:
     output = "worktree /home/dev/mage/draft\n\n"
     parsed = _parse_worktree_porcelain(output)
@@ -262,6 +346,7 @@ def test_parse_worktree_porcelain_handles_unborn_records(tmp_path: Path) -> None
             path=Path("/home/dev/mage/draft"),
             branch="",
             upstream="",
+            has_remote=False,
         ),
     )
 
