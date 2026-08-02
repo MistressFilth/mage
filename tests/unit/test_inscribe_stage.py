@@ -232,7 +232,9 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
     from mage.verification.reviewers.spec_compliance import SpecComplianceReviewer
 
     class AlwaysFailReviewer(SpecComplianceReviewer):
-        async def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
+        async def run(
+            self, *, draft, spec_context, mapping, events_log, verdict_path, **kwargs
+        ):
             v = ReviewerVerdict(
                 dimension=self.dimension,
                 outcome="fail",

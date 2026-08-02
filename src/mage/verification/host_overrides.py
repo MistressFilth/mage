@@ -29,7 +29,9 @@ class HostConfig(BaseModel):
     check_set: str = "default"
     require_plan_approval: bool = True
     plan_template_path: Path | None = None
-    enabled_reviewers: list[str] | None = None  # Plan 3 addition; None = all enabled, [] = none, list = subset. Honored by InscribeStage + InspectFeatureStage.
+    enabled_reviewers: list[str] | None = (
+        None  # Plan 3 addition; None = all enabled, [] = none, list = subset. Honored by InscribeStage + InspectFeatureStage.
+    )
 
     # Plan 4 — Inner TDD loop iteration budgets
     per_loop_max_iterations: int = (

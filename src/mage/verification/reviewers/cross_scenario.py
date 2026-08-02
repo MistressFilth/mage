@@ -13,7 +13,7 @@ Added to feature_reviewer_registry (Plan 5 Task 3).
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from mage.artifacts.verdict import ReviewerVerdict
 from mage.verification.reviewers.base import ReviewerAgent
@@ -55,18 +55,22 @@ class CrossScenarioReviewer(ReviewerAgent):
     async def run(
         self,
         *,
-        feature_summary: dict,
-        scenarios: list[dict],
-        mapping: object,
+        draft,
+        spec_context: dict,
+        mapping,
+        events_log,
+        verdict_path,
+        **kwargs: object,
     ) -> ReviewerVerdict:
         """Run the reviewer across the whole feature.
 
         Plan 5's InspectFeatureStage (Task 5) calls this with the full
         feature's scenario set.
         """
-        # Construct prompt in-line (do not use ReviewerAgent.run's signature):
         from datetime import UTC, datetime
 
+        feature_summary = cast(dict, kwargs.get("feature_summary", {}))
+        scenarios = cast(list[dict], kwargs.get("scenarios", []))
         prompt = (
             f"Feature summary: {feature_summary}\n\n"
             f"Scenarios:\n" + "\n".join(f"  {s}" for s in scenarios) + "\n\n"

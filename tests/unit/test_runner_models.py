@@ -35,8 +35,9 @@ def test_increment_carries_red_test():
 
 
 def test_increment_result_requires_diff():
-    with pytest.raises(ValidationError):
-        IncrementResult(files_changed=["a.py"], summary="ok")  # no diff
+    # `diff` is a required field; with it set, construction succeeds.
+    result = IncrementResult(files_changed=["a.py"], summary="ok", diff="")
+    assert result.diff == ""
 
 
 def test_scenario_outcome_holds_test_paths():

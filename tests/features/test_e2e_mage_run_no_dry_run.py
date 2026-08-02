@@ -17,6 +17,10 @@ def test_e2e_mage_run_without_dry_run(tmp_path):
     )
     try:
         rc = main(["run", "--project-dir", str(project)])
-    except (SystemExit, OSError, ValueError) as exc:  # real-LLM environments may transiently fail
+    except (
+        SystemExit,
+        OSError,
+        ValueError,
+    ) as exc:  # real-LLM environments may transiently fail
         pytest.skip(f"real-LLM run failed (network/auth): {exc!r}")
     assert rc == 0, f"mage run without --dry-run must succeed; got rc={rc}"

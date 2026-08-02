@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -17,7 +18,7 @@ import pytest
 class TestE2EInnerTDDHappyPath:
     @pytest.mark.asyncio
     async def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
-        from mage.agents.realize import RealizeOutput
+        from mage.agents.realize import RealizeAgent, RealizeOutput
         from mage.artifacts.mapping import (
             BaseBIDEntry,
             LifecycleStatus,
@@ -97,7 +98,7 @@ class TestE2EInnerTDDHappyPath:
             increment_quality_reviewer=CleanReviewer(),
             host_config=cfg,
         )
-        realize_stage = RealizeStage(log, NoOpRealizeAgent())
+        realize_stage = RealizeStage(log, cast(RealizeAgent, NoOpRealizeAgent()))
 
         # Drive 2 scenarios × 3 increments each
         for scenario in scenarios:
@@ -251,7 +252,7 @@ class TestE2ESpecRouteHalt:
             issue: str = "Spec is wrong"
             rationale: str = "Scenario doesn't describe this"
             suggestion: str = "spec:Halt"
-            citations: list = None
+            citations: list | None = None
             route: str = "spec"
 
             def __post_init__(self):
@@ -263,9 +264,9 @@ class TestE2ESpecRouteHalt:
             dimension: str = "increment_quality"
             outcome: str = "fail"
             draft_hash: str = ""
-            reviewed_at: datetime = None
+            reviewed_at: datetime | None = None
             reviewer_id: str = "increment_quality@v1"
-            findings: list = None
+            findings: list | None = None
             notes: str = ""
 
             def __post_init__(self):
@@ -313,7 +314,7 @@ class TestE2ESpecRouteHalt:
 class TestE2ECodeRouteCarryForward:
     @pytest.mark.asyncio
     async def test_code_route_finding_injects_into_next_increment(self, tmp_path):
-        from mage.agents.realize import RealizeOutput
+        from mage.agents.realize import RealizeAgent, RealizeOutput
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
@@ -343,7 +344,7 @@ class TestE2ECodeRouteCarryForward:
             issue: str = "Missing edge case"
             rationale: str = "Empty input not tested"
             suggestion: str = "code:Add empty-input test"
-            citations: list = None
+            citations: list | None = None
             route: str = "code"
 
             def __post_init__(self):
@@ -355,9 +356,9 @@ class TestE2ECodeRouteCarryForward:
             dimension: str = "increment_quality"
             outcome: str = "fail"
             draft_hash: str = ""
-            reviewed_at: datetime = None
+            reviewed_at: datetime | None = None
             reviewer_id: str = "increment_quality@v1"
-            findings: list = None
+            findings: list | None = None
             notes: str = ""
 
             def __post_init__(self):
@@ -393,7 +394,7 @@ class TestE2ECodeRouteCarryForward:
             increment_quality_reviewer=CodeRouteReviewer(),
             host_config=HostConfig(),
         )
-        realize_stage = RealizeStage(log, CapturingRealizeAgent())
+        realize_stage = RealizeStage(log, cast(RealizeAgent, CapturingRealizeAgent()))
         target = ScenarioTarget(
             base_bid="00000",
             sub_bid="00000-0",

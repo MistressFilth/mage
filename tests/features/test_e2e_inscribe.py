@@ -307,7 +307,9 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     )
 
     class AlwaysFailReviewer(SpecComplianceReviewer):
-        async def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
+        async def run(
+            self, *, draft, spec_context, mapping, events_log, verdict_path, **kwargs
+        ):
             v = ReviewerVerdict(
                 dimension=self.dimension,
                 outcome="fail",

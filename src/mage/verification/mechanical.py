@@ -100,7 +100,7 @@ class MechanicalVerifier:
         supplied stubs; this method exists as a stable API surface so the
         graph can wire the verifier in without an AttributeError).
         """
-        if scope is not None or draft is None:
+        if scope is not None or draft is None or mapping is None:
             return []
         return [check.run(draft, mapping) for check in self.checks]
 

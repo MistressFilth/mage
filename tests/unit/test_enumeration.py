@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import cast
+
 import pytest
 
-from mage.artifacts.enumeration import BehaviorSpec
+from mage.artifacts.enumeration import BaseBIDEntry, BehaviorSpec
 from mage.artifacts.mapping import MappingArtifact
 
 
@@ -27,7 +30,7 @@ async def test_assign_bids_monotonically_to_empty_mapping():
         _spec("orders", depends_on=["auth"]),
         _spec("payments", depends_on=["orders"]),
     ]
-    entries = await enumerate_behaviors(specs, mapping)
+    entries = cast(list[BaseBIDEntry], await enumerate_behaviors(specs, mapping))
     assert [e.base_bid for e in entries] == ["00000", "00001", "00002"]
 
 
@@ -41,7 +44,7 @@ async def test_assign_bids_continues_from_existing_mapping():
     )
     mapping = MappingArtifact(project_id="p", base_bids=[existing])
     specs = [_spec("auth"), _spec("orders")]
-    entries = await enumerate_behaviors(specs, mapping)
+    entries = cast(list[BaseBIDEntry], await enumerate_behaviors(specs, mapping))
     assert [e.base_bid for e in entries] == ["00005", "00006"]
 
 
@@ -51,7 +54,7 @@ async def test_dependency_resolves_to_pending_behavior():
 
     mapping = MappingArtifact(project_id="p")
     specs = [_spec("orders", depends_on=["auth"]), _spec("auth")]
-    entries = await enumerate_behaviors(specs, mapping)
+    entries = cast(list[BaseBIDEntry], await enumerate_behaviors(specs, mapping))
     # auth comes first because orders depends on it
     auth_entry = next(e for e in entries if e.behavior_name == "auth")
     orders_entry = next(e for e in entries if e.behavior_name == "orders")
@@ -130,7 +133,7 @@ async def test_cross_behavior_link_to_existing_behavior():
     )
     mapping = MappingArtifact(project_id="p", base_bids=[existing])
     specs = [_spec("checkout", cross=["payments"])]
-    entries = await enumerate_behaviors(specs, mapping)
+    entries = cast(list[BaseBIDEntry], await enumerate_behaviors(specs, mapping))
     assert entries[0].cross_behavior_links == ["00010"]
 
 
@@ -140,7 +143,7 @@ async def test_cross_behavior_link_to_pending_behavior():
 
     mapping = MappingArtifact(project_id="p")
     specs = [_spec("a"), _spec("b", cross=["a"])]
-    entries = await enumerate_behaviors(specs, mapping)
+    entries = cast(list[BaseBIDEntry], await enumerate_behaviors(specs, mapping))
     b = next(e for e in entries if e.behavior_name == "b")
     a = next(e for e in entries if e.behavior_name == "a")
     assert b.cross_behavior_links == [a.base_bid]
@@ -156,8 +159,9 @@ async def test_enumerate_writes_behaviors_yaml(tmp_path):
     mapping = MappingArtifact(project_id="p")
     specs = [_spec("auth"), _spec("orders", depends_on=["auth"])]
 
-    _updated_mapping, behaviors_path = await enumerate_behaviors(
-        specs, mapping, project_dir=tmp_path, events_log=log
+    _updated_mapping, behaviors_path = cast(
+        tuple[MappingArtifact, Path],
+        await enumerate_behaviors(specs, mapping, project_dir=tmp_path, events_log=log),
     )
 
     assert behaviors_path.exists()
@@ -184,6 +188,7 @@ async def test_enumerate_writes_updated_mapping(tmp_path):
         specs, mapping, project_dir=tmp_path, events_log=log
     )
 
+    updated_mapping = cast(MappingArtifact, updated_mapping)
     assert len(updated_mapping.base_bids) == 1
     assert updated_mapping.base_bids[0].behavior_name == "auth"
 

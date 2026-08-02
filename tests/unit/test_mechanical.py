@@ -44,8 +44,26 @@ class TestMechanicalCheck:
         class Incomplete(MechanicalCheck):
             name = "incomplete"
 
-        with pytest.raises(TypeError, match="abstract"):
-            Incomplete()
+            def _run(self, draft, mapping):
+                raise NotImplementedError
+
+        from mage.artifacts.mapping import MappingArtifact as _MA
+        from mage.verification.mechanical import ScenarioDraft as _SD
+
+        _stub_draft = _SD(
+            feature_path=tmp_project_dir / "x.feature",
+            scenario_name="x",
+            gherkin_text="",
+            tags=[],
+            sub_bid="x",
+            parent_base_bid=Base85BID(value="00000"),
+            step_texts=[],
+        )
+        incomplete = Incomplete()
+        with pytest.raises(NotImplementedError):
+            incomplete.run(
+                _stub_draft, _MA(schema_version=2, project_id="t", base_bids=[])
+            )
 
 
 class TestMechanicalVerifier:

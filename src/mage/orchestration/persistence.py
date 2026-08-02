@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 T = TypeVar("T", bound=BaseModel)
 
 
-class FileStatePersistence:
+class FileStatePersistence[T: BaseModel]:
     """Persists a Pydantic state model to disk atomically.
 
     State files are written to <state_dir>/pipeline-state.yaml using a

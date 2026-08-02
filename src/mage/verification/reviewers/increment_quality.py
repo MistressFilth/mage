@@ -8,7 +8,7 @@ default_reviewer_registry (which is the Inscribe 7-reviewer registry).
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from mage.artifacts.inspect import InspectJournalEntry
 from mage.artifacts.verdict import ReviewerVerdict
@@ -61,10 +61,12 @@ class IncrementQualityReviewer(ReviewerAgent):
     async def run(
         self,
         *,
-        increment_diff: str,
-        new_test: str,
-        scenario_steps: list[str],
-        recent_journal_window: list[InspectJournalEntry],
+        draft,
+        spec_context: dict,
+        mapping,
+        events_log,
+        verdict_path,
+        **kwargs: object,
     ) -> ReviewerVerdict:
         """Run the reviewer. Plan 4's InspectLoopStage (Task 12) calls this.
 
@@ -74,6 +76,13 @@ class IncrementQualityReviewer(ReviewerAgent):
         from datetime import UTC, datetime
 
         from mage.artifacts.verdict import ReviewerVerdict
+
+        increment_diff = cast(str, kwargs.get("increment_diff", ""))
+        new_test = cast(str, kwargs.get("new_test", ""))
+        scenario_steps = cast(list[str], kwargs.get("scenario_steps", []))
+        recent_journal_window = cast(
+            list[InspectJournalEntry], kwargs.get("recent_journal_window", [])
+        )
 
         # Format carry-forward section
         cf_section = (

@@ -456,7 +456,7 @@ async def cmd_run(args):
 
 async def cmd_review_show(args):
     """Display the latest aggregate verdict for the project."""
-    from mage.artifacts.verdict import VerdictArtifact
+    from mage.artifacts.verdict import ReviewerAggregate, VerdictArtifact
     from mage.orchestration.events import EventsLog
 
     project_dir: Path = args.project_dir
@@ -486,7 +486,7 @@ async def cmd_review_show(args):
         aggregate_path = Path(aggregate_path_str)
         try:
             aggregate = await VerdictArtifact.load(aggregate_path, log)
-            decision = aggregate.decision
+            decision = ReviewerAggregate.model_validate(aggregate).decision
         except (VerdictError, OSError) as e:
             print(
                 f"mage review show: warning: failed to read aggregate at "

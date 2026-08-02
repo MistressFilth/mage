@@ -62,6 +62,7 @@ class ReviewerAgent(ABC):
         mapping: MappingArtifact,
         events_log: EventsLog,
         verdict_path: Path,
+        **kwargs: Any,
     ) -> ReviewerVerdict:
         draft_hash = self._compute_draft_hash(draft, spec_context)
         prompt = (

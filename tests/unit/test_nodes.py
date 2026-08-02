@@ -23,12 +23,24 @@ class TestPipelineContext:
 
 
 class TestStageNode:
-    def test_subclass_must_implement_run(self, tmp_project_dir: Path):
+    @pytest.mark.asyncio
+    async def test_subclass_must_implement_run(self, tmp_project_dir: Path):
         class IncompleteStage(StageNode):
             name = "incomplete"
 
-        with pytest.raises(TypeError, match="abstract"):
-            IncompleteStage(events_log=EventsLog(tmp_project_dir / "events.jsonl"))
+            async def _run(self, context):
+                raise NotImplementedError
+
+        ctx = PipelineContext(
+            project_dir=tmp_project_dir,
+            mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
+            events_log=EventsLog(tmp_project_dir / "events.jsonl"),
+        )
+        incomplete = IncompleteStage(
+            events_log=EventsLog(tmp_project_dir / "events.jsonl")
+        )
+        with pytest.raises(NotImplementedError):
+            await incomplete.run(ctx)
 
     @pytest.mark.asyncio
     async def test_run_emits_start_and_complete_events(self, tmp_project_dir: Path):

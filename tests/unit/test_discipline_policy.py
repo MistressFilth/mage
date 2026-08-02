@@ -370,9 +370,7 @@ from mage.orchestration.exceptions import ModelCannotApplyCosmetic
 
 def test_cosmetic_guard_rejects_model_source():
     with pytest.raises(ModelCannotApplyCosmetic):
-        guard_cosmetic_application(
-            source="model", sub_bid="A", human_approver=None
-        )
+        guard_cosmetic_application(source="model", sub_bid="A", human_approver=None)
 
 
 def test_cosmetic_guard_accepts_human_source():
@@ -392,9 +390,7 @@ def test_cosmetic_guard_accepts_human_authorized_source():
 
 def test_cosmetic_guard_requires_human_approver_for_human_source():
     with pytest.raises(ModelCannotApplyCosmetic):
-        guard_cosmetic_application(
-            source="human", sub_bid="A", human_approver=None
-        )
+        guard_cosmetic_application(source="human", sub_bid="A", human_approver=None)
 
 
 class TestGuardCosmeticApplicationNarrowSignature:
