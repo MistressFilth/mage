@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,11 +19,6 @@ def _item(**overrides):
     return CosmeticPatch(**defaults)
 
 
-def test_cosmetic_item_default_applied_at_is_none():
-    item = _item()
-    assert item.applied_at is None
-
-
 def test_cosmetic_item_content_hash_stable():
     item_a = _item()
     item_b = _item()
@@ -41,8 +35,3 @@ def test_cosmetic_item_content_hash_changes_with_replacement():
 def test_cosmetic_item_validates_line_range_order():
     with pytest.raises(ValidationError):
         _item(line_range=(20, 10))
-
-
-def test_cosmetic_item_stores_applied_at_when_set():
-    item = _item(applied_at=datetime(2026, 7, 30, tzinfo=UTC))
-    assert item.applied_at == datetime(2026, 7, 30, tzinfo=UTC)

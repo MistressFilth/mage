@@ -130,7 +130,6 @@ async def apply_for_feature(
             if not dry_run:
                 state.applied[item.sub_bid] = CosmeticApplied(
                     content_hash=item.content_hash,
-                    applied_at=now,
                     file=item.file_path,  # type: ignore[arg-type]
                     rationale=item.rationale,
                 )

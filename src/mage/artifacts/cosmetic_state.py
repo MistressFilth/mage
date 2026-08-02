@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -19,7 +18,6 @@ class CosmeticApplied(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     content_hash: str
-    applied_at: datetime
     file: Path
     rationale: str
 

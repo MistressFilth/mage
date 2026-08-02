@@ -650,7 +650,6 @@ class TestCosmeticApply:
         self, tmp_path, monkeypatch
     ):
         """When state file records prior apply with matching hash, emit SKIPPED."""
-        from datetime import UTC, datetime
         from pathlib import Path
 
         import yaml
@@ -702,7 +701,6 @@ class TestCosmeticApply:
             applied={
                 "00000-001": CosmeticApplied(
                     content_hash=item.content_hash,
-                    applied_at=datetime(2026, 7, 30, tzinfo=UTC),
                     file=Path("src/example.py"),
                     rationale="use a constant",
                 ),
@@ -727,7 +725,6 @@ class TestCosmeticApply:
         self, tmp_path, monkeypatch
     ):
         """State record with DIFFERENT hash → fresh apply (replaces content)."""
-        from datetime import UTC, datetime
         from pathlib import Path
 
         import yaml
@@ -766,7 +763,6 @@ class TestCosmeticApply:
             applied={
                 "00000-001": CosmeticApplied(
                     content_hash="different-hash-9999",
-                    applied_at=datetime(2026, 7, 30, tzinfo=UTC),
                     file=Path("src/example.py"),
                     rationale="prior content",
                 ),

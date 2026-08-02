@@ -11,15 +11,24 @@ string-prefix parsing.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import TYPE_CHECKING
 
-from mage.artifacts.inspect import CosmeticFinding, InspectJournalEntry
+from mage.artifacts.inspect import (
+    CosmeticFinding,
+    InspectJournalEntry,
+    InspectRoute,
+)
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
 from mage.verification.host_overrides import HostConfig
 
-InspectRoute = Literal["spec", "code", "cosmetic"]
+if TYPE_CHECKING:
+    from typing import (
+        Literal,  # noqa: F401 — kept for tests that import Literal from this module
+    )
+
+__all__ = ["InspectRoute"]
 
 
 def _normalize_mechanical_findings(items) -> list:

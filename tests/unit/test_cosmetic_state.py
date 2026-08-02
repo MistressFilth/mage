@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,6 @@ from mage.artifacts.cosmetic_state import (
 def _applied(**overrides):
     defaults = {
         "content_hash": "abc123",
-        "applied_at": datetime(2026, 7, 30, tzinfo=UTC),
         "file": Path("src/example.py"),
         "rationale": "use a constant",
     }
