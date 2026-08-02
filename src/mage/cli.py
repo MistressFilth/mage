@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
+from mage.artifacts.plan import PlanError
+from mage.artifacts.verdict import VerdictError
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import default_check_set, load_host_config
@@ -55,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_subparsers = plan_parser.add_subparsers(dest="plan_command", required=True)
 
     # mage plan show
-    show_parser = plan_subparsers.add_parser("show", help="Display Plan + digest")
+    plan_subparsers.add_parser("show", help="Display Plan + digest")
 
     # mage plan revise
     revise_parser = plan_subparsers.add_parser(
@@ -333,7 +335,7 @@ async def cmd_plan_show(args):
     assert log is not None
     try:
         content = await PlanArtifact.load(plan_path, log)
-    except Exception as e:
+    except (PlanError, OSError) as e:
         print(f"(Failed to load Plan: {e})")
         return 0
 
@@ -454,7 +456,7 @@ async def cmd_run(args):
 
 async def cmd_review_show(args):
     """Display the latest aggregate verdict for the project."""
-    from mage.artifacts.verdict import VerdictArtifact
+    from mage.artifacts.verdict import ReviewerAggregate, VerdictArtifact
     from mage.orchestration.events import EventsLog
 
     project_dir: Path = args.project_dir
@@ -484,8 +486,8 @@ async def cmd_review_show(args):
         aggregate_path = Path(aggregate_path_str)
         try:
             aggregate = await VerdictArtifact.load(aggregate_path, log)
-            decision = aggregate.decision
-        except Exception as e:
+            decision = ReviewerAggregate.model_validate(aggregate).decision
+        except (VerdictError, OSError) as e:
             print(
                 f"mage review show: warning: failed to read aggregate at "
                 f"{aggregate_path}: {e}",
@@ -706,7 +708,6 @@ async def cmd_cosmetic_watch(args) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
-    config = load_host_config(project_dir)
     mapping = (
         MappingArtifact.load(project_dir / "mapping.yaml")
         if (project_dir / "mapping.yaml").exists()

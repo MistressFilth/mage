@@ -13,11 +13,16 @@ accessed below is `mapping.cosmetic_findings`.
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
+
+logger = logging.getLogger(__name__)
 
 
 class MappingArtifactWatcher:
@@ -93,7 +98,12 @@ class MappingArtifactWatcher:
                         continue
                     try:
                         event = Event.model_validate_json(line)
-                    except Exception:
+                    except (OSError, ValueError) as e:
+                        logger.debug(
+                            "continuing after %s in cosmetic watcher: %s",
+                            type(e).__name__,
+                            e,
+                        )
                         continue
                     if event.event_type != EventType.MAPPING_SAVED:
                         continue
@@ -113,7 +123,7 @@ class MappingArtifactWatcher:
 
         try:
             mapping = MappingArtifact.load(self.project_dir / "mapping.yaml")
-        except Exception as exc:
+        except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

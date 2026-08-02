@@ -339,9 +339,19 @@ class InspectFeatureStage:
 
         for reviewer in cross_reviewers:
             verdict = await reviewer.run(
+                draft=None,
+                spec_context={"feature_id": feature_id},
+                mapping=context.mapping,
+                events_log=self.events_log,
+                verdict_path=(
+                    context.project_dir
+                    / ".haileris"
+                    / "verdicts"
+                    / feature_id
+                    / f"{reviewer.dimension}.yaml"
+                ),
                 feature_summary={"feature_id": feature_id},
                 scenarios=scenarios,
-                mapping=context.mapping,
             )
             if not isinstance(verdict, ReviewerVerdict):
                 raise TypeError(

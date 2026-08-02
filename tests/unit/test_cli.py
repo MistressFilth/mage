@@ -107,7 +107,7 @@ def _run_cli(*args, **kwargs):
     def _target():
         try:
             result_box.append(main(*args))
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 — thread target must catch everything to surface the result
             error_box.append(exc)
 
     thread = threading.Thread(target=_target)
@@ -245,7 +245,7 @@ def test_mage_run_without_dry_run_does_not_raise_not_implemented(tmp_path):
         pytest.fail(
             f"cmd_run still raises NotImplementedError after Plan 9 unlock: {exc}"
         )
-    except Exception:
+    except (OSError, ValueError, RuntimeError, KeyError):
         pass  # other failures are OK; we only check the gate is gone
 
 
@@ -650,7 +650,6 @@ class TestCosmeticApply:
         self, tmp_path, monkeypatch
     ):
         """When state file records prior apply with matching hash, emit SKIPPED."""
-        from datetime import UTC, datetime
         from pathlib import Path
 
         import yaml
@@ -702,7 +701,6 @@ class TestCosmeticApply:
             applied={
                 "00000-001": CosmeticApplied(
                     content_hash=item.content_hash,
-                    applied_at=datetime(2026, 7, 30, tzinfo=UTC),
                     file=Path("src/example.py"),
                     rationale="use a constant",
                 ),
@@ -727,7 +725,6 @@ class TestCosmeticApply:
         self, tmp_path, monkeypatch
     ):
         """State record with DIFFERENT hash → fresh apply (replaces content)."""
-        from datetime import UTC, datetime
         from pathlib import Path
 
         import yaml
@@ -766,7 +763,6 @@ class TestCosmeticApply:
             applied={
                 "00000-001": CosmeticApplied(
                     content_hash="different-hash-9999",
-                    applied_at=datetime(2026, 7, 30, tzinfo=UTC),
                     file=Path("src/example.py"),
                     rationale="prior content",
                 ),

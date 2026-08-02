@@ -8,7 +8,7 @@ from subprocess import CompletedProcess
 
 import pytest
 
-from mage.agents.realize import RealizeOutput
+from mage.agents.realize import RealizeAgent, RealizeOutput
 from mage.artifacts.inspect import InspectJournalEntry
 from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.events import EventsLog
@@ -125,12 +125,17 @@ async def test_run_increment_emits_realize_increment_done(tmp_path):
     assert "realize_increment_done" in types
 
 
-class _RecordingAgent:
+class _RecordingAgent(RealizeAgent):
     """Stub RealizeAgent that captures the kwargs passed to `run()`."""
 
     def __init__(self, output: RealizeOutput) -> None:
+        from typing import Any
+
         self._output = output
         self.calls: list[dict] = []
+        # skip parent __init__ (no Pydantic-AI Agent in tests)
+        self._model: Any = None
+        self._system_prompt_only = True
 
     async def run(self, **kwargs) -> RealizeOutput:
         self.calls.append(kwargs)

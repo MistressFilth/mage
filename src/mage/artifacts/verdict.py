@@ -7,13 +7,10 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from mage.artifacts.inspect import InspectRoute
+
 if TYPE_CHECKING:
     from mage.orchestration.events import EventsLog
-
-# Routing for Inspect loop. Defined locally to avoid pulling
-# mage.orchestration.inspect_loop into the artifact layer (cycle) and to
-# keep the dependency direction: artifacts -> nothing internal.
-InspectRoute = Literal["spec", "code", "cosmetic"]
 
 
 class ReviewerFinding(BaseModel):

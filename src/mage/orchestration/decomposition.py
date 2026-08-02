@@ -84,7 +84,7 @@ class DecompositionStage(StageNode):
             feature_id=ascertain.feature_id,
         )
         assert isinstance(enumeration_result, tuple)
-        updated_mapping, behaviors_path = enumeration_result
+        updated_mapping, _behaviors_path = enumeration_result
 
         # 6. Generate plan.md content
         template_path = (

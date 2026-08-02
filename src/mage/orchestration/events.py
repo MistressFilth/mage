@@ -76,7 +76,6 @@ class EventType(str, Enum):
     INSPECT_LOOP_FEATURE_RESOLVED = "inspect_loop_feature_resolved"
 
     INSPECT_JOURNAL_APPENDED = "inspect_journal_appended"
-    SCENARIO_HALT_PERSISTED = "scenario_halt_persisted"
 
     # Plan 5 placeholder members (kept here so events log schema is stable)
     INSPECT_FEATURE_STARTED = "inspect_feature_started"

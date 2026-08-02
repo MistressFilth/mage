@@ -16,7 +16,9 @@ def test_run_pass_is_the_only_public_async_method():
     """`run_pass` is the sole public async entry on `InspectFeatureStage`."""
     public_async = [
         name
-        for name, member in inspect.getmembers(InspectFeatureStage, predicate=inspect.iscoroutinefunction)
+        for name, member in inspect.getmembers(
+            InspectFeatureStage, predicate=inspect.iscoroutinefunction
+        )
         if not name.startswith("_")
     ]
     assert public_async == ["run_pass"], (

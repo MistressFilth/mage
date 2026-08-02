@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from typing import Literal, cast
 
 import pytest
 
@@ -61,11 +62,16 @@ def make_reviewer(
     outcome: str | None = None,
 ):
     class Reviewer:
+        dimension: str = ""
+
         async def run(self, **kwargs):
             reviewer_findings = findings or []
             return ReviewerVerdict(
                 dimension=dimension,
-                outcome=outcome or ("fail" if reviewer_findings else "pass"),
+                outcome=cast(
+                    "Literal['pass', 'fail']",
+                    outcome or ("fail" if reviewer_findings else "pass"),
+                ),
                 draft_hash="",
                 reviewed_at=datetime.now(UTC),
                 reviewer_id=f"{dimension}@v1",

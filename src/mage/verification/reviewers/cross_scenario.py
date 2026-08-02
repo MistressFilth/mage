@@ -52,19 +52,24 @@ class CrossScenarioReviewer(ReviewerAgent):
             "Rationale is mandatory."
         )
 
-    async def run(
+    async def run(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         *,
+        draft,  # Liskov compat with ReviewerAgent.run; unused at feature scope
+        spec_context: dict,  # Liskov compat; unused at feature scope
+        mapping,  # Liskov compat; unused at feature scope
+        events_log,  # Liskov compat; unused at feature scope
+        verdict_path,  # Liskov compat; unused at feature scope
         feature_summary: dict,
         scenarios: list[dict],
-        mapping: object,
     ) -> ReviewerVerdict:
         """Run the reviewer across the whole feature.
 
         Plan 5's InspectFeatureStage (Task 5) calls this with the full
-        feature's scenario set.
+        feature's scenario set. The signature mirrors `ReviewerAgent.run`
+        plus two feature-scoped extras (`feature_summary`, `scenarios`)
+        and is therefore Liskov-compatible.
         """
-        # Construct prompt in-line (do not use ReviewerAgent.run's signature):
         from datetime import UTC, datetime
 
         prompt = (

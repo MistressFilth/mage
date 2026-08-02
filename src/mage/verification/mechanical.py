@@ -100,7 +100,7 @@ class MechanicalVerifier:
         supplied stubs; this method exists as a stable API surface so the
         graph can wire the verifier in without an AttributeError).
         """
-        if scope is not None or draft is None:
+        if scope is not None or draft is None or mapping is None:
             return []
         return [check.run(draft, mapping) for check in self.checks]
 
@@ -211,7 +211,7 @@ class LifecycleStatusTagPresentCheck(MechanicalCheck):
     name = "lifecycle-status-tag-present"
 
     PREFIX = "@status-"
-    VALID_VALUES = {s.value for s in LifecycleStatus}
+    VALID_VALUES = frozenset(s.value for s in LifecycleStatus)
 
     def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
         lifecycle_tags = [t for t in draft.tags if t.startswith(self.PREFIX)]

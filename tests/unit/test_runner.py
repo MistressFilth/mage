@@ -81,17 +81,19 @@ async def test_clean_increment_produces_one_scenario_outcome(tmp_path):
     target = _target()
 
     class _Etch:
-        async def run_scenario(self, ctx, t):
+        async def run_scenario(self, context, target):
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")
             ]
 
     class _Realize:
-        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class _Inspect:
-        async def inspect_increment(self, ctx, *, target, increment, result):
+        async def inspect_increment(self, context, *, target, increment, result):
             return None
 
     etch = _Etch()
@@ -112,7 +114,7 @@ async def test_code_route_re_loops_until_clean(tmp_path):
     target = _target()
 
     class _Etch:
-        async def run_scenario(self, ctx, t):
+        async def run_scenario(self, context, target):
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")
             ]
@@ -137,14 +139,16 @@ async def test_code_route_re_loops_until_clean(tmp_path):
     ]
 
     class _Realize:
-        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     realize = _Realize()
     reviewer = _Reviewer(verdicts)
 
     class _Inspect:
-        async def inspect_increment(self, ctx, *, target, increment, result):
+        async def inspect_increment(self, context, *, target, increment, result):
             v = await reviewer.run()
             return "code" if v.findings else None
 
@@ -166,17 +170,19 @@ async def test_spec_route_raises_scenario_inspect_halted(tmp_path):
     target = _target()
 
     class _Etch:
-        async def run_scenario(self, ctx, t):
+        async def run_scenario(self, context, target):
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")
             ]
 
     class _Realize:
-        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class _Inspect:
-        async def inspect_increment(self, ctx, *, target, increment, result):
+        async def inspect_increment(self, context, *, target, increment, result):
             return "spec"
 
     etch = _Etch()
@@ -195,19 +201,21 @@ async def test_cosmetic_only_does_not_re_loop(tmp_path):
     target = _target()
 
     class _Etch:
-        async def run_scenario(self, ctx, t):
+        async def run_scenario(self, context, target):
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")
             ]
 
     class _Realize:
-        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     calls = {"n": 0}
 
     class _Inspect:
-        async def inspect_increment(self, ctx, **kwargs):
+        async def inspect_increment(self, context, **kwargs):
             calls["n"] += 1
 
     etch = _Etch()
@@ -231,18 +239,20 @@ async def test_resume_skips_completed_scenarios(tmp_path):
     etch_calls: list[str] = []
 
     class E:
-        async def run_scenario(self, ctx, t):
-            etch_calls.append(t.sub_bid)
+        async def run_scenario(self, context, target):
+            etch_calls.append(target.sub_bid)
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code="")
             ]
 
     class R:
-        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class I:
-        async def inspect_increment(self, ctx, *, target, increment, result):
+        async def inspect_increment(self, context, *, target, increment, result):
             return None
 
     runner = FeatureRunner(
@@ -263,19 +273,21 @@ async def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path):
     inspect_iterations: list[int] = []
 
     class E:
-        async def run_scenario(self, ctx, t):
+        async def run_scenario(self, context, target):
             return [
                 Increment(index=0, step="s1", red_test_path="t.py", red_test_code=""),
                 Increment(index=1, step="s2", red_test_path="t.py", red_test_code=""),
             ]
 
     class R:
-        async def run_increment(self, ctx, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class I:
-        async def inspect_increment(self, ctx, *, target, increment, result):
-            inspect_iterations.append(ctx.iteration)
+        async def inspect_increment(self, context, *, target, increment, result):
+            inspect_iterations.append(context.iteration)
 
     runner = FeatureRunner(
         etch=E(), realize=R(), inspect_loop=I(), per_loop_max_iterations=8
@@ -293,17 +305,19 @@ async def test_cursor_cleared_after_clean_scenario(tmp_path):
     t1 = _target()
 
     class _Etch:
-        async def run_scenario(self, c, t):
+        async def run_scenario(self, context, target):
             return [
                 Increment(index=0, step="s", red_test_path="t.py", red_test_code="")
             ]
 
     class _Realize:
-        async def run_increment(self, c, *, target, increment, carry_forward=None):
+        async def run_increment(
+            self, context, *, target, increment, carry_forward=None
+        ):
             return IncrementResult(files_changed=[], summary="", diff="")
 
     class _Inspect:
-        async def inspect_increment(self, c, *, target, increment, result):
+        async def inspect_increment(self, context, *, target, increment, result):
             return None
 
     runner = FeatureRunner(
