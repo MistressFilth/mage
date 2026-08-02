@@ -9,7 +9,7 @@ from subprocess import CompletedProcess
 import pytest
 
 from mage.artifacts.inspect import (
-    CosmeticItem,
+    CosmeticFinding,
     InspectArtifact,
     InspectArtifactContent,
     InspectArtifactDigestMismatchError,
@@ -259,7 +259,7 @@ class TestSettleFinalization:
         context = await make_context(tmp_path / "project")
         context.mapping = context.mapping.append_cosmetic(
             "feat-1",
-            CosmeticItem(
+            CosmeticFinding(
                 sub_bid="000000",
                 scenario_name="happy",
                 location="Given step",

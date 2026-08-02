@@ -364,13 +364,13 @@ def test_supersession_complete_writes_reversion_log_entry():
     )
 
 
-from mage.artifacts.inspect import CosmeticItem
+from mage.artifacts.inspect import CosmeticFinding
 from mage.orchestration.discipline.policy import guard_cosmetic_application
 from mage.orchestration.exceptions import ModelCannotApplyCosmetic
 
 
-def _cosmetic() -> CosmeticItem:
-    return CosmeticItem(
+def _cosmetic() -> CosmeticFinding:
+    return CosmeticFinding(
         sub_bid="A",
         scenario_name="s",
         location="text",

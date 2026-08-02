@@ -52,7 +52,7 @@ class ScenarioInspectStatus(BaseModel):
     status: ScenarioInspectStatusValue
 
 
-class CosmeticItem(BaseModel):
+class CosmeticFinding(BaseModel):
     """Natural-language cosmetic item queued for human review."""
 
     model_config = ConfigDict(frozen=True)

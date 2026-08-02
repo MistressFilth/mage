@@ -15,7 +15,7 @@ from mage.artifacts.bid import Base85BID, next_base_bid
 
 if TYPE_CHECKING:
     from mage.artifacts.inspect import (
-        CosmeticItem,
+        CosmeticFinding,
         InspectArtifactRef,
         InspectJournalEntry,
     )
@@ -89,7 +89,7 @@ class MappingArtifact(BaseModel):
         None  # InspectArtifactRef; typing loose to avoid circular import
     )
     feature_cosmetic_queue: list[dict] = Field(default_factory=list)
-    # ^ list[CosmeticItem]; typing loose to avoid circular import
+    # ^ list[CosmeticFinding]; typing loose to avoid circular import
     feature_status: str = "pending"  # pending | live_assembling | inspect_pending | inspect_passed | settled | halted
 
     def __init__(self, **data: object) -> None:
@@ -227,7 +227,9 @@ class MappingArtifact(BaseModel):
         """Return a new MappingArtifact with feature_inspect set to ref."""
         return self.model_copy(update={"feature_inspect": ref.model_dump(mode="json")})
 
-    def append_cosmetic(self, feature_id: str, item: CosmeticItem) -> MappingArtifact:
+    def append_cosmetic(
+        self, feature_id: str, item: CosmeticFinding
+    ) -> MappingArtifact:
         """Return a new MappingArtifact with item appended to feature_cosmetic_queue
         under the given feature_id."""
         new_dict = item.model_dump(mode="python")

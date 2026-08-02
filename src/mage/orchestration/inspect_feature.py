@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.inspect import (
-    CosmeticItem,
+    CosmeticFinding,
     InspectArtifact,
     InspectArtifactContent,
     InspectArtifactRef,
@@ -391,7 +391,7 @@ class InspectFeatureStage:
             )
             context.mapping = context.mapping.append_cosmetic(
                 feature_id,
-                CosmeticItem(
+                CosmeticFinding(
                     sub_bid=sub_bid,
                     scenario_name=scenario_name,
                     location=finding.location,

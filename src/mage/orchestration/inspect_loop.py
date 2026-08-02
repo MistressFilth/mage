@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from mage.artifacts.inspect import CosmeticItem, InspectJournalEntry
+from mage.artifacts.inspect import CosmeticFinding, InspectJournalEntry
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
@@ -166,7 +166,7 @@ class InspectLoopStage:
             elif route == "cosmetic":
                 context.mapping = context.mapping.append_cosmetic(
                     context.feature_id,
-                    CosmeticItem(
+                    CosmeticFinding(
                         sub_bid=target.sub_bid,
                         scenario_name=target.scenario_name,
                         location=f.location,

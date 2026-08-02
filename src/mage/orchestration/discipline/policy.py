@@ -265,13 +265,13 @@ def complete_supersession(
     return mapping.model_copy(update={"base_bids": new_entries})
 
 
-from mage.artifacts.inspect import CosmeticItem
+from mage.artifacts.inspect import CosmeticFinding
 
 
 # Cosmetic gate (parent v2 design line 327)
 def guard_cosmetic_application(
     source: str,
-    item: CosmeticItem,
+    item: CosmeticFinding,
     human_approver: str | None,
 ) -> PostLiveRevisionEntry:
     """Build a PostLiveRevisionEntry. Reject model source; require human approver."""

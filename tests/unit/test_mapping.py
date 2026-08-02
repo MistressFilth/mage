@@ -303,11 +303,11 @@ class TestPlan4MappingMethods:
         assert m2.feature_inspect["inspect_sha256"] == "abc"
 
     def test_append_cosmetic(self):
-        from mage.artifacts.inspect import CosmeticItem
+        from mage.artifacts.inspect import CosmeticFinding
         from mage.artifacts.mapping import MappingArtifact
 
         m = MappingArtifact(project_id="p1")
-        item = CosmeticItem(
+        item = CosmeticFinding(
             sub_bid="00000-0",
             scenario_name="happy",
             location="Given step",
