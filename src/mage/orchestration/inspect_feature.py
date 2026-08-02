@@ -18,7 +18,7 @@ from mage.artifacts.inspect import (
 )
 from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
 from mage.orchestration.events import Event, EventsLog, EventType
-from mage.orchestration.nodes import PipelineContext, StageNode
+from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
 from mage.verification.mechanical import (
     CheckResult,
@@ -45,8 +45,13 @@ def _noop_fix_wave_dispatcher(**kwargs: Any) -> None:
     """Default dispatcher used when orchestration has no external fix-wave agent."""
 
 
-class InspectFeatureStage(StageNode):
-    """Run the full mechanical, per-scenario, and cross-scenario feature gate."""
+class InspectFeatureStage:
+    """Run the full mechanical, per-scenario, and cross-scenario feature gate.
+
+    Not a graph stage. Invoked directly via ``run_pass`` at the end of the
+    automation phase, with the feature id and complete scenario payloads
+    supplied by the caller.
+    """
 
     name = "inspect_feature"
 
@@ -59,17 +64,11 @@ class InspectFeatureStage(StageNode):
         host_config: HostConfig,
         fix_wave_dispatcher: FixWaveDispatcher | None = None,
     ) -> None:
-        super().__init__(events_log)
+        self.events_log = events_log
         self.reviewers = list(reviewers)
         self.mechanical_verifier = mechanical_verifier
         self.host_config = host_config
         self.fix_wave_dispatcher = fix_wave_dispatcher or _noop_fix_wave_dispatcher
-
-    async def _run(self, context: PipelineContext) -> PipelineContext:
-        raise NotImplementedError(
-            "InspectFeatureStage._run is not wired into the linear graph driver. "
-            "Use run_pass with the feature id and complete scenario payloads."
-        )
 
     @staticmethod
     def _scenario_name(scenario: dict) -> str:

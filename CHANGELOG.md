@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `InspectFeatureStage` is no longer a `StageNode` subclass. The class is a
+  feature-level service whose sole public entry is `run_pass(context, *,
+  feature_id, scenarios, iteration=None) -> InspectArtifactContent`. The
+  unimplemented `_run` method has been deleted. The
+  `InspectFeatureHalted` propagation path and `graph.py`'s halt handler are
+  unchanged.
+
 ### Fixed
 
 - `InspectFeatureStage._run_reviewers` now honors `HostConfig.enabled_reviewers`.
