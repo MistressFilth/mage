@@ -211,7 +211,7 @@ class LifecycleStatusTagPresentCheck(MechanicalCheck):
     name = "lifecycle-status-tag-present"
 
     PREFIX = "@status-"
-    VALID_VALUES = {s.value for s in LifecycleStatus}
+    VALID_VALUES = frozenset(s.value for s in LifecycleStatus)
 
     def _run(self, draft: ScenarioDraft, mapping: MappingArtifact) -> CheckResult:
         lifecycle_tags = [t for t in draft.tags if t.startswith(self.PREFIX)]

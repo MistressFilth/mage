@@ -156,7 +156,7 @@ async def test_enumerate_writes_behaviors_yaml(tmp_path):
     mapping = MappingArtifact(project_id="p")
     specs = [_spec("auth"), _spec("orders", depends_on=["auth"])]
 
-    updated_mapping, behaviors_path = await enumerate_behaviors(
+    _updated_mapping, behaviors_path = await enumerate_behaviors(
         specs, mapping, project_dir=tmp_path, events_log=log
     )
 

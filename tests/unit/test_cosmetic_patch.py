@@ -8,14 +8,14 @@ from mage.artifacts.cosmetic import CosmeticPatch
 
 
 def _item(**overrides):
-    defaults = dict(
-        sub_bid="00000-001",
-        file_path=Path("src/example.py"),
-        line_range=(10, 20),
-        replacement_text="new code\n",
-        rationale="use a constant",
-        proposed_by="IncrementQualityReviewer",
-    )
+    defaults = {
+        "sub_bid": "00000-001",
+        "file_path": Path("src/example.py"),
+        "line_range": (10, 20),
+        "replacement_text": "new code\n",
+        "rationale": "use a constant",
+        "proposed_by": "IncrementQualityReviewer",
+    }
     defaults.update(overrides)
     return CosmeticPatch(**defaults)
 

@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_subparsers = plan_parser.add_subparsers(dest="plan_command", required=True)
 
     # mage plan show
-    show_parser = plan_subparsers.add_parser("show", help="Display Plan + digest")
+    plan_subparsers.add_parser("show", help="Display Plan + digest")
 
     # mage plan revise
     revise_parser = plan_subparsers.add_parser(
@@ -708,7 +708,6 @@ async def cmd_cosmetic_watch(args) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
-    config = load_host_config(project_dir)
     mapping = (
         MappingArtifact.load(project_dir / "mapping.yaml")
         if (project_dir / "mapping.yaml").exists()

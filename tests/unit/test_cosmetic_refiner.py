@@ -68,7 +68,7 @@ async def test_refiner_respects_semaphore_cap():
             active -= 1
 
             class _R:
-                output = {
+                output = {  # noqa: RUF012 — test fake; dict is overridden per-instance in __init__
                     "file_path": "src/example.py",
                     "line_range": [1, 1],
                     "replacement_text": "x",
