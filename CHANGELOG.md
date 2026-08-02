@@ -14,6 +14,19 @@ All notable changes to this project are documented here. The format follows
   unimplemented `_run` method has been deleted. The
   `InspectFeatureHalted` propagation path and `graph.py`'s halt handler are
   unchanged.
+- Lint and typecheck baseline cleanup (Plan 19): `make check` is now green.
+  Resolved 41 pre-existing ruff errors (BLE001, B017, C408, F821, F841,
+  PLW1510, RUF012, RUF059, SIM118, S110, S112, TRY004) and 87 pre-existing
+  pyright errors (reportAbstractUsage, reportArgumentType,
+  reportAssignmentType, reportAttributeAccessIssue, reportCallIssue,
+  reportIncompatibleMethodOverride, reportInvalidTypeVarUse,
+  reportReturnType, reportUndefinedVariable). Also removed 3 dead-code items:
+  `EventType.SCENARIO_HALT_PERSISTED` (declared, never emitted),
+  `CosmeticPatch.applied_at` (written, never read) plus `CosmeticApplied.applied_at`
+  (required, never set), and the 3 duplicate `InspectRoute = Literal[...]`
+  declarations (now one canonical declaration in `mage.artifacts.inspect`).
+  A new static-guard test (`tests/unit/test_static_guards_lint_baseline.py`)
+  prevents future regression of the gate.
 
 ## [0.3.7] - 2026-08-01
 
