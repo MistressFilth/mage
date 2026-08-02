@@ -55,11 +55,21 @@ BARE_DIR_NAME = f"{REPO_NAME}.git"
 
 @dataclass(frozen=True)
 class Worktree:
-    """A worktree description used by the verifier."""
+    """A worktree description used by the verifier.
+
+    ``locked`` is True for worktrees actively held by a process (for
+    example a running agent); the verifier exempts them from sibling and
+    path/branch agreement checks because they cannot be moved while in
+    use. ``has_remote`` is False when the worktree's branch has no
+    matching ``origin/<branch>`` ref; the upstream check is skipped in
+    that case because there is nothing to track.
+    """
 
     path: Path
     branch: str
     upstream: str
+    locked: bool = False
+    has_remote: bool = True
 
 
 class GitProbe(Protocol):
@@ -110,14 +120,33 @@ def real_git_probe(root: Path) -> GitProbe:
         return tuple(line for line in result.stdout.splitlines() if line)
 
     def list_worktrees() -> tuple[Worktree, ...]:
-        result = subprocess.run(
+        porcelain = subprocess.run(
             ["git", "-C", str(root), "worktree", "list", "--porcelain"],
             capture_output=True,
             text=True,
             check=False,
             timeout=GIT_SUBPROCESS_TIMEOUT,
         )
-        return _parse_worktree_porcelain(result.stdout)
+        remote_refs = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/remotes/origin",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=GIT_SUBPROCESS_TIMEOUT,
+        )
+        remote_branches = frozenset(
+            line.removeprefix("origin/")
+            for line in remote_refs.stdout.splitlines()
+            if line
+        )
+        return _parse_worktree_porcelain(porcelain.stdout, remote_branches)
 
     return _CallableProbe(
         has_bare_common_dir=has_bare_common_dir,
@@ -128,29 +157,46 @@ def real_git_probe(root: Path) -> GitProbe:
     )
 
 
-def _parse_worktree_porcelain(output: str) -> tuple[Worktree, ...]:
+def _parse_worktree_porcelain(
+    output: str,
+    remote_branches: frozenset[str] = frozenset(),
+) -> tuple[Worktree, ...]:
     """Parse ``git worktree list --porcelain`` into a tuple of Worktrees.
 
     Records are separated by blank lines. Each record starts with
-    ``worktree <path>``, then optionally ``HEAD <sha>`` and ``branch <refs>``.
-    Unborn worktrees with no branch are recorded with an empty branch name.
+    ``worktree <path>``, then optionally ``HEAD <sha>``, ``branch <refs>``
+    and ``locked <reason>``. Unborn worktrees with no branch are recorded
+    with an empty branch name.
+
+    ``remote_branches`` is the set of branch names that exist on the
+    ``origin`` remote; a Worktree's ``has_remote`` field is True when its
+    branch appears in that set.
     """
     worktrees: list[Worktree] = []
     current_path: Path | None = None
     current_branch = ""
+    current_locked = False
 
     def flush() -> None:
-        nonlocal current_path, current_branch
+        nonlocal current_path, current_branch, current_locked
         if current_path is not None:
+            has_remote = current_branch in remote_branches
             worktrees.append(
                 Worktree(
                     path=current_path,
                     branch=current_branch,
-                    upstream=f"origin/{current_branch}" if current_branch else "",
+                    upstream=(
+                        f"origin/{current_branch}"
+                        if current_branch and has_remote
+                        else ""
+                    ),
+                    locked=current_locked,
+                    has_remote=has_remote,
                 )
             )
         current_path = None
         current_branch = ""
+        current_locked = False
 
     for line in output.splitlines():
         if not line.strip():
@@ -162,6 +208,8 @@ def _parse_worktree_porcelain(output: str) -> tuple[Worktree, ...]:
         elif key == "branch":
             short = value.removeprefix("refs/heads/")
             current_branch = short
+        elif key == "locked":
+            current_locked = True
     flush()
     return tuple(worktrees)
 
@@ -280,13 +328,28 @@ def verify_git(root: Path, git: GitProbe) -> list[str]:
 
 
 def verify_worktrees(root: Path, worktrees: Iterable[Worktree]) -> list[str]:
-    """Check each worktree for sibling layout, path/branch agreement, upstream."""
+    """Check each worktree for sibling layout, path/branch agreement, upstream.
+
+    The bare common directory itself is exempt — it has no branch. A
+    locked worktree (held by a running agent) is also exempt from
+    sibling and path/branch checks because it cannot be moved while in
+    use. The upstream check is skipped when the worktree's branch has no
+    matching ``origin/<branch>`` ref, because there is nothing to track.
+    """
     errors: list[str] = []
     root_resolved = root.resolve()
     repo_root = root_resolved.parent
+    bare_dir = repo_root / BARE_DIR_NAME
 
     for worktree in worktrees:
         path_resolved = worktree.path.resolve()
+
+        if path_resolved == bare_dir and not worktree.branch:
+            continue
+
+        if worktree.locked:
+            continue
+
         try:
             path_resolved.relative_to(repo_root)
         except ValueError:
@@ -307,6 +370,9 @@ def verify_worktrees(root: Path, worktrees: Iterable[Worktree]) -> list[str]:
                 f"worktree directory name {path_resolved.name!r} must equal "
                 f"branch name {worktree.branch!r}",
             )
+
+        if not worktree.has_remote:
+            continue
 
         expected_upstream = f"origin/{worktree.branch}"
         if worktree.upstream != expected_upstream:
