@@ -14,6 +14,11 @@ All notable changes to this project are documented here. The format follows
   unimplemented `_run` method has been deleted. The
   `InspectFeatureHalted` propagation path and `graph.py`'s halt handler are
   unchanged.
+
+## [0.3.7] - 2026-08-01
+
+### Changed
+
 - Renamed `mage.artifacts.inspect.CosmeticItem` to `CosmeticFinding` and `mage.artifacts.cosmetic.CosmeticItem` to `CosmeticPatch` to remove the longstanding name collision. The two classes remain distinct shape-wise; this is a pure rename. `MappingArtifact.append_cosmetic` is now `append_cosmetic_finding`; the `feature_cosmetic_queue` Python attribute is now `cosmetic_findings` (the on-disk YAML/JSON key is preserved via a Pydantic alias, so existing mapping artifacts still load). `guard_cosmetic_application` now takes a `sub_bid: str` directly instead of a full `CosmeticFinding`. A static guard test (`tests/unit/test_static_guards_cosmetic_rename.py`) prevents regression of the bare `CosmeticItem` name in `src/`.
 
 ### Fixed
