@@ -1,5 +1,10 @@
 """Tests for verdict schemas (no I/O yet)."""
 
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Literal, cast
+
 import pytest
 
 
@@ -19,7 +24,6 @@ def test_reviewer_finding_minimal():
 
 
 def test_reviewer_verdict_pass_with_no_findings():
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import ReviewerVerdict
 
@@ -36,7 +40,6 @@ def test_reviewer_verdict_pass_with_no_findings():
 
 
 def test_reviewer_verdict_fail_with_findings():
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
 
@@ -79,7 +82,6 @@ def test_reviewer_finding_requires_rationale():
 
 
 def test_reviewer_verdict_outcome_literal():
-    from datetime import UTC, datetime
 
     import pytest
     from pydantic import ValidationError
@@ -89,7 +91,7 @@ def test_reviewer_verdict_outcome_literal():
     with pytest.raises(ValidationError):
         ReviewerVerdict(
             dimension="d",
-            outcome="maybe",  # invalid literal
+            outcome=cast("Literal['pass', 'fail']", "maybe"),  # invalid literal
             draft_hash="h",
             reviewed_at=datetime.now(UTC),
             reviewer_id="d@v1",
@@ -108,7 +110,6 @@ def test_dimension_summary():
 
 
 def test_reviewer_aggregate_all_pass_yields_approved():
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import DimensionSummary, ReviewerAggregate
 
@@ -139,7 +140,6 @@ def test_reviewer_aggregate_all_pass_yields_approved():
 
 
 def test_reviewer_aggregate_decision_literal():
-    from datetime import UTC, datetime
 
     import pytest
     from pydantic import ValidationError
@@ -152,13 +152,14 @@ def test_reviewer_aggregate_decision_literal():
             aggregated_at=datetime.now(UTC),
             iteration=1,
             per_dimension={},
-            decision="weird",  # invalid literal
+            decision=cast(
+                "Literal['approved', 'needs_refactor', 'needs_human_review']", "weird"
+            ),  # invalid literal
         )
 
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
     from mage.orchestration.events import EventsLog
@@ -182,7 +183,6 @@ async def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path):
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
     from mage.orchestration.events import EventsLog
@@ -204,7 +204,6 @@ async def test_verdict_artifact_load_returns_model_when_digest_matches(tmp_path)
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import (
         ReviewerVerdict,
@@ -233,7 +232,6 @@ async def test_verdict_artifact_load_raises_on_digest_mismatch(tmp_path):
 
 @pytest.mark.asyncio
 async def test_verdict_artifact_finalize_aggregate_uses_aggregate_event(tmp_path):
-    from datetime import UTC, datetime
 
     from mage.artifacts.verdict import (
         DimensionSummary,

@@ -58,7 +58,7 @@ class IncrementQualityReviewer(ReviewerAgent):
             "rationale are rejected."
         )
 
-    async def run(
+    async def run(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         *,
         increment_diff: str,
@@ -69,11 +69,12 @@ class IncrementQualityReviewer(ReviewerAgent):
         """Run the reviewer. Plan 4's InspectLoopStage (Task 12) calls this.
 
         Note: this is a single-increment LLM call (not a per-draft scenario call).
+        The signature intentionally differs from `ReviewerAgent.run` (per-increment
+        inputs, not per-draft). Suppresses `reportIncompatibleMethodOverride` —
+        the override is intentionally not Liskov-substitutable.
         """
         # Construct prompt in-line (do not use ReviewerAgent.run's signature):
         from datetime import UTC, datetime
-
-        from mage.artifacts.verdict import ReviewerVerdict
 
         # Format carry-forward section
         cf_section = (

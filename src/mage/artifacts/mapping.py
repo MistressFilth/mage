@@ -125,7 +125,7 @@ class MappingArtifact(BaseModel):
         """
         # Validate inspect_journal.
         if not isinstance(self.inspect_journal, dict):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 — Pydantic v2 model_validator wraps ValueError → ValidationError; TypeError would leak
                 f"MappingArtifact.inspect_journal must be a dict; "
                 f"got {type(self.inspect_journal).__name__}"
             )
@@ -136,31 +136,31 @@ class MappingArtifact(BaseModel):
                     f"strings; got {k!r}"
                 )
             if not isinstance(v, list):
-                raise ValueError(
+                raise ValueError(  # noqa: TRY004 — see comment above
                     f"MappingArtifact.inspect_journal[{k!r}] must be a list; "
                     f"got {type(v).__name__}"
                 )
             for i, entry in enumerate(v):
                 if not isinstance(entry, dict):
-                    raise ValueError(
+                    raise ValueError(  # noqa: TRY004 — see comment above
                         f"MappingArtifact.inspect_journal[{k!r}][{i}] must be "
                         f"a dict; got {type(entry).__name__}"
                     )
         # Validate cosmetic_findings.
         if not isinstance(self.cosmetic_findings, list):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 — see comment above
                 f"MappingArtifact.cosmetic_findings must be a list; "
                 f"got {type(self.cosmetic_findings).__name__}"
             )
         for i, item in enumerate(self.cosmetic_findings):
             if not isinstance(item, dict):
-                raise ValueError(
+                raise ValueError(  # noqa: TRY004 — see comment above
                     f"MappingArtifact.cosmetic_findings[{i}] must be a "
                     f"dict; got {type(item).__name__}"
                 )
             feature_id = item.get("feature_id")
             if not isinstance(feature_id, str):
-                raise ValueError(
+                raise ValueError(  # noqa: TRY004 — see comment above
                     f"MappingArtifact.cosmetic_findings[{i}] must have a string "
                     f"'feature_id' field (empty string allowed; Plan 13 default); got {feature_id!r}"
                 )

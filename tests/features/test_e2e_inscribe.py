@@ -147,7 +147,7 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
         reviewers=reviewers,
     )
 
-    new_context = await stage.run(context)
+    await stage.run(context)
 
     # Verify mapping has at least one APPROVED scenario under base_bid 00000
     updated_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
@@ -241,7 +241,7 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
         host_config=host_config,
         reviewers=reviewers,
     )
-    new_context = await stage.run(context)
+    await stage.run(context)
 
     # Mapping was updated with at least one approved scenario
     updated_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
@@ -307,7 +307,9 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     )
 
     class AlwaysFailReviewer(SpecComplianceReviewer):
-        async def run(self, *, draft, spec_context, mapping, events_log, verdict_path):
+        async def run(
+            self, *, draft, spec_context, mapping, events_log, verdict_path, **kwargs
+        ):
             v = ReviewerVerdict(
                 dimension=self.dimension,
                 outcome="fail",

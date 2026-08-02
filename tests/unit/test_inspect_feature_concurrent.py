@@ -35,6 +35,8 @@ def _ctx(tmp_path: Path) -> PipelineContext:
 
 def _make_reviewer(dimension: str):
     class Reviewer:
+        dimension: str = ""
+
         async def run(self, **kwargs):
             return ReviewerVerdict(
                 dimension=dimension,

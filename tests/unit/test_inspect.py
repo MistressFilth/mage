@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from mage.artifacts.inspect import (
     InspectArtifactContent,
     InspectArtifactRef,
     InspectJournalEntry,
+    InspectRoute,
     ScenarioInspectStatus,
 )
 
@@ -39,7 +41,7 @@ class TestInspectJournalEntry:
                 iteration=1,
                 dimension="increment_quality",
                 severity="major",
-                route="garbage",  # invalid
+                route=cast("InspectRoute", "garbage"),  # invalid
                 finding_id="f-001",
                 location="src/foo.py",
                 issue="x",
