@@ -401,7 +401,7 @@ class TestGuardCosmeticApplicationNarrowSignature:
     """Plan 18: guard_cosmetic_application takes sub_bid, not a full CosmeticFinding."""
 
     def test_accepts_sub_bid_string_directly(self):
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         from mage.orchestration.discipline.policy import (
             guard_cosmetic_application,
@@ -413,6 +413,7 @@ class TestGuardCosmeticApplicationNarrowSignature:
         assert entry.sub_bid == "00000-001"
         assert entry.human_approver == "alice"
         assert isinstance(entry.timestamp, datetime)
+        assert entry.timestamp.tzinfo is UTC
 
     def test_rejects_model_source_without_human(self):
         import pytest
