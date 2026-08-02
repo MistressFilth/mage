@@ -20,14 +20,12 @@ from mage.artifacts.inspect import InspectJournalEntry
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
+from mage.verification.host_overrides import HostConfig
 
 CommandRunner = Callable[..., CompletedProcess[str]]
 
-# Spec R21: default window sizes. The spec describes these as
-# "host-configurable" but `HostConfig` does not yet expose them; when it
-# does, these constants become the field defaults.
-DEFAULT_PER_SCENARIO_WINDOW = 5
-DEFAULT_CROSS_SCENARIO_WINDOW = 3
+# Window sizes are host-configurable via HostConfig.per_scenario_window
+# and HostConfig.cross_scenario_window (Spec R3 / R21).
 
 
 def _default_command_runner(command: list[str], *, cwd: Path) -> CompletedProcess[str]:
@@ -49,48 +47,44 @@ class RealizeStage:
         agent: RealizeAgent,
         *,
         command_runner: CommandRunner | None = None,
-        per_scenario_window: int = DEFAULT_PER_SCENARIO_WINDOW,
-        cross_scenario_window: int = DEFAULT_CROSS_SCENARIO_WINDOW,
+        host_config: HostConfig,
     ) -> None:
         self.events_log = events_log
         self.agent = agent
         self.command_runner = command_runner or _default_command_runner
-        self.per_scenario_window = per_scenario_window
-        self.cross_scenario_window = cross_scenario_window
+        self.host_config = host_config
 
     def _build_carry_forward(
         self, context: PipelineContext, sub_bid: str
     ) -> list[InspectJournalEntry]:
         """Build the per-scenario carry-forward window (R3 / R21).
 
-        Pulls the last `per_scenario_window` entries from
+        Pulls the last `host_config.per_scenario_window` entries from
         `mapping.inspect_journal[sub_bid]`.
         """
+        window = self.host_config.per_scenario_window
         my_journal = context.mapping.inspect_journal.get(sub_bid, [])
-        return [
-            InspectJournalEntry.model_validate(e)
-            for e in my_journal[-self.per_scenario_window :]
-        ]
+        return [InspectJournalEntry.model_validate(e) for e in my_journal[-window:]]
 
     def _build_cross_scenario_observations(
         self, context: PipelineContext, sub_bid: str
     ) -> list[InspectJournalEntry]:
         """Build the cross-scenario observations window (R3 / R21).
 
-        Takes the last `cross_scenario_window` entries from every OTHER
+        Takes the last `host_config.cross_scenario_window` entries from every OTHER
         sub_bid in `mapping.inspect_journal`, sorts by timestamp descending,
-        and trims to `cross_scenario_window`.
+        and trims to `host_config.cross_scenario_window`.
         """
+        window = self.host_config.cross_scenario_window
         other: list[InspectJournalEntry] = []
         for other_sb, entries in context.mapping.inspect_journal.items():
             if other_sb == sub_bid:
                 continue
             other.extend(
-                InspectJournalEntry.model_validate(e)
-                for e in entries[-self.cross_scenario_window :]
+                InspectJournalEntry.model_validate(e) for e in entries[-window:]
             )
         other.sort(key=lambda e: e.timestamp, reverse=True)
-        return other[: self.cross_scenario_window]
+        return other[:window]
 
     async def run_increment(
         self,

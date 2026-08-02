@@ -50,12 +50,8 @@ class HostConfig(BaseModel):
     max_concurrent_llm_calls: int = 7  # Plan 8: asyncio.Semaphore cap for LLM fan-out
 
     # Plan 6 follow-up: host-configurable journal windows consumed by RealizeStage.
-    per_scenario_window: int = (
-        5  # last N inspect journal entries per sub_bid
-    )
-    cross_scenario_window: int = (
-        3  # last N entries from each OTHER sub_bid
-    )
+    per_scenario_window: int = 5  # last N inspect journal entries per sub_bid
+    cross_scenario_window: int = 3  # last N entries from each OTHER sub_bid
 
 
 def default_check_set(
