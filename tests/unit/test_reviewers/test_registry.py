@@ -39,7 +39,7 @@ def test_aggregate_all_pass_yields_approved():
             reviewed_at=datetime.now(UTC),
             reviewer_id=f"{d}@v1",
         )
-        for d in default_reviewer_registry().keys()
+        for d in default_reviewer_registry()
     }
     agg = aggregate_verdicts(verdicts, iteration=1)
     assert isinstance(agg, ReviewerAggregate)
@@ -56,7 +56,7 @@ def test_aggregate_any_fail_yields_needs_refactor():
             reviewed_at=datetime.now(UTC),
             reviewer_id=f"{d}@v1",
         )
-        for d in default_reviewer_registry().keys()
+        for d in default_reviewer_registry()
     }
     verdicts["scenario_clarity"] = ReviewerVerdict(
         dimension="scenario_clarity",
@@ -105,7 +105,7 @@ def test_aggregate_stores_findings_count():
                 ),
             ],
         )
-        for d in default_reviewer_registry().keys()
+        for d in default_reviewer_registry()
     }
     agg = aggregate_verdicts(verdicts, iteration=1)
     assert all(s.findings_count == 2 for s in agg.per_dimension.values())

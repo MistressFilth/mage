@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -27,7 +26,6 @@ class CosmeticPatch(BaseModel):
     replacement_text: str
     rationale: str
     proposed_by: str
-    applied_at: datetime | None = None
     content_hash: str = Field(default="", validate_default=True)
 
     @model_validator(mode="after")

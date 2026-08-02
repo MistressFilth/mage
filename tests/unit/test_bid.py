@@ -23,7 +23,6 @@ class TestBase85BID:
 
     def test_increment_rolls_over_at_alphabet_end(self):
         # 84 is the highest 2-digit value in Base85 (alphabet has 85 chars)
-        bid = Base85BID(value="0000z")  # 'z' is index 57, not the end
         # Use the highest possible 5-digit Base85 value
         max_bid = Base85BID(
             value="~~~~~"

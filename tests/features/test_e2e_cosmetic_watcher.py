@@ -70,11 +70,12 @@ def test_e2e_cosmetic_watcher_applies_new_queue_entries(tmp_path: Path):
 
     watcher = _spawn_watcher(project, poll_ms=50)
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["mage", "mapping", "save", "--project-dir", str(project)],
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         for _ in range(40):
             state = load_state(project)
@@ -93,6 +94,7 @@ def test_e2e_cosmetic_watcher_applies_new_queue_entries(tmp_path: Path):
         cwd=project,
         capture_output=True,
         text=True,
+        check=False,
     )
     assert "cosmetic(00000-001)" in log.stdout
 
@@ -110,6 +112,7 @@ def test_e2e_cosmetic_watcher_idempotent_across_saves(tmp_path: Path):
         ["mage", "mapping", "save", "--project-dir", str(project)],
         capture_output=True,
         timeout=10,
+        check=False,
     )
     watcher = _spawn_watcher(project, poll_ms=50)
     try:
@@ -122,6 +125,7 @@ def test_e2e_cosmetic_watcher_idempotent_across_saves(tmp_path: Path):
             ["mage", "mapping", "save", "--project-dir", str(project)],
             capture_output=True,
             timeout=10,
+            check=False,
         )
         time.sleep(0.5)
     finally:
@@ -133,6 +137,7 @@ def test_e2e_cosmetic_watcher_idempotent_across_saves(tmp_path: Path):
         cwd=project,
         capture_output=True,
         text=True,
+        check=False,
     )
     cosmetic_commits = [
         line for line in log.stdout.splitlines() if "cosmetic(00000-001)" in line

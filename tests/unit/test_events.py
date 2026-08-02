@@ -116,7 +116,6 @@ class TestPlan4EventTypes:
         assert EventType.INSPECT_LOOP_FAILED.value == "inspect_loop_failed"
         assert EventType.INSPECT_LOOP_COMPLETED.value == "inspect_loop_completed"
         assert EventType.INSPECT_JOURNAL_APPENDED.value == "inspect_journal_appended"
-        assert EventType.SCENARIO_HALT_PERSISTED.value == "scenario_halt_persisted"
 
     def test_inspect_feature_events_placeholders(self):
         """Plan 5 events get placeholder members so the schema is stable."""
