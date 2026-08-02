@@ -28,7 +28,11 @@ _REALIZE = str(Path(SRC) / "mage" / "orchestration" / "realize.py")
 
 
 def _grep(pattern: str, *paths: Path) -> list[str]:
-    """Return list of 'path:line' hits for `pattern` in the given paths."""
+    """Return list of 'path:line' hits for `pattern` in the given paths.
+
+    Excludes this test file from the result so the guard does not match
+    its own docstrings/comments that name the constants.
+    """
     result = subprocess.run(
         ["grep", "-rn", "--include=*.py", pattern, *paths],
         capture_output=True,
@@ -38,10 +42,7 @@ def _grep(pattern: str, *paths: Path) -> list[str]:
     return [
         line
         for line in result.stdout.splitlines()
-        if line
-        and "test_static_guards_realize_windows.py" not in line
-        and "DEFAULT_PER_SCENARIO_WINDOW" not in pattern
-        and "DEFAULT_CROSS_SCENARIO_WINDOW" not in pattern
+        if line and "test_static_guards_realize_windows.py" not in line
     ]
 
 
