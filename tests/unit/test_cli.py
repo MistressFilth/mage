@@ -12,14 +12,14 @@ from mage import cli
 
 
 class _PassthroughRefiner:
-    """Refines raw queue dicts into CosmeticItem objects verbatim."""
+    """Refines raw queue dicts into CosmeticPatch objects verbatim."""
 
     async def refine(self, raw, *, semaphore):
         from pathlib import Path as _P
 
-        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic import CosmeticPatch
 
-        return CosmeticItem(
+        return CosmeticPatch(
             sub_bid=raw["sub_bid"],
             file_path=_P(raw["location"]["file"]),
             line_range=(raw["location"]["line"] - 1, raw["location"]["line"] + 1),
@@ -373,7 +373,7 @@ class TestCosmeticShow:
 
         import yaml
 
-        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic import CosmeticPatch
 
         project_dir = tmp_path
         mapping_path = project_dir / "mapping.yaml"
@@ -396,7 +396,7 @@ class TestCosmeticShow:
             )
         )
 
-        stub_item = CosmeticItem(
+        stub_item = CosmeticPatch(
             sub_bid="00000-001",
             file_path=Path("src/example.py"),
             line_range=(4, 6),
@@ -491,7 +491,7 @@ class TestCosmeticApply:
 
         import yaml
 
-        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic import CosmeticPatch
 
         project_dir = tmp_path
         target_file = project_dir / "src" / "example.py"
@@ -516,7 +516,7 @@ class TestCosmeticApply:
             )
         )
 
-        stub_item = CosmeticItem(
+        stub_item = CosmeticPatch(
             sub_bid="00000-001",
             file_path=Path("src/example.py"),
             line_range=(3, 3),
@@ -655,7 +655,7 @@ class TestCosmeticApply:
 
         import yaml
 
-        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic import CosmeticPatch
         from mage.artifacts.cosmetic_state import (
             CosmeticApplied,
             CosmeticAppliedState,
@@ -688,7 +688,7 @@ class TestCosmeticApply:
 
         # Use the same replacement_text `_PassthroughRefiner` produces so the
         # computed hash matches what the SUT will see.
-        item = CosmeticItem(
+        item = CosmeticPatch(
             sub_bid="00000-001",
             file_path=Path("src/example.py"),
             line_range=(2, 2),

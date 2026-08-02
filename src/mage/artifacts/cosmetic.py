@@ -9,7 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class CosmeticItem(BaseModel):
+class CosmeticPatch(BaseModel):
     """A single concrete cosmetic change proposed by a reviewer (or human).
 
     `file_path` is project-relative. `line_range` is inclusive on both ends.
@@ -31,7 +31,7 @@ class CosmeticItem(BaseModel):
     content_hash: str = Field(default="", validate_default=True)
 
     @model_validator(mode="after")
-    def _validate_line_range_order(self) -> CosmeticItem:
+    def _validate_line_range_order(self) -> CosmeticPatch:
         if self.line_range[0] > self.line_range[1]:
             raise ValueError(
                 f"line_range start ({self.line_range[0]}) must be <= "
