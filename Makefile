@@ -26,14 +26,14 @@ clean: ## Delete caches and build artifacts
 	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
 
 lint: ## Run linters
-	uv run ruff check src tests
+	uv run ruff check src tests scripts
 
 typecheck: ## Run typecheckers
-	uv run pyright src tests
+	uv run pyright src tests scripts
 
 format: ## Run formatters (may auto-edit)
-	uv run ruff format src tests
-	uv run ruff check --fix src tests
+	uv run ruff format src tests scripts
+	uv run ruff check --fix src tests scripts
 
 check: lint typecheck format ## Run lint, typecheck, and format together
 

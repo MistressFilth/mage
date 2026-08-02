@@ -30,7 +30,11 @@ packages = ["src/mage"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "scripts"]
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+extraPaths = ["src", "scripts"]
 
 [dependency-groups]
 dev = [
