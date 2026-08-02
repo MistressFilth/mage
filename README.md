@@ -93,6 +93,29 @@ make check   # lint, typecheck, format
 make help    # all targets
 ```
 
+## Repository status and policy
+
+Design documents and implementation plans are tracked in the repository:
+
+- [Design documents](docs/superpowers/specs/)
+- [Implementation plans](docs/superpowers/plans/)
+
+Repository publication and branch-protection rulesets are external to this
+repo. The intended `main` policy is documented in
+[AGENTS.md](AGENTS.md): protected history, pull requests, squash-only merges,
+and an aggregating `check` status gate. Verify the live ruleset before
+publishing because this README cannot assert the current GitHub state.
+
+Run `make verify-repository` before opening a pull request. The verifier is
+read-only and checks required files, tracked documentation directories,
+changelog structure, local-only ignore entries, tracked cache artifacts, remote
+configuration, bare-repository layout, and worktree upstreams. Scan tracked
+text for secrets before any publication or visibility change.
+
+## Version
+
+The current development version is `0.3.10`.
+
 ## Links
 
 - [CHANGELOG.md](CHANGELOG.md)

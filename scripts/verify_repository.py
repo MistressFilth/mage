@@ -37,6 +37,10 @@ REQUIRED_FILES = (
     ".gitignore",
     ".pre-commit-config.yaml",
 )
+REQUIRED_DOCUMENTATION_FILES = (
+    "docs/superpowers/specs",
+    "docs/superpowers/plans",
+)
 FORBIDDEN_TRACKED_PATTERNS = (
     "__pycache__/",
     ".pytest_cache/",
@@ -219,6 +223,19 @@ def verify_files(root: Path) -> list[str]:
         for missing in _missing_ignore_entries(ignore_lines):
             errors.append(
                 f".gitignore is missing required ignore entry: {missing}",
+            )
+
+    for path in REQUIRED_DOCUMENTATION_FILES:
+        if not (root / path).is_dir():
+            errors.append(f"missing tracked documentation directory: {path}")
+
+    changelog_text = _read_text(root / "CHANGELOG.md")
+    if changelog_text is not None:
+        unreleased_count = changelog_text.count("## [Unreleased]")
+        if unreleased_count != 1:
+            errors.append(
+                "CHANGELOG.md must contain exactly one ## [Unreleased] section; "
+                f"found {unreleased_count}",
             )
 
     return errors

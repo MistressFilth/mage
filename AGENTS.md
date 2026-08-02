@@ -57,8 +57,26 @@ escalate it. Do not label it out-of-scope.
 See @Makefile for the full target list. The ones you will use:
 
 ```bash
-make init        # set up from scratch
-make test        # unit + feature tests
-make check       # lint, typecheck, format
+make init                # set up from scratch
+make test                # unit + feature tests
+make check               # lint, typecheck, format
+make verify-repository   # repository rules and worktree invariants
 ```
+
+### Repository compliance
+
+Run `make verify-repository` before opening a pull request. The verifier is
+read-only and confirms that tracked documentation directories
+(`docs/superpowers/specs/`, `docs/superpowers/plans/`) exist, the changelog
+has exactly one `## [Unreleased]` section, the local-only ignore entries
+(`AGENTS.local.md`, `.claude/settings.local.json`) are present, no cache
+artifacts are tracked, the remote URL and fetch refspec are configured for
+direct branch tracking, the bare common directory is a sibling, and every
+worktree's directory, branch, and upstream agree.
+
+Scan tracked text for secrets before any publication or visibility change.
+The intended `main` policy is: protected history, pull requests required,
+squash-only merges, and an aggregating `check` status gate. The live
+ruleset lives on GitHub and is not asserted by this repository; verify it
+before relying on the policy.
 
