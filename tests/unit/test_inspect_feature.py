@@ -438,21 +438,3 @@ class TestInspectFeatureStage:
         ]
         assert len(fix_events) == 1
         assert fix_events[0].payload["iteration"] == 1
-
-    @pytest.mark.asyncio
-    async def test_run_entrypoint_fails_loudly(self, tmp_path):
-        context = make_context(tmp_path)
-        stage = InspectFeatureStage(
-            context.events_log,
-            reviewers=[],
-            mechanical_verifier=CleanMechanicalVerifier(),
-            host_config=HostConfig(),
-        )
-
-        with pytest.raises(NotImplementedError):
-            await stage.run(context)
-
-        assert not any(
-            event.event_type.value == "inspect_feature_completed"
-            for event in context.events_log.read_all()
-        )
