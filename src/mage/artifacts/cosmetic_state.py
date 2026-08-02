@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 _STATE_FILENAME = "cosmetic_applied.yaml"
 _STATE_DIR = ".haileris"
@@ -53,7 +53,7 @@ def load_state(project_dir: Path) -> CosmeticAppliedState:
     try:
         data = yaml.safe_load(path.read_text()) or {}
         return CosmeticAppliedState(**data)
-    except Exception:
+    except (yaml.YAMLError, OSError, ValidationError):
         return CosmeticAppliedState()
 
 

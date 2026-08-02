@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from mage.verification.host_overrides import (
     HostConfig,
@@ -56,7 +57,7 @@ class TestLoadHostConfig:
         config_dir = tmp_path / ".haileris"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("not: valid: yaml: at all: :::")
-        with pytest.raises(Exception):
+        with pytest.raises(yaml.YAMLError):
             load_host_config(tmp_path)
 
 

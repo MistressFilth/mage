@@ -13,6 +13,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.verification.host_overrides import load_host_config
 
@@ -134,7 +136,7 @@ async def apply_for_feature(
                 )
                 try:
                     await save_state(project_dir, state)
-                except Exception as exc:
+                except (yaml.YAMLError, OSError) as exc:
                     await log.append(
                         Event(
                             timestamp=now,
@@ -156,7 +158,7 @@ async def apply_for_feature(
                     payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
                 )
             )
-        except Exception as exc:
+        except (yaml.YAMLError, OSError) as exc:
             await log.append(
                 Event(
                     timestamp=now,

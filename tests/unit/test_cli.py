@@ -107,7 +107,7 @@ def _run_cli(*args, **kwargs):
     def _target():
         try:
             result_box.append(main(*args))
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 — thread target must catch everything to surface the result
             error_box.append(exc)
 
     thread = threading.Thread(target=_target)
@@ -245,7 +245,7 @@ def test_mage_run_without_dry_run_does_not_raise_not_implemented(tmp_path):
         pytest.fail(
             f"cmd_run still raises NotImplementedError after Plan 9 unlock: {exc}"
         )
-    except Exception:
+    except (OSError, ValueError, RuntimeError, KeyError):
         pass  # other failures are OK; we only check the gate is gone
 
 
