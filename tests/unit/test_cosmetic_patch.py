@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mage.artifacts.cosmetic import CosmeticItem
+from mage.artifacts.cosmetic import CosmeticPatch
 
 
 def _item(**overrides):
@@ -17,7 +17,7 @@ def _item(**overrides):
         proposed_by="IncrementQualityReviewer",
     )
     defaults.update(overrides)
-    return CosmeticItem(**defaults)
+    return CosmeticPatch(**defaults)
 
 
 def test_cosmetic_item_default_applied_at_is_none():

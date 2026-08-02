@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mage.artifacts.cosmetic import CosmeticItem
+from mage.artifacts.cosmetic import CosmeticPatch
 from mage.artifacts.mapping import MappingArtifact
 
 
@@ -24,7 +24,7 @@ def test_feature_cosmetic_queue_entry_requires_feature_id():
 
 def test_append_cosmetic_takes_feature_id_and_appends():
     m = MappingArtifact(schema_version=2, project_id="p")
-    item = CosmeticItem(
+    item = CosmeticPatch(
         sub_bid="00000-001",
         file_path=Path("src/example.py"),
         line_range=(10, 20),
@@ -39,7 +39,7 @@ def test_append_cosmetic_takes_feature_id_and_appends():
 
 def test_feature_cosmetic_queue_round_trips_via_save_load(tmp_path):
     m = MappingArtifact(schema_version=2, project_id="p")
-    item = CosmeticItem(
+    item = CosmeticPatch(
         sub_bid="00000-001",
         file_path=Path("src/example.py"),
         line_range=(1, 1),

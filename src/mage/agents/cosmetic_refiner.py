@@ -59,7 +59,7 @@ class CosmeticRefiner:
         an LLM call. On real-LLM failure returns a stub item with
         file_path=None.
         """
-        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic import CosmeticPatch
 
         async with semaphore:
             # Test-mode passthrough only fires when no agent has been
@@ -70,7 +70,7 @@ class CosmeticRefiner:
                 file_path = location.get("file")
                 line = int(location.get("line", 1))
                 text = raw.get("text", "")
-                return CosmeticItem(
+                return CosmeticPatch(
                     sub_bid=raw["sub_bid"],
                     file_path=Path(file_path) if file_path else None,
                     line_range=(max(1, line - 1), line + 1),
@@ -87,7 +87,7 @@ class CosmeticRefiner:
                 )
                 result = await self._agent.run(prompt)  # type: ignore[union-attr]
                 data = result.output
-                return CosmeticItem(
+                return CosmeticPatch(
                     sub_bid=raw["sub_bid"],
                     file_path=Path(data["file_path"]),
                     line_range=tuple(data["line_range"]),
@@ -96,7 +96,7 @@ class CosmeticRefiner:
                     proposed_by=raw.get("proposed_by", "unknown"),
                 )
             except Exception as exc:  # noqa: BLE001 — fallback path for any LLM failure
-                return CosmeticItem(
+                return CosmeticPatch(
                     sub_bid=raw["sub_bid"],
                     file_path=None,  # type: ignore[arg-type]
                     line_range=(0, 0),
