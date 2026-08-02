@@ -7,11 +7,8 @@ Mirrors the Plan 13 / Plan 15 / Plan 17 static-guard pattern.
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
-
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC = REPO_ROOT / "src"
