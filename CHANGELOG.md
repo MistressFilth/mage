@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Repository compliance guidance now tracks design and implementation plans in
+  `docs/superpowers/{specs,plans}/` and exposes `make verify-repository` to
+  enforce the on-disk requirements. Repository publication status and the live
+  GitHub ruleset are not asserted in this changelog; verify them before
+  relying on the policy.
+
 - `InspectFeatureStage` is no longer a `StageNode` subclass. The class is a
   feature-level service whose sole public entry is `run_pass(context, *,
   feature_id, scenarios, iteration=None) -> InspectArtifactContent`. The
@@ -129,26 +135,3 @@ All notable changes to this project are documented here. The format follows
   skeleton.
 - Mechanical verification checks and the host-project override mechanism.
 - Decomposition, Plan, and Inscribe stages with their digest-pinned artifacts.
-
-## [Unreleased] - Plan 6
-
-### Added
-
-- PipelineGraph now runs end to end: Decomposition → Inscribe → Automation (Etch → Realize → InspectLoop, nested per scenario and per increment) → InspectFeature → Settle.
-- `FeatureRunner` (orchestration/runner.py): pure loop driver with no I/O of its own. Mutates only `PipelineContext.automation_cursor` and returns `list[ScenarioOutcome]`.
-- `AutomationStage` (orchestration/automation.py): thin `StageNode` shim that builds `ScenarioTarget`s from approved scenarios, delegates to `FeatureRunner`, and writes outcomes back to the mapping with `SCENARIO_LIVE` emission and the `APPROVED → LIVE` transition.
-- Typed frozen data-flow models: `ScenarioTarget`, `Increment`, `IncrementResult`, `ScenarioOutcome`, `AutomationCursor` (all in orchestration/runner.py).
-- `mage run --dry-run --model` end-to-end. `--dry-run` substitutes stub agents; `--model` overrides `HostConfig.model`. `mage review resume` is deleted; `mage run` resumes automatically.
-- `EtchStage.run_scenario`, `RealizeStage.run_increment`, `InspectLoopStage.inspect_increment` — the three automation stages are no longer `StageNode` subclasses. `InspectLoopStage` returns `InspectRoute | None` so `FeatureRunner` controls the loop.
-- `HostConfig.model` field.
-
-### Fixed
-
-- `InspectLoopStage`'s keyword-only constructor replaced the legacy `realize_stage` parameter and dropped `StageNode` inheritance; all pre-existing call sites updated.
-- The cosmetic queue now uses `MappingArtifact.append_cosmetic(CosmeticItem(...))` instead of raw dicts.
-- `RealizeStage.run_increment` rebuilds the per-scenario carry-forward window (last 5 journal entries) and cross-scenario observations (last 3 from siblings) before each agent call. The previous Plan 4 implementation was deleted in Task 4 and the substitution restored.
-- All four halt exceptions (`ScenarioInspectHalted`, `InspectFeatureHalted`, `ReviewBudgetExhausted`, `PlanRevisionRequired`) now route through a single `_persist_halt` path that accepts `BaseException` and uses `getattr` defaults so `PlanRevisionRequired`'s structured payload survives unchanged while `ScenarioInspectHalted` flows through with sensible defaults.
-
-### Changed
-
-- `ReviewerFinding` schema gains `route: InspectRoute = "code"`. The string-prefix parsing fallback (`"spec:"` / `"cosmetic:"` in `suggestion`) is deleted; the prompt now requires the structured `route` field. Default `"code"` is additive and backward-compatible.
