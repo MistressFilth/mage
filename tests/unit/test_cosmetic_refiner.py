@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from mage.agents.cosmetic_refiner import CosmeticRefiner
-from mage.artifacts.cosmetic import CosmeticItem
+from mage.artifacts.cosmetic import CosmeticPatch
 
 
 def _raw_queue_entry():
@@ -45,7 +45,7 @@ async def test_refiner_produces_cosmetic_item_from_raw_dict():
     refiner._agent = _CannedAgent(canned_payload)  # type: ignore[assignment]
     semaphore = asyncio.Semaphore(1)
     result = await refiner.refine(_raw_queue_entry(), semaphore=semaphore)
-    assert isinstance(result, CosmeticItem)
+    assert isinstance(result, CosmeticPatch)
     assert result.sub_bid == "00000-001"
     assert result.file_path == Path("src/example.py")
     assert result.line_range == (14, 16)
@@ -85,12 +85,12 @@ async def test_refiner_respects_semaphore_cap():
     )
     assert peak <= 2
     assert len(results) == 6
-    assert all(isinstance(r, CosmeticItem) for r in results)
+    assert all(isinstance(r, CosmeticPatch) for r in results)
 
 
 @pytest.mark.asyncio
 async def test_refiner_falls_back_to_stub_on_llm_fail():
-    """LLM raises → fallback CosmeticItem with file_path=None flagged for manual review."""
+    """LLM raises → fallback CosmeticPatch with file_path=None flagged for manual review."""
     refiner = CosmeticRefiner()
 
     class FailingAgent:

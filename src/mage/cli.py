@@ -626,9 +626,7 @@ async def cmd_cosmetic_show(args) -> int:
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     queue = [
-        q
-        for q in mapping.feature_cosmetic_queue
-        if q.get("feature_id") == args.feature_id
+        q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
     ]
     if not queue:
         print(

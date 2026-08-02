@@ -517,7 +517,7 @@ class SettleFeatureStage(StageNode):
                         )
                     )
 
-        queue = context.mapping.feature_cosmetic_queue
+        queue = context.mapping.cosmetic_findings
         await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),

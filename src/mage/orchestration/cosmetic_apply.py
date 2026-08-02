@@ -52,9 +52,7 @@ async def apply_for_feature(
         host_config = host_config.model_copy(update={"model": model})
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
-    queue = [
-        q for q in mapping.feature_cosmetic_queue if q.get("feature_id") == feature_id
-    ]
+    queue = [q for q in mapping.cosmetic_findings if q.get("feature_id") == feature_id]
     if not queue:
         return 0
     refined = await asyncio.gather(

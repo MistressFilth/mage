@@ -1,4 +1,4 @@
-"""CosmeticRefiner: turn raw cosmetic queue entries into concrete CosmeticItems."""
+"""CosmeticRefiner: turn raw cosmetic queue entries into concrete CosmeticPatches."""
 
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ class CosmeticRefiner:
 
     `refine()` is async and takes an `asyncio.Semaphore` to allow the caller
     to cap concurrent LLM fan-out (see HostConfig.max_concurrent_llm_calls).
-    On LLM failure, returns a stub CosmeticItem with file_path=None so the
+    On LLM failure, returns a stub CosmeticPatch with file_path=None so the
     caller can decide how to surface the failure (see COSMETIC_REFINER_FALLBACK
     event).
 
     Test mode (model is None or the string ``"test"``): bypasses the LLM
-    entirely. The refiner synthesizes a CosmeticItem directly from the raw
+    entirely. The refiner synthesizes a CosmeticPatch directly from the raw
     queue entry's ``location`` field (``file_path``, ``line_range``) and
     ``text`` (``replacement_text``, ``rationale``). This makes the CLI
     deterministic in ``--model test`` E2E flows without needing per-call
@@ -39,7 +39,7 @@ class CosmeticRefiner:
     def __init__(self, *, model: Any = None) -> None:
         self._is_test_mode = model is None or model == "test"
         if self._is_test_mode:
-            # Skip Agent construction; refine() builds CosmeticItem directly.
+            # Skip Agent construction; refine() builds CosmeticPatch directly.
             self._agent: Agent[None, dict[str, Any]] | None = None
         else:
             self._agent = Agent(
@@ -51,15 +51,15 @@ class CosmeticRefiner:
 
     async def refine(
         self, raw: dict, *, semaphore: asyncio.Semaphore
-    ) -> Any:  # returns CosmeticItem; Any here to avoid runtime cycle
-        """Refine one raw queue entry into a CosmeticItem.
+    ) -> Any:  # returns CosmeticPatch; Any here to avoid runtime cycle
+        """Refine one raw queue entry into a CosmeticPatch.
 
         Acquires the semaphore first (caller controls fan-out cap). In
-        test mode builds the CosmeticItem from raw["location"] without
+        test mode builds the CosmeticPatch from raw["location"] without
         an LLM call. On real-LLM failure returns a stub item with
         file_path=None.
         """
-        from mage.artifacts.cosmetic import CosmeticItem
+        from mage.artifacts.cosmetic import CosmeticPatch
 
         async with semaphore:
             # Test-mode passthrough only fires when no agent has been
@@ -70,7 +70,7 @@ class CosmeticRefiner:
                 file_path = location.get("file")
                 line = int(location.get("line", 1))
                 text = raw.get("text", "")
-                return CosmeticItem(
+                return CosmeticPatch(
                     sub_bid=raw["sub_bid"],
                     file_path=Path(file_path) if file_path else None,
                     line_range=(max(1, line - 1), line + 1),
@@ -87,7 +87,7 @@ class CosmeticRefiner:
                 )
                 result = await self._agent.run(prompt)  # type: ignore[union-attr]
                 data = result.output
-                return CosmeticItem(
+                return CosmeticPatch(
                     sub_bid=raw["sub_bid"],
                     file_path=Path(data["file_path"]),
                     line_range=tuple(data["line_range"]),
@@ -96,7 +96,7 @@ class CosmeticRefiner:
                     proposed_by=raw.get("proposed_by", "unknown"),
                 )
             except Exception as exc:  # noqa: BLE001 — fallback path for any LLM failure
-                return CosmeticItem(
+                return CosmeticPatch(
                     sub_bid=raw["sub_bid"],
                     file_path=None,  # type: ignore[arg-type]
                     line_range=(0, 0),

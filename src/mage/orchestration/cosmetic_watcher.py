@@ -4,6 +4,10 @@ Plan 11: tails `events.jsonl`, diffs the mapping's
 `feature_cosmetic_queue` against the last seen snapshot, and calls
 `apply_for_feature` per feature_id with new entries. Idempotency from
 Plan 10 (`CosmeticAppliedState`) protects against double-application.
+
+Note: the on-disk YAML/JSON key remains `feature_cosmetic_queue` via a
+Pydantic `Field(alias=...)` on `MappingArtifact`; the in-memory attribute
+accessed below is `mapping.cosmetic_findings`.
 """
 
 from __future__ import annotations
@@ -26,6 +30,11 @@ class MappingArtifactWatcher:
     `stop()` is the only way to terminate `run()` cleanly. The daemon
     emits `COSMETIC_WATCHER_STARTED` on entry and `COSMETIC_WATCHER_STOPPED`
     on exit.
+
+    The on-disk key (`feature_cosmetic_queue`) and the in-memory attribute
+    (`mapping.cosmetic_findings`) are aliased via
+    ``Field(alias="feature_cosmetic_queue")`` on ``MappingArtifact``; the
+    code below reads the latter.
     """
 
     def __init__(
@@ -117,7 +126,7 @@ class MappingArtifactWatcher:
             )
             return
         new_seen: dict[str, frozenset[str]] = {}
-        for entry in mapping.feature_cosmetic_queue:
+        for entry in mapping.cosmetic_findings:
             fid = entry.get("feature_id")
             sb = entry.get("sub_bid")
             if not isinstance(fid, str) or not isinstance(sb, str):

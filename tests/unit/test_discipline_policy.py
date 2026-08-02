@@ -364,31 +364,20 @@ def test_supersession_complete_writes_reversion_log_entry():
     )
 
 
-from mage.artifacts.inspect import CosmeticItem
 from mage.orchestration.discipline.policy import guard_cosmetic_application
 from mage.orchestration.exceptions import ModelCannotApplyCosmetic
-
-
-def _cosmetic() -> CosmeticItem:
-    return CosmeticItem(
-        sub_bid="A",
-        scenario_name="s",
-        location="text",
-        text="t",
-        proposed_by="cosmetic",
-    )
 
 
 def test_cosmetic_guard_rejects_model_source():
     with pytest.raises(ModelCannotApplyCosmetic):
         guard_cosmetic_application(
-            source="model", item=_cosmetic(), human_approver=None
+            source="model", sub_bid="A", human_approver=None
         )
 
 
 def test_cosmetic_guard_accepts_human_source():
     out = guard_cosmetic_application(
-        source="human", item=_cosmetic(), human_approver="alice"
+        source="human", sub_bid="A", human_approver="alice"
     )
     assert out.sub_bid == "A"
     assert out.human_approver == "alice"
@@ -396,7 +385,7 @@ def test_cosmetic_guard_accepts_human_source():
 
 def test_cosmetic_guard_accepts_human_authorized_source():
     out = guard_cosmetic_application(
-        source="human-authorized", item=_cosmetic(), human_approver="ci-bot"
+        source="human-authorized", sub_bid="A", human_approver="ci-bot"
     )
     assert out.human_approver == "ci-bot"
 
@@ -404,5 +393,37 @@ def test_cosmetic_guard_accepts_human_authorized_source():
 def test_cosmetic_guard_requires_human_approver_for_human_source():
     with pytest.raises(ModelCannotApplyCosmetic):
         guard_cosmetic_application(
-            source="human", item=_cosmetic(), human_approver=None
+            source="human", sub_bid="A", human_approver=None
         )
+
+
+class TestGuardCosmeticApplicationNarrowSignature:
+    """Plan 18: guard_cosmetic_application takes sub_bid, not a full CosmeticFinding."""
+
+    def test_accepts_sub_bid_string_directly(self):
+        from datetime import UTC, datetime
+
+        from mage.orchestration.discipline.policy import (
+            guard_cosmetic_application,
+        )
+
+        entry = guard_cosmetic_application(
+            source="human", sub_bid="00000-001", human_approver="alice"
+        )
+        assert entry.sub_bid == "00000-001"
+        assert entry.human_approver == "alice"
+        assert isinstance(entry.timestamp, datetime)
+        assert entry.timestamp.tzinfo is UTC
+
+    def test_rejects_model_source_without_human(self):
+        import pytest
+
+        from mage.orchestration.discipline.policy import (
+            ModelCannotApplyCosmetic,
+            guard_cosmetic_application,
+        )
+
+        with pytest.raises(ModelCannotApplyCosmetic):
+            guard_cosmetic_application(
+                source="model", sub_bid="00000-001", human_approver=None
+            )
