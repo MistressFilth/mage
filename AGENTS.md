@@ -18,6 +18,30 @@ Before opening or merging a PR:
    `docs/superpowers/plans/`. A behavior change that contradicts a spec means
    the spec is edited in the same PR.
 
+## Repository compliance
+
+Before opening or merging a pull request, run the local checks and inspect the
+tracked-content results:
+
+```bash
+make verify-repository
+make check
+make test
+```
+
+`make verify-repository` is read-only. It checks the required files, exact
+`CLAUDE.md` references, tracked documentation directories, the changelog has
+exactly one `## [Unreleased]` section, local-only ignore entries, tracked
+cache artifacts, remote configuration, bare-repository layout, and worktree
+upstreams. Keep `docs/superpowers/specs/` and `docs/superpowers/plans/`
+tracked; do not restore a broad ignore rule for `docs/superpowers/`.
+
+Before changing repository visibility or publishing content, scan every
+tracked text file for secrets. A detected credential blocks publication until
+it is revoked or rotated and the scan is clean. The intended `main` policy is
+documented in @AGENTS.md rather than asserted from the in-tree state; the
+live GitHub ruleset must be inspected before relying on it.
+
 ## Pre-existing issues
 
 A "pre-existing" issue — one already on `main`, in the tracker, or marked
@@ -62,21 +86,4 @@ make test                # unit + feature tests
 make check               # lint, typecheck, format
 make verify-repository   # repository rules and worktree invariants
 ```
-
-### Repository compliance
-
-Run `make verify-repository` before opening a pull request. The verifier is
-read-only and confirms that tracked documentation directories
-(`docs/superpowers/specs/`, `docs/superpowers/plans/`) exist, the changelog
-has exactly one `## [Unreleased]` section, the local-only ignore entries
-(`AGENTS.local.md`, `.claude/settings.local.json`) are present, no cache
-artifacts are tracked, the remote URL and fetch refspec are configured for
-direct branch tracking, the bare common directory is a sibling, and every
-worktree's directory, branch, and upstream agree.
-
-Scan tracked text for secrets before any publication or visibility change.
-The intended `main` policy is: protected history, pull requests required,
-squash-only merges, and an aggregating `check` status gate. The live
-ruleset lives on GitHub and is not asserted by this repository; verify it
-before relying on the policy.
 
