@@ -1,3 +1,3 @@
 """mage: spec-driven development pipeline."""
 
-__version__ = "0.1.0"
+__version__ = "0.3.10"
