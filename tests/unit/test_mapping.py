@@ -516,7 +516,7 @@ class TestCosmeticFindingsAlias:
         assert dumped_second["feature_id"] == "feat-2"
         assert dumped_second["text"] == "swap to walrus"
 
-    def test_save_writes_alias_key_and_round_trips(self):
+    def test_save_writes_alias_key_and_round_trips(self, tmp_path):
         """Plan 18 reviewer fix #1: save() must serialize under feature_cosmetic_queue.
 
         Before the fix, ``model_dump(mode="json")`` was called without
@@ -526,7 +526,6 @@ class TestCosmeticFindingsAlias:
         is what appears on disk.
         """
         import asyncio
-        from pathlib import Path
 
         from mage.artifacts.inspect import CosmeticFinding
         from mage.artifacts.mapping import MappingArtifact
@@ -544,9 +543,7 @@ class TestCosmeticFindingsAlias:
                 | {"feature_id": "feat-1"},
             ],
         )
-        path = Path("/tmp/plan18_save_alias_demo.yaml")
-        if path.exists():
-            path.unlink()
+        path = tmp_path / "plan18_save_alias_demo.yaml"
         asyncio.run(artifact.save(path))
 
         raw = path.read_text()
