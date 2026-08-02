@@ -98,7 +98,9 @@ class TestE2EInnerTDDHappyPath:
             increment_quality_reviewer=CleanReviewer(),
             host_config=cfg,
         )
-        realize_stage = RealizeStage(log, cast(RealizeAgent, NoOpRealizeAgent()))
+        realize_stage = RealizeStage(
+            log, cast(RealizeAgent, NoOpRealizeAgent()), host_config=cfg
+        )
 
         # Drive 2 scenarios × 3 increments each
         for scenario in scenarios:
@@ -394,7 +396,9 @@ class TestE2ECodeRouteCarryForward:
             increment_quality_reviewer=CodeRouteReviewer(),
             host_config=HostConfig(),
         )
-        realize_stage = RealizeStage(log, cast(RealizeAgent, CapturingRealizeAgent()))
+        realize_stage = RealizeStage(
+            log, cast(RealizeAgent, CapturingRealizeAgent()), host_config=HostConfig()
+        )
         target = ScenarioTarget(
             base_bid="00000",
             sub_bid="00000-0",

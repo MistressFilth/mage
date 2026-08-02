@@ -15,6 +15,7 @@ from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.realize import RealizeStage
 from mage.orchestration.runner import Increment, ScenarioTarget
+from mage.verification.host_overrides import HostConfig
 
 
 def _context(tmp_path: Path) -> PipelineContext:
@@ -60,7 +61,12 @@ async def test_run_increment_returns_increment_result_with_diff(tmp_path):
     )
     agent = _StubAgent(RealizeOutput(files_changed=["foo.py", "bar.py"], summary="ok"))
     runner = _RecordingRunner(stdout="diff payload")
-    stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
+    stage = RealizeStage(
+        ctx.events_log,
+        agent=agent,  # type: ignore[arg-type]
+        command_runner=runner,
+        host_config=HostConfig(),
+    )
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
 
@@ -95,7 +101,7 @@ async def test_run_increment_uses_default_runner_when_none_provided(
         return CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr("mage.orchestration.realize._default_command_runner", fake_run)
-    stage = RealizeStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
+    stage = RealizeStage(ctx.events_log, agent=agent, host_config=HostConfig())  # type: ignore[arg-type]
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
 
@@ -117,7 +123,12 @@ async def test_run_increment_emits_realize_increment_done(tmp_path):
     )
     agent = _StubAgent(RealizeOutput(files_changed=["x.py"], summary=""))
     runner = _RecordingRunner(stdout="")
-    stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
+    stage = RealizeStage(
+        ctx.events_log,
+        agent=agent,  # type: ignore[arg-type]
+        command_runner=runner,
+        host_config=HostConfig(),
+    )
 
     await stage.run_increment(ctx, target=target, increment=increment)
 
@@ -177,7 +188,12 @@ async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
     )
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
     runner = _RecordingRunner(stdout="")
-    stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
+    stage = RealizeStage(
+        ctx.events_log,
+        agent=agent,
+        command_runner=runner,
+        host_config=HostConfig(),  # type: ignore[arg-type]
+    )
 
     # Plant a single journal entry on the target sub_bid.
     entry = _journal_entry(sub_bid="00001-0001", finding_id="f-1")
@@ -211,7 +227,12 @@ async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp
     )
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
     runner = _RecordingRunner(stdout="")
-    stage = RealizeStage(ctx.events_log, agent=agent, command_runner=runner)  # type: ignore[arg-type]
+    stage = RealizeStage(
+        ctx.events_log,
+        agent=agent,
+        command_runner=runner,
+        host_config=HostConfig(),  # type: ignore[arg-type]
+    )
 
     # Plant entries on a sibling sub_bid; none on the target.
     base = datetime(2026, 7, 28, 12, 0, 0, tzinfo=UTC)
@@ -253,7 +274,7 @@ async def test_run_increment_carry_forward_window_respects_size(tmp_path):
         ctx.events_log,
         agent=agent,
         command_runner=runner,  # type: ignore[arg-type]
-        per_scenario_window=2,
+        host_config=HostConfig(per_scenario_window=2),
     )
 
     for fid in ["a", "b", "c"]:

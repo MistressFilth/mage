@@ -256,7 +256,7 @@ def _make_dry_run_runner(
     from mage.orchestration.runner import FeatureRunner
 
     etch = EtchStage(log, agent=_StubEtchAgent())  # type: ignore[arg-type]
-    realize = RealizeStage(log, agent=_StubRealizeAgent())  # type: ignore[arg-type]
+    realize = RealizeStage(log, agent=_StubRealizeAgent(), host_config=host_config)  # type: ignore[arg-type]
     inspect = InspectLoopStage(
         log,
         mechanical_verifier=_NoopMechanicalVerifier(),
