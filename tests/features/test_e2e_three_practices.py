@@ -363,7 +363,7 @@ def test_e2e_cosmetic_model_blocked() -> None:
     )
 
     with pytest.raises(ModelCannotApplyCosmetic):
-        guard_cosmetic_application(source="model", item=item, human_approver=None)
+        guard_cosmetic_application(source="model", sub_bid=item.sub_bid, human_approver=None)
 
 
 def test_e2e_plan_order_violation() -> None:
