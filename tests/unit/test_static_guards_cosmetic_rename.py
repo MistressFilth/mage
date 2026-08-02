@@ -53,3 +53,35 @@ class TestOnDiskAliasPreserved:
             "feature_cosmetic_queue (the on-disk alias) is no longer referenced "
             "in src/; verify the MappingArtifact alias is configured correctly"
         )
+
+    def test_alias_appears_in_mapping_artifact_definition(self):
+        """The Pydantic Field alias is the source of truth for the on-disk key.
+
+        A docstring or event-payload reference alone is not sufficient — only
+        the literal ``alias=\"feature_cosmetic_queue\"`` on the
+        ``cosmetic_findings`` Field actually pins the YAML/JSON key. If this
+        assertion fails, the alias was removed from MappingArtifact and the
+        on-disk mapping.yaml will start round-tripping under the wrong key.
+        """
+        import re
+
+        mapping_path = REPO_ROOT / "src/mage/artifacts/mapping.py"
+        text = mapping_path.read_text()
+        assert 'alias="feature_cosmetic_queue"' in text, (
+            f'MappingArtifact no longer pins alias="feature_cosmetic_queue" '
+            f"in {mapping_path}; on-disk mapping.yaml will lose its alias key. "
+            f"Check that the cosmetic_findings Field still uses "
+            f"Field(alias='feature_cosmetic_queue')."
+        )
+        # And it must be on the cosmetic_findings Field specifically, not on
+        # an unrelated attribute — verify by anchoring on the attribute name.
+        match = re.search(
+            r"cosmetic_findings\s*:[^=\n]*=.*?Field\([^)]*alias=\"feature_cosmetic_queue\"",
+            text,
+            re.DOTALL,
+        )
+        assert match is not None, (
+            f"alias='feature_cosmetic_queue' is present in {mapping_path} but "
+            f"not attached to the cosmetic_findings Field; the on-disk key "
+            f"will not be stable."
+        )
