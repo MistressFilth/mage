@@ -51,7 +51,7 @@ def load_state(project_dir: Path) -> CosmeticAppliedState:
     try:
         data = yaml.safe_load(path.read_text()) or {}
         return CosmeticAppliedState(**data)
-    except (yaml.YAMLError, OSError, ValidationError):
+    except (yaml.YAMLError, OSError, ValidationError, TypeError):
         return CosmeticAppliedState()
 
 

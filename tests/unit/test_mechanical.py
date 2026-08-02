@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.verification.mechanical import (
@@ -40,30 +38,16 @@ class DummyFailingCheck(MechanicalCheck):
 
 
 class TestMechanicalCheck:
-    def test_subclass_must_implement_run(self, tmp_project_dir: Path):
+    def test_subclass_must_implement_run(self):
+        """MechanicalCheck is an ABC; `_run` MUST be in __abstractmethods__."""
+
         class Incomplete(MechanicalCheck):
             name = "incomplete"
 
-            def _run(self, draft, mapping):
-                raise NotImplementedError
+        import inspect
 
-        from mage.artifacts.mapping import MappingArtifact as _MA
-        from mage.verification.mechanical import ScenarioDraft as _SD
-
-        _stub_draft = _SD(
-            feature_path=tmp_project_dir / "x.feature",
-            scenario_name="x",
-            gherkin_text="",
-            tags=[],
-            sub_bid="x",
-            parent_base_bid=Base85BID(value="00000"),
-            step_texts=[],
-        )
-        incomplete = Incomplete()
-        with pytest.raises(NotImplementedError):
-            incomplete.run(
-                _stub_draft, _MA(schema_version=2, project_id="t", base_bids=[])
-            )
+        assert inspect.isabstract(Incomplete)
+        assert "_run" in Incomplete.__abstractmethods__
 
 
 class TestMechanicalVerifier:

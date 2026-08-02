@@ -54,10 +54,11 @@ async def test_pydantic_etch_agent_prompt_contains_step_and_context():
             captured_prompts.append(prompt)
 
             class _R:
-                output = {  # noqa: RUF012 — test fake; dict is overridden per-instance in __init__
-                    "test_path": "tests/x.py",
-                    "test_code": "def test_x(): assert False\n",
-                }
+                def __init__(self) -> None:
+                    self.output = {
+                        "test_path": "tests/x.py",
+                        "test_code": "def test_x(): assert False\n",
+                    }
 
             return _R()
 

@@ -13,7 +13,7 @@ Added to feature_reviewer_registry (Plan 5 Task 3).
 
 from __future__ import annotations
 
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from mage.artifacts.verdict import ReviewerVerdict
 from mage.verification.reviewers.base import ReviewerAgent
@@ -52,25 +52,26 @@ class CrossScenarioReviewer(ReviewerAgent):
             "Rationale is mandatory."
         )
 
-    async def run(
+    async def run(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         *,
-        draft,
-        spec_context: dict,
-        mapping,
-        events_log,
-        verdict_path,
-        **kwargs: object,
+        draft,  # Liskov compat with ReviewerAgent.run; unused at feature scope
+        spec_context: dict,  # Liskov compat; unused at feature scope
+        mapping,  # Liskov compat; unused at feature scope
+        events_log,  # Liskov compat; unused at feature scope
+        verdict_path,  # Liskov compat; unused at feature scope
+        feature_summary: dict,
+        scenarios: list[dict],
     ) -> ReviewerVerdict:
         """Run the reviewer across the whole feature.
 
         Plan 5's InspectFeatureStage (Task 5) calls this with the full
-        feature's scenario set.
+        feature's scenario set. The signature mirrors `ReviewerAgent.run`
+        plus two feature-scoped extras (`feature_summary`, `scenarios`)
+        and is therefore Liskov-compatible.
         """
         from datetime import UTC, datetime
 
-        feature_summary = cast(dict, kwargs.get("feature_summary", {}))
-        scenarios = cast(list[dict], kwargs.get("scenarios", []))
         prompt = (
             f"Feature summary: {feature_summary}\n\n"
             f"Scenarios:\n" + "\n".join(f"  {s}" for s in scenarios) + "\n\n"

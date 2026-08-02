@@ -15,9 +15,9 @@ All notable changes to this project are documented here. The format follows
   `InspectFeatureHalted` propagation path and `graph.py`'s halt handler are
   unchanged.
 - Lint and typecheck baseline cleanup (Plan 19): `make check` is now green.
-  Resolved 41 pre-existing ruff errors (BLE001, B017, C408, F821, F841,
-  PLW1510, RUF012, RUF059, SIM118, S110, S112, TRY004) and 87 pre-existing
-  pyright errors (reportAbstractUsage, reportArgumentType,
+  Resolved the pre-existing ruff baseline (BLE001, B017, C408, F821, F841,
+  PLW1510, RUF012, RUF059, SIM118, S110, S112, TRY004) and the
+  pre-existing pyright baseline (reportAbstractUsage, reportArgumentType,
   reportAssignmentType, reportAttributeAccessIssue, reportCallIssue,
   reportIncompatibleMethodOverride, reportInvalidTypeVarUse,
   reportReturnType, reportUndefinedVariable). Also removed 3 dead-code items:

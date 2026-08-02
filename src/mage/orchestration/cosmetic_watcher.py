@@ -17,6 +17,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
 
@@ -121,7 +123,7 @@ class MappingArtifactWatcher:
 
         try:
             mapping = MappingArtifact.load(self.project_dir / "mapping.yaml")
-        except (OSError, ValueError, KeyError) as exc:
+        except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

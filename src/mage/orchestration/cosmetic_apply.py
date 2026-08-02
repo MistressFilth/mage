@@ -157,7 +157,7 @@ async def apply_for_feature(
                     payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
                 )
             )
-        except (yaml.YAMLError, OSError) as exc:
+        except (yaml.YAMLError, OSError, subprocess.CalledProcessError) as exc:
             await log.append(
                 Event(
                     timestamp=now,

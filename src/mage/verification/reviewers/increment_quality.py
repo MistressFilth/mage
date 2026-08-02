@@ -8,7 +8,7 @@ default_reviewer_registry (which is the Inscribe 7-reviewer registry).
 
 from __future__ import annotations
 
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from mage.artifacts.inspect import InspectJournalEntry
 from mage.artifacts.verdict import ReviewerVerdict
@@ -58,31 +58,23 @@ class IncrementQualityReviewer(ReviewerAgent):
             "rationale are rejected."
         )
 
-    async def run(
+    async def run(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         *,
-        draft,
-        spec_context: dict,
-        mapping,
-        events_log,
-        verdict_path,
-        **kwargs: object,
+        increment_diff: str,
+        new_test: str,
+        scenario_steps: list[str],
+        recent_journal_window: list[InspectJournalEntry],
     ) -> ReviewerVerdict:
         """Run the reviewer. Plan 4's InspectLoopStage (Task 12) calls this.
 
         Note: this is a single-increment LLM call (not a per-draft scenario call).
+        The signature intentionally differs from `ReviewerAgent.run` (per-increment
+        inputs, not per-draft). Suppresses `reportIncompatibleMethodOverride` —
+        the override is intentionally not Liskov-substitutable.
         """
         # Construct prompt in-line (do not use ReviewerAgent.run's signature):
         from datetime import UTC, datetime
-
-        from mage.artifacts.verdict import ReviewerVerdict
-
-        increment_diff = cast(str, kwargs.get("increment_diff", ""))
-        new_test = cast(str, kwargs.get("new_test", ""))
-        scenario_steps = cast(list[str], kwargs.get("scenario_steps", []))
-        recent_journal_window = cast(
-            list[InspectJournalEntry], kwargs.get("recent_journal_window", [])
-        )
 
         # Format carry-forward section
         cf_section = (
