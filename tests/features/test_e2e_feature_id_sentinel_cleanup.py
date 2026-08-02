@@ -65,7 +65,10 @@ from mage.verification.reviewers.testability import TestabilityReviewer
 # match newlines.
 _BANNED_PATTERNS: tuple[str, ...] = (
     r'"feature_id"\s*:\s*"unknown"',
-    r'append_cosmetic\s*\(\s*"unknown"',
+    # Plan 18 renamed append_cosmetic -> append_cosmetic_finding; the sentinel
+    # guard accepts both spellings so a regression that drops "unknown" into
+    # the new method's first arg is caught.
+    r'append_cosmetic(_finding)?\s*\(\s*"unknown"',
 )
 
 
@@ -83,8 +86,9 @@ def test_static_guard_no_unknown_feature_id_in_inspect_or_inscribe_source() -> N
     Catches the two patterns the plan explicitly banned, regardless of
     surrounding whitespace (including across newlines):
     - ``"feature_id": "unknown"`` as a payload/dict value
-    - ``append_cosmetic("unknown"`` as the first positional argument
-      (also wrapped-across-lines form)
+    - ``append_cosmetic("unknown"`` (or the Plan 18 spelling
+      ``append_cosmetic_finding("unknown"``) as the first positional
+      argument (also wrapped-across-lines form)
 
     Sub_bid/scenario_name ``"unknown"`` fallbacks are intentionally out of
     scope and are NOT flagged here.
@@ -109,6 +113,40 @@ def test_static_guard_no_unknown_feature_id_in_inspect_or_inscribe_source() -> N
         "or inscribe.py:\n"
         + "\n".join(f"{p}  {f}:{n}: {l!r}" for (p, f, n, l) in offenders)
     )
+
+
+def test_append_cosmetic_sentinel_regex_matches_both_old_and_new_method_names() -> None:
+    """The sentinel regex must catch both the pre-Plan-18 and post-Plan-18 spellings.
+
+    Plan 18 renamed ``append_cosmetic`` to ``append_cosmetic_finding``. The
+    guard pattern ``r'append_cosmetic(_finding)?\\s*\\(\\s*"unknown"'`` has to
+    flag both forms so a regression that introduces ``"unknown"`` as the first
+    arg of either spelling is caught.
+    """
+    pattern = next(
+        p for p in _BANNED_PATTERNS if "append_cosmetic" in p and "unknown" in p
+    )
+    compiled = re.compile(pattern, re.DOTALL)
+
+    old_form = 'append_cosmetic("unknown", "feat-1", entry)'
+    new_form = 'append_cosmetic_finding("unknown", entry)'
+    wrapped_form = 'append_cosmetic_finding(\n    "unknown", entry)'
+
+    assert compiled.search(old_form) is not None, (
+        f"regex {pattern!r} did not match legacy form: {old_form!r}"
+    )
+    assert compiled.search(new_form) is not None, (
+        f"regex {pattern!r} did not match renamed form: {new_form!r}"
+    )
+    assert compiled.search(wrapped_form) is not None, (
+        f"regex {pattern!r} did not match wrapped form: {wrapped_form!r}"
+    )
+
+    # And it must NOT match legitimate uses (no "unknown" first arg).
+    clean_old = 'append_cosmetic("feat-1", entry)'
+    clean_new = 'append_cosmetic_finding("feat-1", entry)'
+    assert compiled.search(clean_old) is None
+    assert compiled.search(clean_new) is None
 
 
 # ---------------------------------------------------------------------------
