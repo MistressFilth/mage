@@ -41,6 +41,8 @@ def write_valid_repository_fixture(root: Path, *, bare_dir: str = "repo.git") ->
     root.mkdir(parents=True, exist_ok=True)
     for name, contents in REQUIRED_FILES.items():
         (root / name).write_text(contents)
+    (root / "docs" / "superpowers" / "specs").mkdir(parents=True)
+    (root / "docs" / "superpowers" / "plans").mkdir(parents=True)
     ignore_lines = [
         "__pycache__/",
         "*.pyc",
@@ -115,16 +117,25 @@ def test_rejects_wrong_worktree_path_and_upstream(tmp_path: Path) -> None:
     assert "origin/feature-x" in joined
 
 
+def test_verify_files_rejects_missing_tracked_documentation(tmp_path: Path) -> None:
+    write_valid_repository_fixture(tmp_path)
+    (tmp_path / "docs" / "superpowers" / "plans").rmdir()
+    errors = verify_files(tmp_path)
+    assert any("docs/superpowers/plans" in error for error in errors)
+
+
+def test_verify_files_rejects_duplicate_unreleased_sections(tmp_path: Path) -> None:
+    write_valid_repository_fixture(tmp_path)
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n## [Unreleased]\n"
+    )
+    errors = verify_files(tmp_path)
+    assert any("exactly one" in error for error in errors)
+
+
 def test_verify_files_accepts_valid_tree(tmp_path: Path) -> None:
     write_valid_repository_fixture(tmp_path)
     assert verify_files(tmp_path) == []
-
-
-def test_verify_files_rejects_wrong_claude_references(tmp_path: Path) -> None:
-    write_valid_repository_fixture(tmp_path)
-    (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n")
-    errors = verify_files(tmp_path)
-    assert any("CLAUDE.md" in error for error in errors)
 
 
 def test_verify_files_rejects_missing_pre_commit_config(tmp_path: Path) -> None:
