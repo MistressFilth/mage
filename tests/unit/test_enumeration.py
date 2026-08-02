@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from mage.artifacts.enumeration import BehaviorSpec
 from mage.artifacts.mapping import MappingArtifact
 
 
 def _spec(name: str, *, depends_on=(), cross=()) -> BehaviorSpec:
-    from mage.artifacts.enumeration import BehaviorSpec
-
     return BehaviorSpec(
         name=name,
         description=f"{name} behavior",
