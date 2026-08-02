@@ -28,6 +28,10 @@ All notable changes to this project are documented here. The format follows
   A new static-guard test (`tests/unit/test_static_guards_lint_baseline.py`)
   prevents future regression of the gate.
 
+### Fixed
+
+- `RealizeStage` journal windows (`per_scenario_window`, `cross_scenario_window`) now honor `HostConfig` — was hardcoded module constants, silently ignored from `.haileris/config.yaml`.
+
 ## [0.3.7] - 2026-08-01
 
 ### Changed

@@ -70,7 +70,9 @@ class TestRealizeStageSignature:
         parameters and does have host_config."""
         tree = ast.parse(Path(_REALIZE).read_text())
         realize_cls = next(
-            node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name == "RealizeStage"
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ClassDef) and node.name == "RealizeStage"
         )
         init = next(
             node
@@ -94,11 +96,15 @@ class TestRealizeStageSignature:
 class TestHostConfigWindowsPresent:
     def test_host_config_declares_both_window_fields(self):
         text = HOST_OVERRIDES.read_text()
-        assert re.search(r"^\s*per_scenario_window\s*:\s*int\s*=", text, re.MULTILINE), (
+        assert re.search(
+            r"^\s*per_scenario_window\s*:\s*int\s*=", text, re.MULTILINE
+        ), (
             "HostConfig no longer declares per_scenario_window; the Plan 6 "
             "follow-up typed field must stay."
         )
-        assert re.search(r"^\s*cross_scenario_window\s*:\s*int\s*=", text, re.MULTILINE), (
+        assert re.search(
+            r"^\s*cross_scenario_window\s*:\s*int\s*=", text, re.MULTILINE
+        ), (
             "HostConfig no longer declares cross_scenario_window; the Plan 6 "
             "follow-up typed field must stay."
         )

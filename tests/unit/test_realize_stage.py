@@ -62,7 +62,10 @@ async def test_run_increment_returns_increment_result_with_diff(tmp_path):
     agent = _StubAgent(RealizeOutput(files_changed=["foo.py", "bar.py"], summary="ok"))
     runner = _RecordingRunner(stdout="diff payload")
     stage = RealizeStage(
-        ctx.events_log, agent=agent, command_runner=runner, host_config=HostConfig()  # type: ignore[arg-type]
+        ctx.events_log,
+        agent=agent,  # type: ignore[arg-type]
+        command_runner=runner,
+        host_config=HostConfig(),
     )
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
@@ -121,7 +124,10 @@ async def test_run_increment_emits_realize_increment_done(tmp_path):
     agent = _StubAgent(RealizeOutput(files_changed=["x.py"], summary=""))
     runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
-        ctx.events_log, agent=agent, command_runner=runner, host_config=HostConfig()  # type: ignore[arg-type]
+        ctx.events_log,
+        agent=agent,  # type: ignore[arg-type]
+        command_runner=runner,
+        host_config=HostConfig(),
     )
 
     await stage.run_increment(ctx, target=target, increment=increment)
@@ -183,7 +189,10 @@ async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
     runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
-        ctx.events_log, agent=agent, command_runner=runner, host_config=HostConfig()  # type: ignore[arg-type]
+        ctx.events_log,
+        agent=agent,
+        command_runner=runner,
+        host_config=HostConfig(),  # type: ignore[arg-type]
     )
 
     # Plant a single journal entry on the target sub_bid.
@@ -219,7 +228,10 @@ async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
     runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
-        ctx.events_log, agent=agent, command_runner=runner, host_config=HostConfig()  # type: ignore[arg-type]
+        ctx.events_log,
+        agent=agent,
+        command_runner=runner,
+        host_config=HostConfig(),  # type: ignore[arg-type]
     )
 
     # Plant entries on a sibling sub_bid; none on the target.
