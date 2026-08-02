@@ -270,7 +270,9 @@ class MappingArtifact(BaseModel):
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp_path = path.with_suffix(path.suffix + ".tmp")
             tmp_path.write_text(
-                yaml.safe_dump(self.model_dump(mode="json"), sort_keys=False)
+                yaml.safe_dump(
+                    self.model_dump(mode="json", by_alias=True), sort_keys=False
+                )
             )
             tmp_path.replace(path)
         if events_log is not None:

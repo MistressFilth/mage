@@ -494,8 +494,66 @@ class TestCosmeticFindingsAlias:
                     proposed_by="increment_quality",
                 ).model_dump(mode="python")
                 | {"feature_id": "feat-1"},
+                CosmeticFinding(
+                    sub_bid="00000-002",
+                    scenario_name="s2",
+                    location="src/x.py:5",
+                    text="swap to walrus",
+                    proposed_by="increment_quality",
+                ).model_dump(mode="python")
+                | {"feature_id": "feat-2"},
             ],
         )
         dumped = artifact.model_dump(mode="json", by_alias=True)
         assert "feature_cosmetic_queue" in dumped
         assert "cosmetic_findings" not in dumped
+        assert len(dumped["feature_cosmetic_queue"]) == 2
+        dumped_first = dumped["feature_cosmetic_queue"][0]
+        assert dumped_first["feature_id"] == "feat-1"
+        assert dumped_first["text"] == "tidy imports"
+        assert dumped_first["sub_bid"] == "00000-001"
+        dumped_second = dumped["feature_cosmetic_queue"][1]
+        assert dumped_second["feature_id"] == "feat-2"
+        assert dumped_second["text"] == "swap to walrus"
+
+    def test_save_writes_alias_key_and_round_trips(self):
+        """Plan 18 reviewer fix #1: save() must serialize under feature_cosmetic_queue.
+
+        Before the fix, ``model_dump(mode="json")`` was called without
+        ``by_alias=True`` and emitted ``cosmetic_findings`` as the YAML key,
+        breaking the on-disk compatibility promise. This test calls the real
+        ``save()`` path, parses the YAML it wrote, and confirms the alias key
+        is what appears on disk.
+        """
+        import asyncio
+        from pathlib import Path
+
+        from mage.artifacts.inspect import CosmeticFinding
+        from mage.artifacts.mapping import MappingArtifact
+
+        artifact = MappingArtifact(
+            project_id="demo",
+            cosmetic_findings=[
+                CosmeticFinding(
+                    sub_bid="00000-001",
+                    scenario_name="s",
+                    location="src/x.py:1",
+                    text="tidy imports",
+                    proposed_by="increment_quality",
+                ).model_dump(mode="python")
+                | {"feature_id": "feat-1"},
+            ],
+        )
+        path = Path("/tmp/plan18_save_alias_demo.yaml")
+        if path.exists():
+            path.unlink()
+        asyncio.run(artifact.save(path))
+
+        raw = path.read_text()
+        assert "feature_cosmetic_queue:" in raw
+        assert "cosmetic_findings:" not in raw
+
+        loaded = MappingArtifact.load(path)
+        assert len(loaded.cosmetic_findings) == 1
+        assert loaded.cosmetic_findings[0]["feature_id"] == "feat-1"
+        assert loaded.cosmetic_findings[0]["text"] == "tidy imports"
