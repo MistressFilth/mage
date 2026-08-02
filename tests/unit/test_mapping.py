@@ -220,7 +220,7 @@ class TestPlan4MappingFields:
         from mage.artifacts.mapping import MappingArtifact
 
         m = MappingArtifact(project_id="p1")
-        assert m.feature_cosmetic_queue == []
+        assert m.cosmetic_findings == []
 
     def test_feature_status_defaults_pending(self):
         from mage.artifacts.mapping import MappingArtifact
@@ -303,20 +303,20 @@ class TestPlan4MappingMethods:
         assert m2.feature_inspect["inspect_sha256"] == "abc"
 
     def test_append_cosmetic(self):
-        from mage.artifacts.inspect import CosmeticItem
+        from mage.artifacts.inspect import CosmeticFinding
         from mage.artifacts.mapping import MappingArtifact
 
         m = MappingArtifact(project_id="p1")
-        item = CosmeticItem(
+        item = CosmeticFinding(
             sub_bid="00000-0",
             scenario_name="happy",
             location="Given step",
             text="Rephrase",
             proposed_by="increment_quality",
         )
-        m2 = m.append_cosmetic("feat-1", item)
-        assert len(m2.feature_cosmetic_queue) == 1
-        assert m2.feature_cosmetic_queue[0]["text"] == "Rephrase"
+        m2 = m.append_cosmetic_finding("feat-1", item)
+        assert len(m2.cosmetic_findings) == 1
+        assert m2.cosmetic_findings[0]["text"] == "Rephrase"
 
     def test_feature_resume_state_halted(self):
         from mage.artifacts.mapping import MappingArtifact
@@ -345,7 +345,7 @@ class TestMappingArtifactValidation:
 
         m = MappingArtifact(project_id="p1")
         assert m.inspect_journal == {}
-        assert m.feature_cosmetic_queue == []
+        assert m.cosmetic_findings == []
         assert m.feature_inspect is None
 
     def test_valid_journal_entry_passes(self):
@@ -440,7 +440,7 @@ class TestMappingArtifactValidation:
         assert loaded.inspect_journal == {
             "00000-0": [{"route": "code", "dimension": "mechanical"}]
         }
-        assert loaded.feature_cosmetic_queue == [
+        assert loaded.cosmetic_findings == [
             {"feature_id": "feat-1", "text": "rephrase"}
         ]
 
@@ -459,3 +459,98 @@ class TestMappingArtifactValidation:
                 project_id="p1",
                 inspect_journal={"k": "not-a-list"},
             )
+
+
+class TestCosmeticFindingsAlias:
+    """Plan 18: cosmetic_findings Python attr round-trips via feature_cosmetic_queue on-disk key."""
+
+    def test_load_via_alias_key_populates_cosmetic_findings(self):
+        from mage.artifacts.mapping import MappingArtifact
+
+        artifact = MappingArtifact.model_validate(
+            {
+                "schema_version": 2,
+                "project_id": "demo",
+                "feature_cosmetic_queue": [
+                    {"sub_bid": "00000-001", "feature_id": "feat-1"}
+                ],
+            }
+        )
+        assert len(artifact.cosmetic_findings) == 1
+        assert artifact.cosmetic_findings[0]["feature_id"] == "feat-1"
+
+    def test_dump_with_alias_serializes_as_feature_cosmetic_queue(self):
+        from mage.artifacts.inspect import CosmeticFinding
+        from mage.artifacts.mapping import MappingArtifact
+
+        artifact = MappingArtifact(
+            project_id="demo",
+            cosmetic_findings=[
+                CosmeticFinding(
+                    sub_bid="00000-001",
+                    scenario_name="s",
+                    location="src/x.py:1",
+                    text="tidy imports",
+                    proposed_by="increment_quality",
+                ).model_dump(mode="python")
+                | {"feature_id": "feat-1"},
+                CosmeticFinding(
+                    sub_bid="00000-002",
+                    scenario_name="s2",
+                    location="src/x.py:5",
+                    text="swap to walrus",
+                    proposed_by="increment_quality",
+                ).model_dump(mode="python")
+                | {"feature_id": "feat-2"},
+            ],
+        )
+        dumped = artifact.model_dump(mode="json", by_alias=True)
+        assert "feature_cosmetic_queue" in dumped
+        assert "cosmetic_findings" not in dumped
+        assert len(dumped["feature_cosmetic_queue"]) == 2
+        dumped_first = dumped["feature_cosmetic_queue"][0]
+        assert dumped_first["feature_id"] == "feat-1"
+        assert dumped_first["text"] == "tidy imports"
+        assert dumped_first["sub_bid"] == "00000-001"
+        dumped_second = dumped["feature_cosmetic_queue"][1]
+        assert dumped_second["feature_id"] == "feat-2"
+        assert dumped_second["text"] == "swap to walrus"
+
+    def test_save_writes_alias_key_and_round_trips(self, tmp_path):
+        """Plan 18 reviewer fix #1: save() must serialize under feature_cosmetic_queue.
+
+        Before the fix, ``model_dump(mode="json")`` was called without
+        ``by_alias=True`` and emitted ``cosmetic_findings`` as the YAML key,
+        breaking the on-disk compatibility promise. This test calls the real
+        ``save()`` path, parses the YAML it wrote, and confirms the alias key
+        is what appears on disk.
+        """
+        import asyncio
+
+        from mage.artifacts.inspect import CosmeticFinding
+        from mage.artifacts.mapping import MappingArtifact
+
+        artifact = MappingArtifact(
+            project_id="demo",
+            cosmetic_findings=[
+                CosmeticFinding(
+                    sub_bid="00000-001",
+                    scenario_name="s",
+                    location="src/x.py:1",
+                    text="tidy imports",
+                    proposed_by="increment_quality",
+                ).model_dump(mode="python")
+                | {"feature_id": "feat-1"},
+            ],
+        )
+        path = tmp_path / "plan18_save_alias_demo.yaml"
+        asyncio.run(artifact.save(path))
+
+        raw = path.read_text()
+        assert "feature_cosmetic_queue:" in raw
+        assert "cosmetic_findings:" not in raw
+
+        loaded = MappingArtifact.load(path)
+        assert len(loaded.cosmetic_findings) == 1
+        assert loaded.cosmetic_findings[0]["feature_id"] == "feat-1"
+        assert loaded.cosmetic_findings[0]["text"] == "tidy imports"

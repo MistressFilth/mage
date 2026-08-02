@@ -24,7 +24,7 @@ from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
 from mage.agents.inscribe import InscribeAgent, InscribeOutput, ScenarioSpec
-from mage.artifacts.inspect import CosmeticItem
+from mage.artifacts.inspect import CosmeticFinding
 from mage.artifacts.mapping import (
     BaseBIDEntry,
     LifecycleStatus,
@@ -354,7 +354,7 @@ def test_e2e_cosmetic_model_blocked() -> None:
     apply a live-scenario text change — must raise
     ``ModelCannotApplyCosmetic``.
     """
-    item = CosmeticItem(
+    item = CosmeticFinding(
         sub_bid="A",
         scenario_name="login succeeds",
         location="scenarios/00000/login succeeds.feature:5",
@@ -363,7 +363,7 @@ def test_e2e_cosmetic_model_blocked() -> None:
     )
 
     with pytest.raises(ModelCannotApplyCosmetic):
-        guard_cosmetic_application(source="model", item=item, human_approver=None)
+        guard_cosmetic_application(source="model", sub_bid=item.sub_bid, human_approver=None)
 
 
 def test_e2e_plan_order_violation() -> None:

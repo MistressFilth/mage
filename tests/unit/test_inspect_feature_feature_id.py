@@ -45,7 +45,7 @@ def test_append_cosmetics_threads_feature_id_from_caller(tmp_path):
         feature_id="feat-X",
     )
 
-    queue = context.mapping.feature_cosmetic_queue
+    queue = context.mapping.cosmetic_findings
     assert len(queue) == 1
     assert queue[0].get("feature_id") == "feat-X"
     assert queue[0].get("feature_id") != "unknown"
@@ -75,7 +75,7 @@ def test_append_cosmetics_propagates_empty_feature_id(tmp_path):
         feature_id="",
     )
 
-    queue = context.mapping.feature_cosmetic_queue
+    queue = context.mapping.cosmetic_findings
     assert len(queue) == 1
     assert queue[0].get("feature_id") == ""
     assert queue[0].get("feature_id") != "unknown"

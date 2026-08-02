@@ -1,9 +1,7 @@
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
-from mage.artifacts.cosmetic import CosmeticItem
+from mage.artifacts.inspect import CosmeticFinding
 from mage.artifacts.mapping import MappingArtifact
 
 
@@ -24,36 +22,34 @@ def test_feature_cosmetic_queue_entry_requires_feature_id():
 
 def test_append_cosmetic_takes_feature_id_and_appends():
     m = MappingArtifact(schema_version=2, project_id="p")
-    item = CosmeticItem(
+    item = CosmeticFinding(
         sub_bid="00000-001",
-        file_path=Path("src/example.py"),
-        line_range=(10, 20),
-        replacement_text="x = 42\n",
-        rationale="use a constant",
+        scenario_name="use-constant",
+        location="src/example.py:10",
+        text="use a constant",
         proposed_by="human",
     )
-    m2 = m.append_cosmetic("feat-1", item)
-    assert len(m2.feature_cosmetic_queue) == 1
-    assert m2.feature_cosmetic_queue[0]["feature_id"] == "feat-1"
+    m2 = m.append_cosmetic_finding("feat-1", item)
+    assert len(m2.cosmetic_findings) == 1
+    assert m2.cosmetic_findings[0]["feature_id"] == "feat-1"
 
 
 def test_feature_cosmetic_queue_round_trips_via_save_load(tmp_path):
     m = MappingArtifact(schema_version=2, project_id="p")
-    item = CosmeticItem(
+    item = CosmeticFinding(
         sub_bid="00000-001",
-        file_path=Path("src/example.py"),
-        line_range=(1, 1),
-        replacement_text="x\n",
-        rationale="x",
+        scenario_name="replace-x",
+        location="src/example.py:1",
+        text="x",
         proposed_by="human",
     )
-    m2 = m.append_cosmetic("feat-9", item)
+    m2 = m.append_cosmetic_finding("feat-9", item)
     path = tmp_path / "mapping.yaml"
     import asyncio
 
     asyncio.run(m2.save(path))
     loaded = MappingArtifact.load(path)
-    assert loaded.feature_cosmetic_queue[0]["feature_id"] == "feat-9"
+    assert loaded.cosmetic_findings[0]["feature_id"] == "feat-9"
 
 
 def test_feature_cosmetic_queue_accepts_empty_feature_id_string():
@@ -90,4 +86,4 @@ def test_feature_cosmetic_queue_empty_feature_id_round_trips(tmp_path):
 
     asyncio.run(m.save(path))
     loaded = MappingArtifact.load(path)
-    assert loaded.feature_cosmetic_queue[0]["feature_id"] == ""
+    assert loaded.cosmetic_findings[0]["feature_id"] == ""

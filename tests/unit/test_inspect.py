@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from mage.artifacts.inspect import (
-    CosmeticItem,
+    CosmeticFinding,
     InspectArtifactContent,
     InspectArtifactRef,
     InspectJournalEntry,
@@ -82,9 +82,9 @@ class TestScenarioInspectStatus:
         assert s.status == "approved_with_caveat"
 
 
-class TestCosmeticItem:
+class TestCosmeticFinding:
     def test_constructs(self):
-        item = CosmeticItem(
+        item = CosmeticFinding(
             sub_bid="00000-0",
             scenario_name="happy",
             location="Given step: line 3",
