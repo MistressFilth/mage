@@ -364,7 +364,7 @@ class TestInspectFeatureStage:
         )
 
         assert artifact.cross_scenario == [finding.model_dump(mode="json")]
-        assert context.mapping.feature_cosmetic_queue == [
+        assert context.mapping.cosmetic_findings == [
             {
                 "feature_id": "feat-1",
                 "sub_bid": "000000",

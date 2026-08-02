@@ -257,7 +257,7 @@ class TestSettleFinalization:
     @pytest.mark.asyncio
     async def test_keep_writes_reports_and_atomically_settles_mapping(self, tmp_path):
         context = await make_context(tmp_path / "project")
-        context.mapping = context.mapping.append_cosmetic(
+        context.mapping = context.mapping.append_cosmetic_finding(
             "feat-1",
             CosmeticFinding(
                 sub_bid="000000",

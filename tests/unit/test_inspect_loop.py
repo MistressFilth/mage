@@ -155,7 +155,7 @@ async def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
     )
 
     assert route is None
-    cosmetic = ctx.mapping.feature_cosmetic_queue
+    cosmetic = ctx.mapping.cosmetic_findings
     assert len(cosmetic) == 1
 
 

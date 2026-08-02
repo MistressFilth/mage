@@ -389,7 +389,7 @@ class InspectFeatureStage:
             scenario_name = (
                 self._scenario_name(scenario) if scenario is not None else "unknown"
             )
-            context.mapping = context.mapping.append_cosmetic(
+            context.mapping = context.mapping.append_cosmetic_finding(
                 feature_id,
                 CosmeticFinding(
                     sub_bid=sub_bid,

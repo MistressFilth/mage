@@ -77,7 +77,7 @@ class BaseBIDEntry(BaseModel):
 
 
 class MappingArtifact(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
     schema_version: int = 2
     project_id: str
     base_bids: list[BaseBIDEntry] = Field(default_factory=list)
@@ -88,7 +88,10 @@ class MappingArtifact(BaseModel):
     feature_inspect: dict | None = (
         None  # InspectArtifactRef; typing loose to avoid circular import
     )
-    feature_cosmetic_queue: list[dict] = Field(default_factory=list)
+    cosmetic_findings: list[dict] = Field(
+        default_factory=list,
+        alias="feature_cosmetic_queue",
+    )
     # ^ list[CosmeticFinding]; typing loose to avoid circular import
     feature_status: str = "pending"  # pending | live_assembling | inspect_pending | inspect_passed | settled | halted
 
@@ -143,22 +146,22 @@ class MappingArtifact(BaseModel):
                         f"MappingArtifact.inspect_journal[{k!r}][{i}] must be "
                         f"a dict; got {type(entry).__name__}"
                     )
-        # Validate feature_cosmetic_queue.
-        if not isinstance(self.feature_cosmetic_queue, list):
+        # Validate cosmetic_findings.
+        if not isinstance(self.cosmetic_findings, list):
             raise ValueError(
-                f"MappingArtifact.feature_cosmetic_queue must be a list; "
-                f"got {type(self.feature_cosmetic_queue).__name__}"
+                f"MappingArtifact.cosmetic_findings must be a list; "
+                f"got {type(self.cosmetic_findings).__name__}"
             )
-        for i, item in enumerate(self.feature_cosmetic_queue):
+        for i, item in enumerate(self.cosmetic_findings):
             if not isinstance(item, dict):
                 raise ValueError(
-                    f"MappingArtifact.feature_cosmetic_queue[{i}] must be a "
+                    f"MappingArtifact.cosmetic_findings[{i}] must be a "
                     f"dict; got {type(item).__name__}"
                 )
             feature_id = item.get("feature_id")
             if not isinstance(feature_id, str):
                 raise ValueError(
-                    f"MappingArtifact.feature_cosmetic_queue[{i}] must have a string "
+                    f"MappingArtifact.cosmetic_findings[{i}] must have a string "
                     f"'feature_id' field (empty string allowed; Plan 13 default); got {feature_id!r}"
                 )
         # Validate feature_inspect (None or a dict).
@@ -227,17 +230,17 @@ class MappingArtifact(BaseModel):
         """Return a new MappingArtifact with feature_inspect set to ref."""
         return self.model_copy(update={"feature_inspect": ref.model_dump(mode="json")})
 
-    def append_cosmetic(
+    def append_cosmetic_finding(
         self, feature_id: str, item: CosmeticFinding
     ) -> MappingArtifact:
-        """Return a new MappingArtifact with item appended to feature_cosmetic_queue
-        under the given feature_id."""
+        """Return a new MappingArtifact with item appended to cosmetic_findings
+        under the given feature_id. On-disk key remains feature_cosmetic_queue."""
         new_dict = item.model_dump(mode="python")
         new_dict["feature_id"] = feature_id
         return self.model_copy(
             update={
-                "feature_cosmetic_queue": [
-                    *self.feature_cosmetic_queue,
+                "cosmetic_findings": [
+                    *self.cosmetic_findings,
                     new_dict,
                 ]
             }
@@ -254,7 +257,7 @@ class MappingArtifact(BaseModel):
             "should_resume": self.feature_status in halted_states,
             "has_inspect_journal": bool(self.inspect_journal),
             "has_feature_inspect": self.feature_inspect is not None,
-            "cosmetic_queue_size": len(self.feature_cosmetic_queue),
+            "cosmetic_queue_size": len(self.cosmetic_findings),
         }
 
     async def save(
@@ -280,7 +283,7 @@ class MappingArtifact(BaseModel):
                     timestamp=datetime.now(UTC),
                     event_type=EventType.MAPPING_SAVED,
                     payload={
-                        "feature_cosmetic_queue_size": len(self.feature_cosmetic_queue),
+                        "feature_cosmetic_queue_size": len(self.cosmetic_findings),
                         "base_bids_count": len(self.base_bids),
                     },
                 )

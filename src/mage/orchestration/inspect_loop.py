@@ -164,7 +164,7 @@ class InspectLoopStage:
             elif route == "code":
                 code_count += 1
             elif route == "cosmetic":
-                context.mapping = context.mapping.append_cosmetic(
+                context.mapping = context.mapping.append_cosmetic_finding(
                     context.feature_id,
                     CosmeticFinding(
                         sub_bid=target.sub_bid,

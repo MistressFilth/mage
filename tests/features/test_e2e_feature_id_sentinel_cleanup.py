@@ -352,7 +352,7 @@ async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
     # Cosmetic queue entries (on disk via re-loaded mapping) must carry
     # the real feature_id, never "unknown".
     updated = MappingArtifact.load(project_dir / "mapping.yaml")
-    queue = updated.feature_cosmetic_queue
+    queue = updated.cosmetic_findings
     assert queue, "expected at least one cosmetic queue entry"
     for entry in queue:
         assert entry.get("feature_id") == feature_id, (

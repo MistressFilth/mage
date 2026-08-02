@@ -117,7 +117,7 @@ class MappingArtifactWatcher:
             )
             return
         new_seen: dict[str, frozenset[str]] = {}
-        for entry in mapping.feature_cosmetic_queue:
+        for entry in mapping.cosmetic_findings:
             fid = entry.get("feature_id")
             sb = entry.get("sub_bid")
             if not isinstance(fid, str) or not isinstance(sb, str):
