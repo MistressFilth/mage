@@ -60,9 +60,14 @@ class RealizeStage:
         """Build the per-scenario carry-forward window (R3 / R21).
 
         Pulls the last `host_config.per_scenario_window` entries from
-        `mapping.inspect_journal[sub_bid]`.
+        `mapping.inspect_journal[sub_bid]`. Non-positive window sizes
+        (0 or negative) produce an empty carry-forward: ``my_journal[-0:]``
+        is the full list (Python treats ``-0`` as ``0``), so an explicit
+        guard is required.
         """
         window = self.host_config.per_scenario_window
+        if window <= 0:
+            return []
         my_journal = context.mapping.inspect_journal.get(sub_bid, [])
         return [InspectJournalEntry.model_validate(e) for e in my_journal[-window:]]
 
@@ -73,9 +78,13 @@ class RealizeStage:
 
         Takes the last `host_config.cross_scenario_window` entries from every OTHER
         sub_bid in `mapping.inspect_journal`, sorts by timestamp descending,
-        and trims to `host_config.cross_scenario_window`.
+        and trims to `host_config.cross_scenario_window`. Non-positive window
+        sizes produce an empty cross-scenario slice (see ``_build_carry_forward``
+        for the rationale).
         """
         window = self.host_config.cross_scenario_window
+        if window <= 0:
+            return []
         other: list[InspectJournalEntry] = []
         for other_sb, entries in context.mapping.inspect_journal.items():
             if other_sb == sub_bid:

@@ -166,6 +166,60 @@ class TestHostConfigFlowThrough:
         assert [e.finding_id for e in cross] == ["y", "z"]
 
     @pytest.mark.asyncio
+    async def test_per_scenario_window_zero_yields_empty(self, tmp_path: Path) -> None:
+        host_config = HostConfig(per_scenario_window=0, cross_scenario_window=3)
+        ctx, _ = _ctx(tmp_path)
+        ctx.host_config = host_config
+        stage, agent = self._stage(host_config, tmp_path)
+
+        # Three same-sub_bid journal entries; window=0 must clamp to empty
+        # (not ``my_journal[-0:]`` which is ``my_journal[0:]`` = full list).
+        for fid in ["a", "b", "c"]:
+            ctx.mapping = ctx.mapping.append_inspect_journal(
+                "00001-0001",
+                _journal_entry(
+                    sub_bid="00001-0001",
+                    finding_id=fid,
+                    ts=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+                ),
+            )
+
+        await stage.run_increment(
+            ctx, target=_scenario_target(), increment=_increment()
+        )
+
+        assert agent.calls[0]["carry_forward"] == []
+
+    @pytest.mark.asyncio
+    async def test_cross_scenario_window_zero_yields_empty(
+        self, tmp_path: Path
+    ) -> None:
+        host_config = HostConfig(per_scenario_window=5, cross_scenario_window=0)
+        ctx, _ = _ctx(tmp_path)
+        ctx.host_config = host_config
+        stage, agent = self._stage(host_config, tmp_path)
+
+        base = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+        ctx.mapping = ctx.mapping.append_inspect_journal(
+            "other-X",
+            _journal_entry(
+                sub_bid="other-X", finding_id="x", ts=base.replace(minute=10)
+            ),
+        )
+        ctx.mapping = ctx.mapping.append_inspect_journal(
+            "other-Y",
+            _journal_entry(
+                sub_bid="other-Y", finding_id="y", ts=base.replace(minute=20)
+            ),
+        )
+
+        await stage.run_increment(
+            ctx, target=_scenario_target(), increment=_increment()
+        )
+
+        assert agent.calls[0]["cross_scenario_observations"] == []
+
+    @pytest.mark.asyncio
     async def test_run_increment_passes_slices_to_agent(self, tmp_path: Path) -> None:
         host_config = HostConfig(per_scenario_window=3, cross_scenario_window=3)
         ctx, _ = _ctx(tmp_path)
