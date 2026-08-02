@@ -1,5 +1,6 @@
 title = "mage scan"
+
 [allowlist]
 description = "Allow sha256 package hashes in uv.lock"
-regexes = ["""sha256:[a-f0-9]{64}"""]
-paths = ["""uv\.lock"""]
+regexes = ['''(?i)sha256:[a-f0-9]{64}''']
+paths = ['uv.lock']
