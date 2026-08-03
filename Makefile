@@ -26,14 +26,14 @@ clean: ## Delete caches and build artifacts
 	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
 
 lint: ## Run linters
-	uv run ruff check src tests scripts
+	uv run ruff check src tests
 
 typecheck: ## Run typecheckers
-	uv run ty check src tests scripts
+	uv run ty check src tests
 
 format: ## Run formatters (may auto-edit)
-	uv run ruff format src tests scripts
-	uv run ruff check --fix src tests scripts
+	uv run ruff format src tests
+	uv run ruff check --fix src tests
 
 check: lint typecheck format ## Run lint, typecheck, and format together
 
