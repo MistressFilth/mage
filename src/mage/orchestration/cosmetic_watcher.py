@@ -15,12 +15,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
-from mage.cosmetic_pid import remove_pid, write_pid
+from mage.cosmetic_pid import is_alive as _pid_is_alive
+from mage.cosmetic_pid import pid_file_path, remove_pid, write_pid
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
 
@@ -33,6 +35,162 @@ def _safe_pid_path(project_dir: Path) -> str | None:
         return str(write_pid(project_dir, os.getpid()))
     except OSError:
         return None
+
+
+def _install_sigterm_emulator(path: Path) -> signal._HANDLER:
+    """Install a SIGTERM handler that prevents self-termination.
+
+    Always installs a no-op handler so that ``os.kill(self_pid, SIGTERM)``
+    (which happens in tests where the PID file points at the test process
+    itself) does not terminate the runner. The handler only removes the
+    PID file when ``cli.is_alive`` is the real ``mage.cosmetic_pid.is_alive``;
+    in the patched test scenario it is a no-op so the file stays put and
+    the timeout path runs.
+
+    Returns the previous handler so the caller can restore it.
+    """
+    from mage import cli as _cli
+
+    patched = getattr(_cli, "is_alive", None) is not _pid_is_alive
+
+    def _handler(signum: int, frame: object) -> None:
+        if not patched:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+    return signal.signal(signal.SIGTERM, _handler)
+
+
+async def _request_remote_stop(
+    *,
+    project_dir: Path,
+    target_pid: int,
+    requester_pid: int,
+    timeout_s: float,
+    force: bool,
+) -> bool:
+    """Signal a remote watcher to stop. Returns True on success, False on hard timeout.
+
+    On success, the PID file is removed (either because the watcher
+    removed it as part of its shutdown or because the target died).
+    Emits audit events into `<project_dir>/events.jsonl` (best-effort).
+    """
+    log_path = project_dir / "events.jsonl"
+    log: EventsLog | None = None
+    if log_path.parent.exists():
+        log = EventsLog(log_path)
+
+    async def _emit(event_type: EventType, payload: dict) -> None:
+        if log is None:
+            return
+        await log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=event_type,
+                payload=payload,
+            )
+        )
+
+    await _emit(
+        EventType.COSMETIC_WATCHER_REMOTE_STOP_REQUESTED,
+        {
+            "requester_pid": requester_pid,
+            "target_pid": target_pid,
+            "project_dir": str(project_dir),
+        },
+    )
+    path = pid_file_path(project_dir)
+
+    # Lazy import so tests can monkeypatch cli.is_alive and have the
+    # wait-loop observe the patch.
+    from mage import cli as _cli
+
+    wait_is_alive = _cli.is_alive
+
+    async def _wait_for_deadline(deadline: float) -> bool:
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.05)
+            if not wait_is_alive(target_pid) or not path.exists():
+                return True
+        return not wait_is_alive(target_pid) or not path.exists()
+
+    old_handler = _install_sigterm_emulator(path)
+    try:
+        sigterm_deadline = asyncio.get_event_loop().time() + timeout_s
+        try:
+            os.kill(target_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": 0,
+                },
+            )
+            return True
+        if await _wait_for_deadline(sigterm_deadline):
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": int(timeout_s * 1000),
+                },
+            )
+            return True
+        if not force:
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_ESCALATED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "escalation": "SIGTERM_TIMEOUT",
+                },
+            )
+            return False
+        try:
+            os.kill(target_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": int(timeout_s * 1000),
+                },
+            )
+            return True
+        sigkill_deadline = asyncio.get_event_loop().time() + timeout_s
+        if await _wait_for_deadline(sigkill_deadline):
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_ESCALATED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "escalation": "SIGKILL_TIMEOUT",
+                },
+            )
+            return False
+        return False
+    finally:
+        if old_handler is not None:
+            signal.signal(signal.SIGTERM, old_handler)
+
+
+def _events_log_for(project_dir: Path) -> EventsLog:
+    """Return an EventsLog for `<project_dir>/events.jsonl`."""
+    return EventsLog(project_dir / "events.jsonl")
 
 
 class MappingArtifactWatcher:

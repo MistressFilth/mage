@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import signal
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
 from mage.artifacts.verdict import VerdictError
+from mage.cosmetic_pid import is_alive, pid_file_path, read_pid, remove_pid
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import default_check_set, load_host_config
@@ -161,6 +163,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--project-dir", type=Path, default=argparse.SUPPRESS
     )
     cosmetic_watch_parser.add_argument("--poll-interval-ms", type=int, default=250)
+
+    # mage cosmetic unwatch
+    cosmetic_unwatch_parser = cosmetic_subparsers.add_parser(
+        "unwatch",
+        help="Stop the cosmetic watcher daemon (per-project)",
+    )
+    cosmetic_unwatch_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_unwatch_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Escalate to SIGKILL after a 5s SIGTERM timeout",
+    )
 
     # mage mapping
     mapping_parser = subparsers.add_parser(
@@ -709,6 +725,60 @@ async def cmd_cosmetic_watch(args) -> int:
     return 0
 
 
+async def cmd_cosmetic_unwatch(args) -> int:
+    """Stop the cosmetic watcher daemon by PID file, with SIGTERM/SIGKILL escalation."""
+    from datetime import UTC, datetime
+
+    from mage.orchestration.cosmetic_watcher import (
+        _events_log_for,
+        _request_remote_stop,
+    )
+    from mage.orchestration.events import Event, EventType
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    path = pid_file_path(project_dir)
+    pid = read_pid(project_dir)
+    if pid is None:
+        print(
+            f"mage cosmetic unwatch: no watcher running for {project_dir}",
+            file=sys.stderr,
+        )
+        return 0
+    if not is_alive(pid):
+        remove_pid(project_dir)
+        print(
+            f"mage cosmetic unwatch: removed stale pid file for pid={pid}",
+            file=sys.stderr,
+        )
+        events_log = _events_log_for(project_dir)
+        await events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.COSMETIC_WATCHER_STALE_PID_REMOVED,
+                payload={
+                    "pid_file_path": str(path),
+                    "recorded_pid": pid,
+                },
+            )
+        )
+        return 0
+    await _request_remote_stop(
+        project_dir=project_dir,
+        target_pid=pid,
+        requester_pid=os.getpid(),
+        timeout_s=5.0,
+        force=getattr(args, "force", False),
+    )
+    if read_pid(project_dir) is None:
+        return 0
+    print(
+        "mage cosmetic unwatch: watcher did not stop after 5000ms; "
+        "pass --force to escalate",
+        file=sys.stderr,
+    )
+    return 3
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
@@ -766,6 +836,8 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_cosmetic_apply(args)
     if args.command == "cosmetic" and args.cosmetic_command == "watch":
         return await cmd_cosmetic_watch(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "unwatch":
+        return await cmd_cosmetic_unwatch(args)
     if args.command == "mapping" and args.mapping_command == "save":
         return await cmd_mapping_save(args)
     parser.print_help()
