@@ -747,9 +747,37 @@ async def cmd_cosmetic_show(args) -> int:
 
 
 def _render_journal_section(*, project_dir: Path, feature_id: str, mapping) -> None:
-    """Print the inspect journal section. Task 7 implements the body."""
+    """Print inspect journal entries tagged with `feature_id`, newest first."""
+    by_sub = mapping.inspect_journal or {}
+    flat: list[dict] = []
+    for entries in by_sub.values():
+        for entry in entries:
+            if entry.get("feature_id") == feature_id:
+                flat.append(entry)
+    if not flat:
+        return
+    flat.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
     print("## Inspect journal")
-    print("[count: 0, latest first]")
+    print(f"[count: {len(flat)}, latest first]")
+    print()
+    for entry in flat:
+        ts = entry.get("timestamp", "")
+        if hasattr(ts, "isoformat"):
+            ts = ts.isoformat()
+        print(
+            f"  {ts}  scenario={entry.get('scenario_id', '')} "
+            f" iter={entry.get('iteration', '')} "
+            f" dimension={entry.get('dimension', '')} "
+            f" severity={entry.get('severity', '')}"
+        )
+        route = entry.get("route", "")
+        finding_id = entry.get("finding_id", "")
+        if route or finding_id:
+            print(f"    route={route}  finding_id={finding_id}")
+        loc = entry.get("location") or "null"
+        print(f"    location={loc}")
+        print(f"    issue: {entry.get('issue', '')}")
+        print(f"    rationale: {entry.get('rationale', '')}")
 
 
 async def cmd_cosmetic_apply(args) -> int:
