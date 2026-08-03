@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `make verify-repository`: read-only repository compliance checker
+  (`scripts/verify_repository.py`). Asserts required files
+  (`README.md`, `CHANGELOG.md`, `AGENTS.md`, `AGENTS.local.md`, `CLAUDE.md`,
+  `Makefile`, `.pre-commit-config.yaml`), tracked `docs/superpowers/specs/`
+  and `docs/superpowers/plans/` paths, a single `[Unreleased]` section in
+  `CHANGELOG.md`, that `CLAUDE.md` contains only `@AGENTS.md\n@AGENTS.local.md`
+  references, the `.gitignore` local-only entries
+  (`AGENTS.local.md`, `.claude/settings.local.json`), and the absence of cache
+  artifacts. Verifies the remote URL is `https://github.com/{owner}/{repo}.git`,
+  the fetch refspec is `+refs/heads/*:refs/heads/*`, and the bare-repo worktree
+  layout invariants (bare dir name, sibling worktrees, directory ↔ branch
+  parity, no checked-out branch in the bare dir, per-worktree upstream
+  tracking). Topology checks tolerate currently-active worktrees and local
+  worktrees that have never pushed a remote-tracking branch.
+- `.gitleaks.toml` allowlist suppressing `sha256:` package-hash false positives
+  on the `uv.lock` path; gitleaks scans otherwise report every pinned package
+  digest as a credential candidate.
+
 ### Changed
 
 - Repository compliance guidance now tracks design and implementation plans in
@@ -13,6 +33,33 @@ All notable changes to this project are documented here. The format follows
   enforce the on-disk requirements. Repository publication status and the live
   GitHub ruleset are not asserted in this changelog; verify them before
   relying on the policy.
+- Identified stale local branches that are candidates for `git branch -D`:
+  none of these branches are checked out in any worktree, none have an
+  upstream configured, and they are not `worktree-agent-*` active branches.
+  They have NOT been deleted by this release; they are listed here so an
+  operator can prune them safely. Confirm with
+  `git worktree list --porcelain` before deletion:
+
+  ```bash
+  git branch -D plan-10-cosmetic-idempotency
+  git branch -D plan-11-cosmetic-watch
+  git branch -D plan-13-feature-id-sentinel-cleanup
+  git branch -D plan-14-settle-supersession
+  ```
+
+  Notes:
+
+  - `plan-10-cosmetic-idempotency` and `plan-11-cosmetic-watch` are merged
+    into `main` via pull requests (#1 and #2) and are safe to delete.
+  - `plan-13-feature-id-sentinel-cleanup` and `plan-14-settle-supersession`
+    are NOT merged into `main`; the Plan 13 / Plan 14 commits reachable from
+    those branches do not appear on `main` (`git merge-base --is-ancestor`
+    returns false; `git branch --contains` on the tip excludes `main`). The
+    CHANGELOG `[0.3.7]` section describes the Plan 13 / Plan 14 work as if
+    it shipped, but the corresponding code changes never landed. Deleting
+    these branches orphans that work; first verify whether the work should
+    be merged, cherry-picked, or marked intentionally abandoned before
+    running the deletion command.
 
 - `InspectFeatureStage` is no longer a `StageNode` subclass. The class is a
   feature-level service whose sole public entry is `run_pass(context, *,
@@ -37,6 +84,25 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 
 - `RealizeStage` journal windows (`per_scenario_window`, `cross_scenario_window`) now honor `HostConfig` — was hardcoded module constants, silently ignored from `.haileris/config.yaml`.
+
+## [0.3.9] - 2026-08-02
+
+### Added
+
+- Repository rules compliance design document at
+  `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md`
+  outlining the compliance baseline, invariants, and enforcement strategy.
+- Repository rules compliance implementation plan at
+  `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`
+  describing the verifier rollout phases and test coverage.
+
+### Fixed
+
+- `make verify-repository`: address review findings, harden assertions, and
+  correct enforcement gaps surfaced during code review. Tightened the Makefile
+  `verify-repository` target wiring, pyproject script entrypoint, and the
+  verifier's invariant assertions; expanded
+  `tests/unit/test_verify_repository.py` to cover the additional cases.
 
 ## [0.3.7] - 2026-08-01
 

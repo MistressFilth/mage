@@ -879,7 +879,7 @@ wheels = [
 
 [[package]]
 name = "mage"
-version = "0.3.9"
+version = "0.3.10"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
