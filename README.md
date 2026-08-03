@@ -1,5 +1,7 @@
 # mage
 
+[![Checks](https://github.com/MistressFilth/mage/actions/workflows/check.yml/badge.svg)](https://github.com/MistressFilth/mage/actions/workflows/check.yml)
+
 Spec-driven development pipeline: a staged engine that decomposes a feature
 into behaviors, inscribes Gherkin scenarios, drives an inner TDD loop, inspects
 the result, and finalizes the branch.
@@ -105,12 +107,6 @@ repo. The intended `main` policy is documented in
 [AGENTS.md](AGENTS.md): protected history, pull requests, squash-only merges,
 and an aggregating `check` status gate. Verify the live ruleset before
 publishing because this README cannot assert the current GitHub state.
-
-Run `make verify-repository` before opening a pull request. The verifier is
-read-only and checks required files, tracked documentation directories,
-changelog structure, local-only ignore entries, tracked cache artifacts, remote
-configuration, bare-repository layout, and worktree upstreams. Scan tracked
-text for secrets before any publication or visibility change.
 
 ## Version
 

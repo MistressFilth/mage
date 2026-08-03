@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help init sync unit-test features-test test clean lint typecheck format check verify-repository release
+.PHONY: help init sync unit-test features-test test clean lint typecheck format check release
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -26,19 +26,16 @@ clean: ## Delete caches and build artifacts
 	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
 
 lint: ## Run linters
-	uv run ruff check src tests scripts
+	uv run ruff check src tests
 
 typecheck: ## Run typecheckers
-	uv run ty check src tests scripts
+	uv run ty check src tests
 
 format: ## Run formatters (may auto-edit)
-	uv run ruff format src tests scripts
-	uv run ruff check --fix src tests scripts
+	uv run ruff format src tests
+	uv run ruff check --fix src tests
 
 check: lint typecheck format ## Run lint, typecheck, and format together
-
-verify-repository: ## Verify repository rules and worktree invariants
-	uv run python scripts/verify_repository.py
 
 release: ## Build, tag, and release a new version
 	@test -n "$(VERSION)" || { echo "usage: make release VERSION=X.Y.Z"; exit 2; }
