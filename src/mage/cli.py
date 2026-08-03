@@ -134,6 +134,22 @@ def build_parser() -> argparse.ArgumentParser:
     cosmetic_show_parser.add_argument(
         "--project-dir", type=Path, default=argparse.SUPPRESS
     )
+    cosmetic_show_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Dump queue entries without LLM refinement",
+    )
+    cosmetic_show_parser.add_argument(
+        "--journal",
+        action="store_true",
+        help="Append a section of inspect journal entries for the feature",
+    )
+    cosmetic_show_parser.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        help="Restrict to sub_bids matching the predicate, e.g. 'sub_bid=01JF...'",
+    )
 
     # mage cosmetic apply
     cosmetic_apply_parser = cosmetic_subparsers.add_parser(
@@ -632,9 +648,15 @@ async def cmd_settle_run(args):
 
 
 async def cmd_cosmetic_show(args) -> int:
-    """Refine and display the project's cosmetic queue items."""
-    from mage.agents.cosmetic_refiner import CosmeticRefiner
+    """Show cosmetic queue entries for a feature.
+
+    Default mode refines via the LLM as before. `--raw` skips refinement
+    and emits a stable text dump. `--journal` appends inspect journal
+    entries for the same feature. `--filter sub_bid=...` narrows.
+    """
+    from mage.artifacts.cosmetic_state import load_state
     from mage.artifacts.mapping import MappingArtifact
+    from mage.cosmetic_filters import FilterParseError, parse_filters
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
     mapping_path = project_dir / "mapping.yaml"
@@ -644,18 +666,68 @@ async def cmd_cosmetic_show(args) -> int:
         )
         return 1
     mapping = MappingArtifact.load(mapping_path)
-    host_config = load_host_config(project_dir)
-    refiner = CosmeticRefiner(model=host_config.model)
-    semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
+    raw_filter = getattr(args, "filter", None)
+    try:
+        filters = parse_filters(raw_filter, subcommand="cosmetic show")
+    except FilterParseError as e:
+        print(
+            f"mage cosmetic show: {e.message}",
+            file=sys.stderr,
+        )
+        return 2
     queue = [
         q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
     ]
+    if "sub_bid" in filters:
+        allowed = filters["sub_bid"]
+        available = {q["sub_bid"] for q in queue}
+        missing = allowed - available
+        if missing:
+            print(
+                f"mage cosmetic show: unknown sub_bid "
+                f"{min(missing)!r} for feature {args.feature_id!r}",
+                file=sys.stderr,
+            )
+            return 2
+        queue = [q for q in queue if q["sub_bid"] in allowed]
+    queue.sort(key=lambda q: q.get("sub_bid", ""))
+    state = load_state(project_dir)
+    if getattr(args, "raw", False):
+        for q in queue:
+            sub_bid = q.get("sub_bid", "")
+            applied = state.applied.get(sub_bid)
+            status = "applied" if applied is not None else "pending"
+            print(f"[sub_bid: {sub_bid}]")
+            print(f"  scenario: {q.get('scenario_name', '—')}")
+            print(f"  location: {q.get('location') or '—'}")
+            print(f"  text: {q.get('text', '')}")
+            print(f"  proposed_by: {q.get('proposed_by', '—')}")
+            print(f"  feature_id: {q.get('feature_id', '—')}")
+            print(f"  status: {status}")
+        if getattr(args, "journal", False):
+            _render_journal_section(
+                project_dir=project_dir,
+                feature_id=args.feature_id,
+                mapping=mapping,
+            )
+        return 0
     if not queue:
         print(
             f"mage cosmetic show: no items for feature_id={args.feature_id}",
             file=sys.stderr,
         )
+        if getattr(args, "journal", False):
+            _render_journal_section(
+                project_dir=project_dir,
+                feature_id=args.feature_id,
+                mapping=mapping,
+            )
         return 0
+    from mage.agents.cosmetic_refiner import CosmeticRefiner
+
+    host_config = load_host_config(project_dir)
+    refiner = CosmeticRefiner(model=host_config.model)
+    semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     refined = await asyncio.gather(
         *[refiner.refine(q, semaphore=semaphore) for q in queue]
     )
@@ -665,7 +737,19 @@ async def cmd_cosmetic_show(args) -> int:
             f"{item.sub_bid} {fp}:{item.line_range[0]}-{item.line_range[1]} "
             f"{item.rationale}"
         )
+    if getattr(args, "journal", False):
+        _render_journal_section(
+            project_dir=project_dir,
+            feature_id=args.feature_id,
+            mapping=mapping,
+        )
     return 0
+
+
+def _render_journal_section(*, project_dir: Path, feature_id: str, mapping) -> None:
+    """Print the inspect journal section. Task 7 implements the body."""
+    print("## Inspect journal")
+    print("[count: 0, latest first]")
 
 
 async def cmd_cosmetic_apply(args) -> int:
