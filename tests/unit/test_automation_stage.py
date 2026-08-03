@@ -75,7 +75,7 @@ async def test_automation_stage_excludes_non_approved_scenarios(tmp_path):
                 ScenarioOutcome(sub_bid=t.sub_bid, test_paths=["t.py"]) for t in targets
             ]
 
-    stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
+    stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type, ty:invalid-argument-type]
     await stage.run(ctx)
 
     sent = captured_targets[0]
@@ -96,7 +96,7 @@ async def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
                 ScenarioOutcome(sub_bid="00001-0001", test_paths=["t1.py", "t2.py"])
             ]
 
-    stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
+    stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type, ty:invalid-argument-type]
     await stage.run(ctx)
 
     saved = MappingArtifact.load(tmp_path / "mapping.yaml")
@@ -117,7 +117,7 @@ async def test_automation_stage_emits_scenario_live(tmp_path):
         async def run(self, context, targets, *, cursor=None):
             return [ScenarioOutcome(sub_bid="00001-0001", test_paths=["t.py"])]
 
-    stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
+    stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type, ty:invalid-argument-type]
     await stage.run(ctx)
 
     types = [e.event_type.value for e in ctx.events_log.read_all()]
@@ -146,6 +146,6 @@ async def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
     with patch(
         "mage.orchestration.automation.guard_automation_entry", autospec=True
     ) as mock_guard:
-        stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type]
+        stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type, ty:invalid-argument-type]
         await stage.run(ctx)
         assert mock_guard.call_count == 1

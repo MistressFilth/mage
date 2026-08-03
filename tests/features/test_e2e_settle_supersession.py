@@ -124,11 +124,11 @@ def _stub_stage(events_log: EventsLog) -> SettleFeatureStage:
             is_worktree=False,
         )
 
-    stage._load_ready_inspect = _noop  # type: ignore[method-assign]
-    stage._run_tests = _noop  # type: ignore[method-assign]
-    stage._detect_environment = _fake_environment  # type: ignore[method-assign]
-    stage._execute_disposition = _noop  # type: ignore[method-assign]
-    stage._render_report = staticmethod(  # type: ignore[method-assign]
+    stage._load_ready_inspect = _noop  # type: ignore[method-assign, ty:invalid-assignment]
+    stage._run_tests = _noop  # type: ignore[method-assign, ty:invalid-assignment]
+    stage._detect_environment = _fake_environment  # type: ignore[method-assign, ty:invalid-assignment]
+    stage._execute_disposition = _noop  # type: ignore[method-assign, ty:invalid-assignment]
+    stage._render_report = staticmethod(  # type: ignore[method-assign, ty:invalid-assignment]
         lambda **_kwargs: ""
     )
     return stage

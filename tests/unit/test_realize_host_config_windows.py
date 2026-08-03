@@ -56,7 +56,7 @@ def _journal_entry(
         iteration=1,
         dimension="increment_quality",
         severity="major",
-        route=route,  # type: ignore[arg-type]
+        route=route,  # type: ignore[arg-type, ty:invalid-argument-type]
         finding_id=finding_id,
         location=f"{sub_bid}.py:1",
         issue="issue",
@@ -98,7 +98,7 @@ class TestHostConfigFlowThrough:
     ) -> tuple[RealizeStage, _RecordingAgent]:
         log = EventsLog(tmp_path / "events.jsonl")
         agent = _RecordingAgent()
-        stage = RealizeStage(log, agent=agent, host_config=host_config)  # type: ignore[arg-type]
+        stage = RealizeStage(log, agent=agent, host_config=host_config)
         return stage, agent
 
     @pytest.mark.asyncio

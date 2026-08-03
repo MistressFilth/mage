@@ -88,7 +88,7 @@ class PydanticEtchAgent(EtchAgent):
                 test_code=test_code,
             )
         prompt = f"step={step!r}\nscenario_context={scenario_context!r}"
-        result = await self._agent.run(prompt)  # type: ignore[union-attr]
+        result = await self._agent.run(prompt)  # ty: ignore[unresolved-attribute]
         data = result.output
         return RedTestSpec(
             step_name=data.get("step_name", step),
