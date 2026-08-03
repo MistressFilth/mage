@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import signal
 import sys
@@ -149,6 +150,28 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         help="Restrict to sub_bids matching the predicate, e.g. 'sub_bid=01JF...'",
+    )
+
+    # mage cosmetic list
+    cosmetic_list_parser = cosmetic_subparsers.add_parser(
+        "list",
+        help="List cosmetic queue entries for a feature",
+    )
+    cosmetic_list_parser.add_argument("feature_id")
+    cosmetic_list_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_list_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format (default text)",
+    )
+    cosmetic_list_parser.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        help="Restrict to sub_bids matching 'sub_bid=...'",
     )
 
     # mage cosmetic apply
@@ -794,6 +817,81 @@ async def cmd_cosmetic_apply(args) -> int:
     )
 
 
+async def cmd_cosmetic_list(args) -> int:
+    """List cosmetic queue entries for a feature. Text or JSON output."""
+    from mage.artifacts.cosmetic_state import load_state
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.cosmetic_filters import FilterParseError, parse_filters
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    mapping_path = project_dir / "mapping.yaml"
+    if not mapping_path.exists():
+        print(
+            f"mage cosmetic list: no mapping found at {mapping_path}",
+            file=sys.stderr,
+        )
+        return 1
+    mapping = MappingArtifact.load(mapping_path)
+    state = load_state(project_dir)
+    raw_filter = getattr(args, "filter", None)
+    try:
+        filters = parse_filters(raw_filter, subcommand="cosmetic list")
+    except FilterParseError as e:
+        print(f"mage cosmetic list: {e.message}", file=sys.stderr)
+        return 2
+    queue = [
+        q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
+    ]
+    if "sub_bid" in filters:
+        allowed = filters["sub_bid"]
+        available = {q["sub_bid"] for q in queue}
+        missing = allowed - available
+        if missing:
+            print(
+                f"mage cosmetic list: unknown sub_bid "
+                f"{min(missing)!r} for feature {args.feature_id!r}",
+                file=sys.stderr,
+            )
+            return 2
+        queue = [q for q in queue if q["sub_bid"] in allowed]
+    queue.sort(key=lambda q: q.get("sub_bid", ""))
+    rows: list[dict] = []
+    for q in queue:
+        sub_bid = q.get("sub_bid", "")
+        applied_record = state.applied.get(sub_bid)
+        applied_at_value = getattr(applied_record, "applied_at", None)
+        rows.append(
+            {
+                "feature_id": args.feature_id,
+                "status": "applied" if applied_record is not None else "pending",
+                "sub_bid": sub_bid,
+                "scenario": q.get("scenario_name", ""),
+                "file": q.get("location") or None,
+                "applied_at": (
+                    applied_at_value.isoformat()
+                    if applied_at_value is not None
+                    else None
+                ),
+            }
+        )
+    if getattr(args, "format", "text") == "json":
+        print(json.dumps({"entries": rows}))
+        return 0
+    print(
+        f"{'feature_id':<12}  {'status':<8}  "
+        f"{'sub_bid':<18}  {'scenario':<18}  {'file':<24}  applied_at"
+    )
+    for row in rows:
+        file_disp = row["file"] or "—"
+        applied_at_disp = row["applied_at"] or "—"
+        print(
+            f"{row['feature_id']:<12}  {row['status']:<8}  "
+            f"{row['sub_bid']:<18}  {row['scenario']:<18}  "
+            f"{file_disp:<24}  {applied_at_disp}"
+        )
+    return 0
+
+
 async def cmd_mapping_save(args) -> int:
     """Re-save mapping.yaml and emit MAPPING_SAVED.
 
@@ -944,6 +1042,8 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_settle_run(args)
     if args.command == "cosmetic" and args.cosmetic_command == "show":
         return await cmd_cosmetic_show(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "list":
+        return await cmd_cosmetic_list(args)
     if args.command == "cosmetic" and args.cosmetic_command == "apply":
         return await cmd_cosmetic_apply(args)
     if args.command == "cosmetic" and args.cosmetic_command == "watch":
