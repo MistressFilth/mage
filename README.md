@@ -1,5 +1,7 @@
 # mage
 
+[![Checks](https://github.com/MistressFilth/mage/actions/workflows/check.yml/badge.svg)](https://github.com/MistressFilth/mage/actions/workflows/check.yml)
+
 Spec-driven development pipeline: a staged engine that decomposes a feature
 into behaviors, inscribes Gherkin scenarios, drives an inner TDD loop, inspects
 the result, and finalizes the branch.

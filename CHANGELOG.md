@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored the `main/` worktree to branch `main`, removed stale worktrees, and rewrote repository history without prohibited co-author trailers.
+- Added regression checks for required repository metadata and commit-message policy.
+- Prevented pytest from treating imported `TestabilityReviewer` classes as test containers.
+
+## [0.3.11] - 2026-08-02
+
 ### Added
 
 - `make verify-repository`: read-only repository compliance checker
@@ -107,6 +115,12 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 
 - `RealizeStage` journal windows (`per_scenario_window`, `cross_scenario_window`) now honor `HostConfig` — was hardcoded module constants, silently ignored from `.haileris/config.yaml`.
+
+## [0.3.10] - 2026-08-02
+
+### Changed
+
+- Established the repository rules compliance baseline.
 
 ## [0.3.9] - 2026-08-02
 
