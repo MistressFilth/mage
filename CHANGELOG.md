@@ -33,6 +33,33 @@ All notable changes to this project are documented here. The format follows
   enforce the on-disk requirements. Repository publication status and the live
   GitHub ruleset are not asserted in this changelog; verify them before
   relying on the policy.
+- Identified stale local branches that are candidates for `git branch -D`:
+  none of these branches are checked out in any worktree, none have an
+  upstream configured, and they are not `worktree-agent-*` active branches.
+  They have NOT been deleted by this release; they are listed here so an
+  operator can prune them safely. Confirm with
+  `git worktree list --porcelain` before deletion:
+
+  ```bash
+  git branch -D plan-10-cosmetic-idempotency
+  git branch -D plan-11-cosmetic-watch
+  git branch -D plan-13-feature-id-sentinel-cleanup
+  git branch -D plan-14-settle-supersession
+  ```
+
+  Notes:
+
+  - `plan-10-cosmetic-idempotency` and `plan-11-cosmetic-watch` are merged
+    into `main` via pull requests (#1 and #2) and are safe to delete.
+  - `plan-13-feature-id-sentinel-cleanup` and `plan-14-settle-supersession`
+    are NOT merged into `main`; the Plan 13 / Plan 14 commits reachable from
+    those branches do not appear on `main` (`git merge-base --is-ancestor`
+    returns false; `git branch --contains` on the tip excludes `main`). The
+    CHANGELOG `[0.3.7]` section describes the Plan 13 / Plan 14 work as if
+    it shipped, but the corresponding code changes never landed. Deleting
+    these branches orphans that work; first verify whether the work should
+    be merged, cherry-picked, or marked intentionally abandoned before
+    running the deletion command.
 
 - `InspectFeatureStage` is no longer a `StageNode` subclass. The class is a
   feature-level service whose sole public entry is `run_pass(context, *,
