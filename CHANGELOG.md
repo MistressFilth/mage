@@ -58,6 +58,25 @@ All notable changes to this project are documented here. The format follows
 
 - `RealizeStage` journal windows (`per_scenario_window`, `cross_scenario_window`) now honor `HostConfig` — was hardcoded module constants, silently ignored from `.haileris/config.yaml`.
 
+## [0.3.9] - 2026-08-02
+
+### Added
+
+- Repository rules compliance design document at
+  `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md`
+  outlining the compliance baseline, invariants, and enforcement strategy.
+- Repository rules compliance implementation plan at
+  `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`
+  describing the verifier rollout phases and test coverage.
+
+### Fixed
+
+- `make verify-repository`: address review findings, harden assertions, and
+  correct enforcement gaps surfaced during code review. Tightened the Makefile
+  `verify-repository` target wiring, pyproject script entrypoint, and the
+  verifier's invariant assertions; expanded
+  `tests/unit/test_verify_repository.py` to cover the additional cases.
+
 ## [0.3.7] - 2026-08-01
 
 ### Changed
