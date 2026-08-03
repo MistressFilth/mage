@@ -100,20 +100,27 @@ async def test_list_json_stable_keys(
     payload = json.loads(capsys.readouterr().out)
     assert list(payload.keys()) == ["entries"]
     entry = payload["entries"][0]
+    # `applied_at` is intentionally absent: the state model does not
+    # store a timestamp, so promising a column we always render as
+    # null would mislead readers (Minor #1).
     assert list(entry.keys()) == [
         "feature_id",
         "status",
         "sub_bid",
         "scenario",
         "file",
-        "applied_at",
     ]
 
 
 @pytest.mark.asyncio
-async def test_list_applied_at_iso8601_for_applied(
+async def test_list_applied_status_no_applied_at(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """An applied entry surfaces `status=applied` and the file path.
+
+    Minor #1: `applied_at` is no longer in the output schema; this
+    test replaces the prior iso8601-applied_at test.
+    """
     _write_mapping(
         tmp_path,
         feature_id="feat",
@@ -144,14 +151,10 @@ async def test_list_applied_at_iso8601_for_applied(
     )
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["entries"][0]["status"] == "applied"
-    assert (
-        payload["entries"][0]["applied_at"] is None
-    )  # CosmeticApplied has no applied_at
-    # The applied_at column is read from CosmeticApplied fields we don't store;
-    # the spec accepts `null` for unknown; we surface None unless we later
-    # promote it from the record.
-    assert payload["entries"][0]["file"] == "src/auth.py"
+    entry = payload["entries"][0]
+    assert entry["status"] == "applied"
+    assert "applied_at" not in entry
+    assert entry["file"] == "src/auth.py"
 
 
 @pytest.mark.asyncio

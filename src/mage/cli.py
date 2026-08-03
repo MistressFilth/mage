@@ -920,7 +920,10 @@ async def cmd_cosmetic_list(args) -> int:
     for q in queue:
         sub_bid = _queue_sub_bid(q)
         applied_record = state.applied.get(sub_bid)
-        applied_at_value = getattr(applied_record, "applied_at", None)
+        # `applied_at` is intentionally omitted: the state model
+        # (CosmeticApplied) does not record a timestamp, so the column
+        # could never carry a real value. Promising a column we
+        # always render as `null` would mislead readers.
         rows.append(
             {
                 "feature_id": args.feature_id,
@@ -928,11 +931,6 @@ async def cmd_cosmetic_list(args) -> int:
                 "sub_bid": sub_bid,
                 "scenario": q.get("scenario_name", ""),
                 "file": q.get("location") or None,
-                "applied_at": (
-                    applied_at_value.isoformat()
-                    if applied_at_value is not None
-                    else None
-                ),
             }
         )
     if getattr(args, "format", "text") == "json":
@@ -940,15 +938,14 @@ async def cmd_cosmetic_list(args) -> int:
         return 0
     print(
         f"{'feature_id':<12}  {'status':<8}  "
-        f"{'sub_bid':<18}  {'scenario':<18}  {'file':<24}  applied_at"
+        f"{'sub_bid':<18}  {'scenario':<18}  {'file':<24}"
     )
     for row in rows:
         file_disp = row["file"] or "—"
-        applied_at_disp = row["applied_at"] or "—"
         print(
             f"{row['feature_id']:<12}  {row['status']:<8}  "
             f"{row['sub_bid']:<18}  {row['scenario']:<18}  "
-            f"{file_disp:<24}  {applied_at_disp}"
+            f"{file_disp:<24}"
         )
     return 0
 

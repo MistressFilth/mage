@@ -255,7 +255,9 @@ async def test_apply_passes_feature_id_through(
 
 
 @pytest.mark.asyncio
-async def test_apply_for_feature_narrows_by_feature_id(tmp_path: Path) -> None:
+async def test_apply_for_feature_narrows_by_feature_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`apply_for_feature(feature_id=...)` skips other features' sub_bids.
 
     Important #3: when a sub_bid exists in two features, the
@@ -310,19 +312,13 @@ async def test_apply_for_feature_narrows_by_feature_id(tmp_path: Path) -> None:
                 proposed_by="increment_quality",
             )
 
-    from mage.agents import cosmetic_refiner as cr_mod
-
-    real_refiner = cr_mod.CosmeticRefiner
-    cr_mod.CosmeticRefiner = _StubRefiner  # type: ignore[misc, assignment]
-    try:
-        rc = await apply_for_feature(
-            project_dir,
-            ["01JF"],
-            dry_run=True,
-            feature_id="feat-a",
-        )
-    finally:
-        cr_mod.CosmeticRefiner = real_refiner
+    monkeypatch.setattr("mage.agents.cosmetic_refiner.CosmeticRefiner", _StubRefiner)
+    rc = await apply_for_feature(
+        project_dir,
+        ["01JF"],
+        dry_run=True,
+        feature_id="feat-a",
+    )
     assert rc == 0
     # Only feat-a's entry was processed
     assert captured == ["in-feat-a"]
