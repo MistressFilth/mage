@@ -31,7 +31,7 @@ class TestLintBaseline:
         )
 
     def test_ty_passes(self):
-        result = _run(["uv", "run", "ty", "check", "src", "tests"])
+        result = _run(["uv", "run", "ty", "check", "src", "tests", "scripts"])
         assert result.returncode == 0, (
             f"ty check failed with {result.returncode} errors:\n{result.stdout}"
         )

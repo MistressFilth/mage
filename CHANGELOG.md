@@ -85,12 +85,17 @@ All notable changes to this project are documented here. The format follows
   implementation, very fast) and is a drop-in for the `pyright` rule subset
   we relied on. The `[tool.pyright]` block was removed from `pyproject.toml`
   (no equivalent `[tool.ty]` is required — `ty` auto-detects `src/` layout
-  and inherits the `scripts/` path through `uv run`'s project root).
-  `make typecheck` now invokes `uv run ty check src tests scripts`. The
+  from the project root). The `scripts/` path is currently reachable by
+  pytest only (via `[tool.pytest.ini_options] pythonpath = ["src", "scripts"]`),
+  so the three `from verify_repository import ...` sites in
+  `tests/unit/test_verify_repository.py` carry in-line
+  `# ty: ignore[unresolved-import]` suppressions; an inline `[tool.ty]`
+  block can replace these once we add a real `scripts/` package.
+  `make typecheck` now invokes `uv run ty check src tests scripts` and the
   static-guard test (`tests/unit/test_static_guards_lint_baseline.py`) was
-  re-pointed at `ty` so the gate keeps enforcing zero typecheck errors.
-  A handful of `pyright: ignore[reportIncompatibleMethodOverride]` /
-  `type: ignore[union-attr]` comments were updated to `ty: ignore[...]`
+  re-pointed at the same command so the gate keeps enforcing zero
+  typecheck errors. A handful of `pyright: ignore[reportIncompatibleMethodOverride]`
+  / `type: ignore[union-attr]` comments were updated to `ty: ignore[...]`
   where the rule names diverge; test stub assignments gained combined
   `# type: ignore[arg-type, ty:invalid-argument-type]` annotations so
   pyright and `ty` both accept them. The lazy `_save_lock` write in
