@@ -14,15 +14,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
+from mage.cosmetic_pid import remove_pid, write_pid
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_pid_path(project_dir: Path) -> str | None:
+    """Return the canonical PID file path string; None if write would fail."""
+    try:
+        return str(write_pid(project_dir, os.getpid()))
+    except OSError:
+        return None
 
 
 class MappingArtifactWatcher:
@@ -56,7 +66,7 @@ class MappingArtifactWatcher:
         self._last_seen: dict[str, frozenset[str]] = {}
 
     def stop(self) -> None:
-        """Request graceful shutdown."""
+        """Request graceful shutdown. Removes PID file (best-effort)."""
         self._stop = True
 
     async def run(self) -> None:
@@ -76,6 +86,8 @@ class MappingArtifactWatcher:
                 payload={
                     "project_dir": str(self.project_dir),
                     "poll_interval_ms": self.poll_interval_ms,
+                    "pid": os.getpid(),
+                    "pid_file_path": _safe_pid_path(self.project_dir),
                 },
             )
         )
@@ -109,11 +121,15 @@ class MappingArtifactWatcher:
                         continue
                     await self._handle_mapping_saved()
         finally:
+            removed = remove_pid(self.project_dir)
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.COSMETIC_WATCHER_STOPPED,
-                    payload={"project_dir": str(self.project_dir)},
+                    payload={
+                        "project_dir": str(self.project_dir),
+                        "pid_file_removed": removed,
+                    },
                 )
             )
 
