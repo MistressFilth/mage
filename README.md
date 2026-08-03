@@ -108,12 +108,6 @@ repo. The intended `main` policy is documented in
 and an aggregating `check` status gate. Verify the live ruleset before
 publishing because this README cannot assert the current GitHub state.
 
-Run `make verify-repository` before opening a pull request. The verifier is
-read-only and checks required files, tracked documentation directories,
-changelog structure, local-only ignore entries, tracked cache artifacts, remote
-configuration, bare-repository layout, and worktree upstreams. Scan tracked
-text for secrets before any publication or visibility change.
-
 ## Version
 
 The current development version is `0.3.11`.

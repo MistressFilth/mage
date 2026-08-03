@@ -6,10 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from mage.verification.reviewers.testability import TestabilityReviewer
-
-TestabilityReviewer.__test__ = False  # ty: ignore[unresolved-attribute]
-
 
 @pytest.fixture
 def tmp_project_dir(tmp_path: Path) -> Path:

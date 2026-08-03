@@ -6,11 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
+### Removed
 
-- Restored the `main/` worktree to branch `main`, removed stale worktrees, and rewrote repository history without prohibited co-author trailers.
-- Added regression checks for required repository metadata and commit-message policy.
-- Prevented pytest from treating imported `TestabilityReviewer` classes as test containers.
+- `make verify-repository` target, `scripts/verify_repository.py`, and `tests/unit/test_verify_repository.py`. Repository rule enforcement is external to this project.
+- `tests/unit/test_repository_compliance.py` and the pytest collection shim in `tests/conftest.py`.
+- Tracked design and plan documents at `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md` and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
 
 ## [0.3.11] - 2026-08-02
 
