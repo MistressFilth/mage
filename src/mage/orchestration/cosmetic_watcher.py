@@ -324,7 +324,13 @@ class MappingArtifactWatcher:
             new_entries = sub_bids - self._last_seen.get(fid, frozenset())
             if not new_entries:
                 continue
-            rc = await apply_for_feature(self.project_dir, list(new_entries))
+            # Pass feature_id so apply_for_feature narrows the queue
+            # by the loop's current feature_id. Without this narrowing,
+            # a sub_bid that exists in another feature would also be
+            # picked up here.
+            rc = await apply_for_feature(
+                self.project_dir, list(new_entries), feature_id=fid
+            )
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

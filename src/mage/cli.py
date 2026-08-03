@@ -872,6 +872,7 @@ async def cmd_cosmetic_apply(args) -> int:
         sub_bids,
         dry_run=getattr(args, "dry_run", False),
         model=getattr(args, "model", None),
+        feature_id=args.feature_id,
     )
 
 
