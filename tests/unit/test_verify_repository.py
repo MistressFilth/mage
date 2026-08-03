@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
-from verify_repository import (
+from verify_repository import (  # ty: ignore[unresolved-import]
     Worktree,
     _parse_worktree_porcelain,
     build_git_probe,
@@ -216,7 +216,7 @@ def test_verify_worktrees_accepts_sibling_layout(tmp_path: Path) -> None:
 
 def test_verify_worktrees_skips_bare_common_dir_entry(tmp_path: Path) -> None:
     """The bare common dir itself appears in porcelain with no branch."""
-    from verify_repository import BARE_DIR_NAME
+    from verify_repository import BARE_DIR_NAME  # ty: ignore[unresolved-import]
 
     bare = tmp_path.parent / BARE_DIR_NAME
     worktree = Worktree(
@@ -400,6 +400,6 @@ def test_main_uses_subprocess_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def verify_with_probe(root: Path, probe: FakeProbe) -> list[str]:
     """Run ``verify`` with a stub probe so tests stay deterministic."""
-    from verify_repository import _verify
+    from verify_repository import _verify  # ty: ignore[unresolved-import]
 
     return _verify(root, probe, probe.list_worktrees())

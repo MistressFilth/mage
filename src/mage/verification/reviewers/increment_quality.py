@@ -58,7 +58,7 @@ class IncrementQualityReviewer(ReviewerAgent):
             "rationale are rejected."
         )
 
-    async def run(  # pyright: ignore[reportIncompatibleMethodOverride]
+    async def run(  # ty: ignore[invalid-method-override]
         self,
         *,
         increment_diff: str,

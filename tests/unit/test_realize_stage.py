@@ -63,7 +63,7 @@ async def test_run_increment_returns_increment_result_with_diff(tmp_path):
     runner = _RecordingRunner(stdout="diff payload")
     stage = RealizeStage(
         ctx.events_log,
-        agent=agent,  # type: ignore[arg-type]
+        agent=agent,  # type: ignore[arg-type, ty:invalid-argument-type]
         command_runner=runner,
         host_config=HostConfig(),
     )
@@ -101,7 +101,7 @@ async def test_run_increment_uses_default_runner_when_none_provided(
         return CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr("mage.orchestration.realize._default_command_runner", fake_run)
-    stage = RealizeStage(ctx.events_log, agent=agent, host_config=HostConfig())  # type: ignore[arg-type]
+    stage = RealizeStage(ctx.events_log, agent=agent, host_config=HostConfig())  # type: ignore[arg-type, ty:invalid-argument-type]
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
 
@@ -125,7 +125,7 @@ async def test_run_increment_emits_realize_increment_done(tmp_path):
     runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
         ctx.events_log,
-        agent=agent,  # type: ignore[arg-type]
+        agent=agent,  # type: ignore[arg-type, ty:invalid-argument-type]
         command_runner=runner,
         host_config=HostConfig(),
     )
@@ -161,7 +161,7 @@ def _journal_entry(
         iteration=1,
         dimension="increment_quality",
         severity="major",
-        route=route,  # type: ignore[arg-type]
+        route=route,  # type: ignore[arg-type, ty:invalid-argument-type]
         finding_id=finding_id,
         location=f"{sub_bid}.py:1",
         issue="issue",
@@ -192,7 +192,7 @@ async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
         ctx.events_log,
         agent=agent,
         command_runner=runner,
-        host_config=HostConfig(),  # type: ignore[arg-type]
+        host_config=HostConfig(),
     )
 
     # Plant a single journal entry on the target sub_bid.
@@ -231,7 +231,7 @@ async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp
         ctx.events_log,
         agent=agent,
         command_runner=runner,
-        host_config=HostConfig(),  # type: ignore[arg-type]
+        host_config=HostConfig(),
     )
 
     # Plant entries on a sibling sub_bid; none on the target.
@@ -273,7 +273,7 @@ async def test_run_increment_carry_forward_window_respects_size(tmp_path):
     stage = RealizeStage(
         ctx.events_log,
         agent=agent,
-        command_runner=runner,  # type: ignore[arg-type]
+        command_runner=runner,
         host_config=HostConfig(per_scenario_window=2),
     )
 

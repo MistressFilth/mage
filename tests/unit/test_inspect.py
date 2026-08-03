@@ -61,7 +61,7 @@ class TestInspectJournalEntry:
             rationale="y",
         )
         with pytest.raises(ValidationError):
-            entry.finding_id = "different"  # type: ignore[misc]
+            entry.finding_id = "different"  # type: ignore[misc, ty:invalid-assignment]
 
 
 class TestScenarioInspectStatus:
