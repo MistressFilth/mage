@@ -6,6 +6,47 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- `make verify-repository` target, `scripts/verify_repository.py`, and `tests/unit/test_verify_repository.py`. Repository rule enforcement is external to this project.
+- `tests/unit/test_repository_compliance.py` and the pytest collection shim in `tests/conftest.py`.
+- Tracked design and plan documents at `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md` and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
+
+## [0.3.11] - 2026-08-02
+
+### Added
+
+- `make verify-repository` and `.github/workflows/check.yml`: aggregating
+  `check` status gate required for protected `main`.
+
+### Changed
+
+- Replaced `pyright` with [`ty`](https://github.com/astral-sh/ty) as the
+  `make typecheck` driver. `ty` is Astral's Python typechecker (Rust
+  implementation, very fast) and is a drop-in for the `pyright` rule subset
+  we relied on. The `[tool.pyright]` block was removed from `pyproject.toml`
+  (no equivalent `[tool.ty]` is required — `ty` auto-detects `src/` layout
+  from the project root). The `scripts/` path is currently reachable by
+  pytest only (via `[tool.pytest.ini_options] pythonpath = ["src", "scripts"]`),
+  so the three `from verify_repository import ...` sites in
+  `tests/unit/test_verify_repository.py` carry in-line
+  `# ty: ignore[unresolved-import]` suppressions; an inline `[tool.ty]`
+  block can replace these once we add a real `scripts/` package.
+  `make typecheck` now invokes `uv run ty check src tests scripts` and the
+  static-guard test (`tests/unit/test_static_guards_lint_baseline.py`) was
+  re-pointed at the same command so the gate keeps enforcing zero
+  typecheck errors. A handful of `pyright: ignore[reportIncompatibleMethodOverride]`
+  / `type: ignore[union-attr]` comments were updated to `ty: ignore[...]`
+  where the rule names diverge; test stub assignments gained combined
+  `# type: ignore[arg-type, ty:invalid-argument-type]` annotations so
+  pyright and `ty` both accept them. The lazy `_save_lock` write in
+  `MappingArtifact._get_save_lock` now goes through `object.__setattr__`
+  to satisfy `ty`'s read-only-property check (the underlying
+  `pydantic.BaseModel(frozen=True)` model still enforces the
+  `ValidationError` contract for any user-side write).
+
+## [0.3.10] - 2026-08-02
+
 ### Added
 
 - `make verify-repository`: read-only repository compliance checker
@@ -13,7 +54,8 @@ All notable changes to this project are documented here. The format follows
   (`README.md`, `CHANGELOG.md`, `AGENTS.md`, `AGENTS.local.md`, `CLAUDE.md`,
   `Makefile`, `.pre-commit-config.yaml`), tracked `docs/superpowers/specs/`
   and `docs/superpowers/plans/` paths, a single `[Unreleased]` section in
-  `CHANGELOG.md`, that `CLAUDE.md` contains only `@AGENTS.md\n@AGENTS.local.md`
+  `CHANGELOG.md`, that `CLAUDE.md` contains only `@AGENTS.md
+@AGENTS.local.md`
   references, the `.gitignore` local-only entries
   (`AGENTS.local.md`, `.claude/settings.local.json`), and the absence of cache
   artifacts. Verifies the remote URL is `https://github.com/{owner}/{repo}.git`,
@@ -25,6 +67,9 @@ All notable changes to this project are documented here. The format follows
 - `.gitleaks.toml` allowlist suppressing `sha256:` package-hash false positives
   on the `uv.lock` path; gitleaks scans otherwise report every pinned package
   digest as a credential candidate.
+- Design and implementation plan documents at
+  `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md`
+  and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
 
 ### Changed
 
@@ -78,35 +123,17 @@ All notable changes to this project are documented here. The format follows
   `CosmeticPatch.applied_at` (written, never read) plus `CosmeticApplied.applied_at`
   (required, never set), and the 3 duplicate `InspectRoute = Literal[...]`
   declarations (now one canonical declaration in `mage.artifacts.inspect`).
-  A new static-guard test (`tests/unit/test_static_guards_lint_baseline.py`)
+  A new static guard test (`tests/unit/test_static_guards_lint_baseline.py`)
   prevents future regression of the gate.
-- Replaced `pyright` with [`ty`](https://github.com/astral-sh/ty) as the
-  `make typecheck` driver. `ty` is Astral's Python typechecker (Rust
-  implementation, very fast) and is a drop-in for the `pyright` rule subset
-  we relied on. The `[tool.pyright]` block was removed from `pyproject.toml`
-  (no equivalent `[tool.ty]` is required — `ty` auto-detects `src/` layout
-  from the project root). The `scripts/` path is currently reachable by
-  pytest only (via `[tool.pytest.ini_options] pythonpath = ["src", "scripts"]`),
-  so the three `from verify_repository import ...` sites in
-  `tests/unit/test_verify_repository.py` carry in-line
-  `# ty: ignore[unresolved-import]` suppressions; an inline `[tool.ty]`
-  block can replace these once we add a real `scripts/` package.
-  `make typecheck` now invokes `uv run ty check src tests scripts` and the
-  static-guard test (`tests/unit/test_static_guards_lint_baseline.py`) was
-  re-pointed at the same command so the gate keeps enforcing zero
-  typecheck errors. A handful of `pyright: ignore[reportIncompatibleMethodOverride]`
-  / `type: ignore[union-attr]` comments were updated to `ty: ignore[...]`
-  where the rule names diverge; test stub assignments gained combined
-  `# type: ignore[arg-type, ty:invalid-argument-type]` annotations so
-  pyright and `ty` both accept them. The lazy `_save_lock` write in
-  `MappingArtifact._get_save_lock` now goes through `object.__setattr__`
-  to satisfy `ty`'s read-only-property check (the underlying
-  `pydantic.BaseModel(frozen=True)` model still enforces the
-  `ValidationError` contract for any user-side write).
 
 ### Fixed
 
 - `RealizeStage` journal windows (`per_scenario_window`, `cross_scenario_window`) now honor `HostConfig` — was hardcoded module constants, silently ignored from `.haileris/config.yaml`.
+- `make verify-repository`: address review findings, harden assertions, and
+  correct enforcement gaps surfaced during code review. Tightened the Makefile
+  `verify-repository` target wiring, pyproject script entrypoint, and the
+  verifier's invariant assertions; expanded
+  `tests/unit/test_verify_repository.py` to cover the additional cases.
 
 ## [0.3.9] - 2026-08-02
 

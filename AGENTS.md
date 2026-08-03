@@ -14,33 +14,6 @@ Before opening or merging a PR:
    `### Added` / `### Changed` / `### Fixed` group.
 3. **Update `README.md`.** New commands, config options, install steps, and
    behavior changes all belong there.
-4. **Update `docs/`.** Specs live in `docs/superpowers/specs/`, plans in
-   `docs/superpowers/plans/`. A behavior change that contradicts a spec means
-   the spec is edited in the same PR.
-
-## Repository compliance
-
-Before opening or merging a pull request, run the local checks and inspect the
-tracked-content results:
-
-```bash
-make verify-repository
-make check
-make test
-```
-
-`make verify-repository` is read-only. It checks the required files, exact
-`CLAUDE.md` references, tracked documentation directories, the changelog has
-exactly one `## [Unreleased]` section, local-only ignore entries, tracked
-cache artifacts, remote configuration, bare-repository layout, and worktree
-upstreams. Keep `docs/superpowers/specs/` and `docs/superpowers/plans/`
-tracked; do not restore a broad ignore rule for `docs/superpowers/`.
-
-Before changing repository visibility or publishing content, scan every
-tracked text file for secrets. A detected credential blocks publication until
-it is revoked or rotated and the scan is clean. The intended `main` policy is
-documented in @AGENTS.md rather than asserted from the in-tree state; the
-live GitHub ruleset must be inspected before relying on it.
 
 ## Pre-existing issues
 
@@ -84,6 +57,5 @@ See @Makefile for the full target list. The ones you will use:
 make init                # set up from scratch
 make test                # unit + feature tests
 make check               # lint, typecheck, format
-make verify-repository   # repository rules and worktree invariants
 ```
 
