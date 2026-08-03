@@ -184,3 +184,66 @@ def test_show_raw_filter_unknown_sub_bid_exits_2(
     )
     assert rc == 2
     assert "unknown sub_bid" in capsys.readouterr().err
+
+
+def test_show_raw_does_not_crash_on_missing_sub_bid(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A queue entry missing `sub_bid` must not crash `show --raw` (Crit. 1)."""
+    _write_mapping(
+        tmp_path,
+        feature_id="feat",
+        findings=[
+            {
+                "scenario_name": "orphan",
+                "location": "src/z.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "signin",
+                "location": "src/auth.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+        ],
+    )
+    rc = asyncio.run(
+        cli.cmd_cosmetic_show(_Args(feature_id="feat", project_dir=tmp_path, raw=True))
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "01JF" in out
+
+
+def test_show_raw_does_not_crash_on_null_sub_bid(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A queue entry with `sub_bid: None` must not crash `show --raw` (Crit. 2)."""
+    _write_mapping(
+        tmp_path,
+        feature_id="feat",
+        findings=[
+            {
+                "sub_bid": None,
+                "scenario_name": "null-bid",
+                "location": "src/n.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "signin",
+                "location": "src/auth.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+        ],
+    )
+    rc = asyncio.run(
+        cli.cmd_cosmetic_show(_Args(feature_id="feat", project_dir=tmp_path, raw=True))
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "01JF" in out

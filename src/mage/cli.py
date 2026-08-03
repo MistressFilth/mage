@@ -676,6 +676,17 @@ async def cmd_settle_run(args):
     return 0
 
 
+def _queue_sub_bid(entry: dict) -> str:
+    """Return the queue entry's `sub_bid` as a string, never KeyError/None.
+
+    Some queue entries may be missing `sub_bid` or carry an explicit
+    ``null``. Callers that need a non-empty string use this helper so a
+    malformed entry does not crash `show`/`list`/`apply`.
+    """
+    value = entry.get("sub_bid", "")
+    return value if isinstance(value, str) else ""
+
+
 async def cmd_cosmetic_show(args) -> int:
     """Show cosmetic queue entries for a feature.
 
@@ -709,7 +720,9 @@ async def cmd_cosmetic_show(args) -> int:
     ]
     if "sub_bid" in filters:
         allowed = filters["sub_bid"]
-        available = {q["sub_bid"] for q in queue}
+        # Skip entries with missing/empty sub_bid so they neither validate
+        # nor surface in `missing` — a malformed queue entry must not crash.
+        available = {sb for sb in (_queue_sub_bid(q) for q in queue) if sb}
         missing = allowed - available
         if missing:
             print(
@@ -718,12 +731,12 @@ async def cmd_cosmetic_show(args) -> int:
                 file=sys.stderr,
             )
             return 2
-        queue = [q for q in queue if q["sub_bid"] in allowed]
-    queue.sort(key=lambda q: q.get("sub_bid", ""))
+        queue = [q for q in queue if _queue_sub_bid(q) in allowed]
+    queue.sort(key=lambda q: _queue_sub_bid(q))
     state = load_state(project_dir)
     if getattr(args, "raw", False):
         for q in queue:
-            sub_bid = q.get("sub_bid", "")
+            sub_bid = _queue_sub_bid(q)
             applied = state.applied.get(sub_bid)
             status = "applied" if applied is not None else "pending"
             print(f"[sub_bid: {sub_bid}]")
@@ -833,7 +846,9 @@ async def cmd_cosmetic_apply(args) -> int:
     queue = [
         q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
     ]
-    available = {q.get("sub_bid", "") for q in queue}
+    # Filter empty sub_bids so malformed queue entries (missing or null
+    # sub_bid) never enter the available set nor get sent to apply.
+    available = {sb for sb in (_queue_sub_bid(q) for q in queue) if sb}
     if "sub_bid" in filters:
         allowed = filters["sub_bid"]
         missing = allowed - available
@@ -882,7 +897,9 @@ async def cmd_cosmetic_list(args) -> int:
     ]
     if "sub_bid" in filters:
         allowed = filters["sub_bid"]
-        available = {q["sub_bid"] for q in queue}
+        # Skip empty sub_bids from `available` so malformed entries never
+        # crash the --filter validation set construction.
+        available = {sb for sb in (_queue_sub_bid(q) for q in queue) if sb}
         missing = allowed - available
         if missing:
             print(
@@ -891,11 +908,11 @@ async def cmd_cosmetic_list(args) -> int:
                 file=sys.stderr,
             )
             return 2
-        queue = [q for q in queue if q["sub_bid"] in allowed]
-    queue.sort(key=lambda q: q.get("sub_bid", ""))
+        queue = [q for q in queue if _queue_sub_bid(q) in allowed]
+    queue.sort(key=lambda q: _queue_sub_bid(q))
     rows: list[dict] = []
     for q in queue:
-        sub_bid = q.get("sub_bid", "")
+        sub_bid = _queue_sub_bid(q)
         applied_record = state.applied.get(sub_bid)
         applied_at_value = getattr(applied_record, "applied_at", None)
         rows.append(

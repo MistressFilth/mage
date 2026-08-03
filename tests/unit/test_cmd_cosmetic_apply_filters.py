@@ -157,3 +157,48 @@ async def test_apply_without_filter_calls_apply_with_all_sub_bids(
     rc = await cli.cmd_cosmetic_apply(_Args(feature_id="feat", project_dir=tmp_path))
     assert rc == 0
     assert seen["sub_bids"] == ["01JF", "01JG"]
+
+
+@pytest.mark.asyncio
+async def test_apply_does_not_crash_on_null_sub_bid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An entry with `sub_bid: None` must not crash `apply` (Crit. 2).
+
+    The apply set is built from non-empty strings only; the null entry is
+    silently dropped so apply_for_feature never sees a None sub_bid.
+    """
+    _write_mapping(
+        tmp_path,
+        feature_id="feat",
+        findings=[
+            {
+                "sub_bid": None,
+                "scenario_name": "null",
+                "location": "src/n.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "ok",
+                "location": "src/a.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+        ],
+    )
+    seen: dict = {}
+
+    async def _fake(project_dir, sub_bids, *, dry_run, model):
+        seen["sub_bids"] = list(sub_bids)
+        return 0
+
+    monkeypatch.setattr(
+        "mage.orchestration.cosmetic_apply.apply_for_feature",
+        _fake,
+    )
+    rc = await cli.cmd_cosmetic_apply(_Args(feature_id="feat", project_dir=tmp_path))
+    assert rc == 0
+    # Only the well-formed entry reaches apply_for_feature
+    assert seen["sub_bids"] == ["01JF"]

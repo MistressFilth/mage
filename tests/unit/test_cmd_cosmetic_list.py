@@ -229,3 +229,82 @@ async def test_list_empty_returns_empty_entries(
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload == {"entries": []}
+
+
+@pytest.mark.asyncio
+async def test_list_skips_entries_with_missing_sub_bid(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Entries missing `sub_bid` must not crash `list` (Crit. 1).
+
+    A queue entry without `sub_bid` is rendered as a row with empty
+    `sub_bid`/file; the list call must not raise KeyError.
+    """
+    _write_mapping(
+        tmp_path,
+        feature_id="feat",
+        findings=[
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "s",
+                "location": "src/a.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+            {
+                # no `sub_bid` key at all
+                "scenario_name": "orphan",
+                "location": "src/z.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+        ],
+    )
+    rc = await cli.cmd_cosmetic_list(
+        _Args(feature_id="feat", project_dir=tmp_path, format="json")
+    )
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    sub_bids = [entry["sub_bid"] for entry in payload["entries"]]
+    assert "01JF" in sub_bids
+    assert "" in sub_bids
+
+
+@pytest.mark.asyncio
+async def test_list_skips_entries_with_explicit_null_sub_bid(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Entries with `sub_bid: None` must not crash `list` (Crit. 2).
+
+    The null entry is rendered as a row with empty sub_bid; the apply
+    set must filter it out so apply does not crash on a None.
+    """
+    _write_mapping(
+        tmp_path,
+        feature_id="feat",
+        findings=[
+            {
+                "sub_bid": None,
+                "scenario_name": "null-bid",
+                "location": "src/n.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "ok",
+                "location": "src/a.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+            },
+        ],
+    )
+    rc = await cli.cmd_cosmetic_list(
+        _Args(feature_id="feat", project_dir=tmp_path, format="json")
+    )
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    sub_bids = [entry["sub_bid"] for entry in payload["entries"]]
+    assert sub_bids == ["", "01JF"] or sorted(sub_bids) == ["", "01JF"]
+    # No None in serialized output
+    assert None not in sub_bids
