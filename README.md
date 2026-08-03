@@ -114,7 +114,7 @@ text for secrets before any publication or visibility change.
 
 ## Version
 
-The current development version is `0.3.10`.
+The current development version is `0.3.11`.
 
 ## Links
 
