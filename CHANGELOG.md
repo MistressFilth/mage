@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `make verify-repository`: read-only repository compliance checker
+  (`scripts/verify_repository.py`). Asserts required files
+  (`README.md`, `CHANGELOG.md`, `AGENTS.md`, `AGENTS.local.md`, `CLAUDE.md`,
+  `Makefile`, `.pre-commit-config.yaml`), tracked `docs/superpowers/specs/`
+  and `docs/superpowers/plans/` paths, a single `[Unreleased]` section in
+  `CHANGELOG.md`, that `CLAUDE.md` contains only `@AGENTS.md\n@AGENTS.local.md`
+  references, the `.gitignore` local-only entries
+  (`AGENTS.local.md`, `.claude/settings.local.json`), and the absence of cache
+  artifacts. Verifies the remote URL is `https://github.com/{owner}/{repo}.git`,
+  the fetch refspec is `+refs/heads/*:refs/heads/*`, and the bare-repo worktree
+  layout invariants (bare dir name, sibling worktrees, directory ↔ branch
+  parity, no checked-out branch in the bare dir, per-worktree upstream
+  tracking). Topology checks tolerate currently-active worktrees and local
+  worktrees that have never pushed a remote-tracking branch.
+- `.gitleaks.toml` allowlist suppressing `sha256:` package-hash false positives
+  on the `uv.lock` path; gitleaks scans otherwise report every pinned package
+  digest as a credential candidate.
+
 ### Changed
 
 - Repository compliance guidance now tracks design and implementation plans in
