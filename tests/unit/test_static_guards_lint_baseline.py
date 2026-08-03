@@ -1,4 +1,4 @@
-"""Static guard: enforce zero ruff + zero pyright errors after Plan 19.
+"""Static guard: enforce zero ruff + zero ty errors after Plan 19.
 
 Mirrors the Plan 13/15/17/18 static-guard pattern. Asserts that the
 make check gate can actually gate. If a future commit regresses lint
@@ -30,8 +30,8 @@ class TestLintBaseline:
             f"ruff check failed with {result.returncode} errors:\n{result.stdout}"
         )
 
-    def test_pyright_passes(self):
-        result = _run(["uv", "run", "pyright", "src", "tests"])
+    def test_ty_passes(self):
+        result = _run(["uv", "run", "ty", "check", "src", "tests"])
         assert result.returncode == 0, (
-            f"pyright failed with {result.returncode} errors:\n{result.stdout}"
+            f"ty check failed with {result.returncode} errors:\n{result.stdout}"
         )

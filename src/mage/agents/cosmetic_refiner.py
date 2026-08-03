@@ -85,7 +85,7 @@ class CosmeticRefiner:
                     f"location={raw.get('location')!r}\n"
                     f"proposed_by={raw.get('proposed_by')!r}"
                 )
-                result = await self._agent.run(prompt)  # type: ignore[union-attr]
+                result = await self._agent.run(prompt)  # ty: ignore[unresolved-attribute]
                 data = result.output
                 return CosmeticPatch(
                     sub_bid=raw["sub_bid"],

@@ -22,7 +22,7 @@ def test_scenario_target_is_frozen():
         steps=["x", "y", "z"],
     )
     with pytest.raises(ValidationError):
-        target.scenario_name = "other"
+        target.scenario_name = "other"  # ty: ignore[invalid-assignment]
 
 
 def test_increment_carries_red_test():
@@ -31,7 +31,7 @@ def test_increment_carries_red_test():
     )
     assert inc.index == 0
     with pytest.raises(ValidationError):
-        inc.index = 1
+        inc.index = 1  # ty: ignore[invalid-assignment]
 
 
 def test_increment_result_requires_diff():
@@ -49,4 +49,4 @@ def test_automation_cursor_defaults():
     cursor = AutomationCursor(sub_bid="00001-0001", increment_index=0, iteration=1)
     assert cursor.iteration == 1
     with pytest.raises(ValidationError):
-        cursor.iteration = 2
+        cursor.iteration = 2  # ty: ignore[invalid-assignment]

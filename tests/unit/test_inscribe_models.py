@@ -35,7 +35,7 @@ def test_scenario_spec_is_frozen():
     import pytest
 
     with pytest.raises(ValidationError):
-        spec.name = "mutated"
+        spec.name = "mutated"  # ty: ignore[invalid-assignment]
 
 
 def test_inscribe_output_holds_scenarios():

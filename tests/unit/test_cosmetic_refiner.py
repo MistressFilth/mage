@@ -42,7 +42,7 @@ async def test_refiner_produces_cosmetic_item_from_raw_dict():
         "replacement_text": "CONSTANT = 42\n",
         "rationale": "use a constant",
     }
-    refiner._agent = _CannedAgent(canned_payload)  # type: ignore[assignment]
+    refiner._agent = _CannedAgent(canned_payload)  # type: ignore[assignment, ty:invalid-assignment]
     semaphore = asyncio.Semaphore(1)
     result = await refiner.refine(_raw_queue_entry(), semaphore=semaphore)
     assert isinstance(result, CosmeticPatch)
@@ -78,7 +78,7 @@ async def test_refiner_respects_semaphore_cap():
 
             return _R()
 
-    refiner._agent = CountingAgent()  # type: ignore[assignment]
+    refiner._agent = CountingAgent()  # type: ignore[assignment, ty:invalid-assignment]
     items = [_raw_queue_entry() for _ in range(6)]
     semaphore = asyncio.Semaphore(2)
     results = await asyncio.gather(
@@ -98,7 +98,7 @@ async def test_refiner_falls_back_to_stub_on_llm_fail():
         async def run(self, prompt: str):
             raise RuntimeError("LLM blew up")
 
-    refiner._agent = FailingAgent()  # type: ignore[assignment]
+    refiner._agent = FailingAgent()  # type: ignore[assignment, ty:invalid-assignment]
     semaphore = asyncio.Semaphore(1)
     result = await refiner.refine(_raw_queue_entry(), semaphore=semaphore)
     assert result.file_path is None

@@ -29,7 +29,7 @@ lint: ## Run linters
 	uv run ruff check src tests scripts
 
 typecheck: ## Run typecheckers
-	uv run pyright src tests scripts
+	uv run ty check src tests scripts
 
 format: ## Run formatters (may auto-edit)
 	uv run ruff format src tests scripts

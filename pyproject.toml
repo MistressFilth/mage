@@ -18,7 +18,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
-    "pyright>=1.1.350",
+    "ty>=0.0.65",
     "ruff>=0.4",
 ]
 
@@ -31,10 +31,6 @@ packages = ["src/mage"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "scripts"]
-
-[tool.pyright]
-include = ["src", "tests", "scripts"]
-extraPaths = ["src", "scripts"]
 
 [dependency-groups]
 dev = [
