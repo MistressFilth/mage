@@ -198,7 +198,7 @@ class MappingArtifactWatcher:
 
     Tails `events.jsonl` via file-size polling. On each `MAPPING_SAVED`,
     diffs the new `feature_cosmetic_queue` against the last seen snapshot,
-    then calls `apply_for_feature` per feature_id with new entries.
+    then calls `apply_for_feature` per feature_id with the new sub_bids.
 
     `stop()` is the only way to terminate `run()` cleanly. The daemon
     emits `COSMETIC_WATCHER_STARTED` on entry and `COSMETIC_WATCHER_STOPPED`
@@ -320,7 +320,7 @@ class MappingArtifactWatcher:
             new_entries = sub_bids - self._last_seen.get(fid, frozenset())
             if not new_entries:
                 continue
-            rc = await apply_for_feature(self.project_dir, fid)
+            rc = await apply_for_feature(self.project_dir, list(new_entries))
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

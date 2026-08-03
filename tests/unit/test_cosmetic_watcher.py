@@ -79,7 +79,8 @@ async def test_watcher_diffs_queue_and_calls_apply(tmp_path: Path):
 
     mock_apply.assert_called_once()
     args, kwargs = mock_apply.call_args
-    assert args[1] == "feat-1" or kwargs.get("feature_id") == "feat-1"
+    sub_bids_arg = args[1] if len(args) > 1 else kwargs.get("sub_bids")
+    assert "00000-001" in (sub_bids_arg or [])
 
 
 @pytest.mark.asyncio

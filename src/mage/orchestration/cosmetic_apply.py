@@ -21,15 +21,15 @@ from mage.verification.host_overrides import load_host_config
 
 async def apply_for_feature(
     project_dir: Path,
-    feature_id: str,
+    sub_bids: list[str],
     *,
     dry_run: bool = False,
     model: str | None = None,
 ) -> int:
-    """Apply cosmetic queue items for one feature.
+    """Apply cosmetic queue items for the given sub_bids.
 
-    Returns 0 on success (including no-op when queue for feature is empty),
-    1 if mapping.yaml is missing.
+    Returns 0 on success (including no-op when the requested set is empty
+    or all entries resolve to a no-op), 1 if mapping.yaml is missing.
     """
     from mage.agents.cosmetic_refiner import CosmeticRefiner
     from mage.artifacts.cosmetic_state import (
@@ -54,7 +54,8 @@ async def apply_for_feature(
         host_config = host_config.model_copy(update={"model": model})
     refiner = CosmeticRefiner(model=host_config.model)
     semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
-    queue = [q for q in mapping.cosmetic_findings if q.get("feature_id") == feature_id]
+    wanted = set(sub_bids)
+    queue = [q for q in mapping.cosmetic_findings if q.get("sub_bid") in wanted]
     if not queue:
         return 0
     refined = await asyncio.gather(

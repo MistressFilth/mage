@@ -192,6 +192,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Pydantic-AI TestModel stub)"
         ),
     )
+    cosmetic_apply_parser.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        help="Restrict apply to the listed sub_bids, e.g. 'sub_bid=01JF...'",
+    )
 
     # mage cosmetic watch
     cosmetic_watch_parser = cosmetic_subparsers.add_parser(
@@ -804,16 +810,48 @@ def _render_journal_section(*, project_dir: Path, feature_id: str, mapping) -> N
 
 
 async def cmd_cosmetic_apply(args) -> int:
-    """CLI shim: delegate to apply_for_feature."""
+    """Apply cosmetic items to the feature branch, optionally narrowed."""
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.cosmetic_filters import FilterParseError, parse_filters
     from mage.orchestration.cosmetic_apply import apply_for_feature
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    model = getattr(args, "model", None)
+    mapping_path = project_dir / "mapping.yaml"
+    if not mapping_path.exists():
+        print(
+            f"mage cosmetic apply: no mapping found at {mapping_path}",
+            file=sys.stderr,
+        )
+        return 1
+    mapping = MappingArtifact.load(mapping_path)
+    raw_filter = getattr(args, "filter", None)
+    try:
+        filters = parse_filters(raw_filter, subcommand="cosmetic apply")
+    except FilterParseError as e:
+        print(f"mage cosmetic apply: {e.message}", file=sys.stderr)
+        return 2
+    queue = [
+        q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
+    ]
+    available = {q.get("sub_bid", "") for q in queue}
+    if "sub_bid" in filters:
+        allowed = filters["sub_bid"]
+        missing = allowed - available
+        if missing:
+            print(
+                f"mage cosmetic apply: unknown sub_bid "
+                f"{min(missing)!r} for feature {args.feature_id!r}",
+                file=sys.stderr,
+            )
+            return 2
+        sub_bids = sorted(allowed)
+    else:
+        sub_bids = sorted(available)
     return await apply_for_feature(
         project_dir,
-        args.feature_id,
+        sub_bids,
         dry_run=getattr(args, "dry_run", False),
-        model=model,
+        model=getattr(args, "model", None),
     )
 
 
