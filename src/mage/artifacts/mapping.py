@@ -107,8 +107,13 @@ class MappingArtifact(BaseModel):
         requires a running event loop.
         """
         if self._save_lock is None:
-            self._save_lock = asyncio.Lock()
-        return self._save_lock
+            # `MappingArtifact` is `frozen=True`; pydantic reports any
+            # `self._save_lock = ...` as a read-only property write. We
+            # bypass via `object.__setattr__` (the same trick pydantic
+            # itself uses for private attributes) and let the cached
+            # value be observed on the next read.
+            object.__setattr__(self, "_save_lock", asyncio.Lock())
+        return self._save_lock  # ty: ignore[invalid-return-type]
 
     @model_validator(mode="after")
     def _validate_plan4_fields(self) -> MappingArtifact:

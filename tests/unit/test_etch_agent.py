@@ -32,7 +32,7 @@ async def test_pydantic_etch_agent_returns_red_test_spec_from_canned_output():
         "test_path": "tests/test_save.py",
         "test_code": "def test_save():\n    assert False\n",
     }
-    agent._agent = _CannedAgent(canned)  # type: ignore[assignment]
+    agent._agent = _CannedAgent(canned)  # type: ignore[assignment, ty:invalid-assignment]
     result = await agent.run(
         step="when user clicks save",
         scenario_context={"scenario_name": "save scenario"},
@@ -62,7 +62,7 @@ async def test_pydantic_etch_agent_prompt_contains_step_and_context():
 
             return _R()
 
-    agent._agent = CapturingAgent()  # type: ignore[assignment]
+    agent._agent = CapturingAgent()  # type: ignore[assignment, ty:invalid-assignment]
     await agent.run(
         step="save a file",
         scenario_context={"scenario_name": "save scenario", "tags": ["@save"]},

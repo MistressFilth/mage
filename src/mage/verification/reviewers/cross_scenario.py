@@ -52,7 +52,7 @@ class CrossScenarioReviewer(ReviewerAgent):
             "Rationale is mandatory."
         )
 
-    async def run(  # pyright: ignore[reportIncompatibleMethodOverride]
+    async def run(  # ty: ignore[invalid-method-override]
         self,
         *,
         draft,  # Liskov compat with ReviewerAgent.run; unused at feature scope

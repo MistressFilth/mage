@@ -255,8 +255,12 @@ def _make_dry_run_runner(
     from mage.orchestration.realize import RealizeStage
     from mage.orchestration.runner import FeatureRunner
 
-    etch = EtchStage(log, agent=_StubEtchAgent())  # type: ignore[arg-type]
-    realize = RealizeStage(log, agent=_StubRealizeAgent(), host_config=host_config)  # type: ignore[arg-type]
+    etch = EtchStage(log, agent=_StubEtchAgent())  # type: ignore[arg-type, ty:invalid-argument-type]
+    realize = RealizeStage(
+        log,
+        agent=_StubRealizeAgent(),  # type: ignore[arg-type, ty:invalid-argument-type]
+        host_config=host_config,
+    )
     inspect = InspectLoopStage(
         log,
         mechanical_verifier=_NoopMechanicalVerifier(),
