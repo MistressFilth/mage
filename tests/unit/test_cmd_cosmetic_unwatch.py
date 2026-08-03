@@ -282,3 +282,83 @@ def test_unwatch_project_dir_default_is_cwd(
     args = _Args(project_dir=tmp_path)  # direct attribute
     rc = asyncio.run(cli.cmd_cosmetic_unwatch(args))
     assert rc == 0
+
+
+def test_unwatch_sigterm_timeout_event_records_elapsed(
+    tmp_path: Path,
+    self_signal_safe: FakeSignalState,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SIGTERM_TIMEOUT escalation reports elapsed_ms from monotonic.
+
+    Important #1: the escalation event must carry a real duration,
+    not a hardcoded zero or timeout value. The test sets `always_alive`
+    so the SIGTERM window hits its deadline, then checks the
+    REMOTE_STOP_ESCALATED event payload's duration_ms is between 0
+    and timeout_s * 1000.
+    """
+    import json
+
+    _make_mage_dir(tmp_path)
+    self_signal_safe.set_project_dir(tmp_path)
+    self_signal_safe.always_alive = True
+    self_signal_safe.sigterm_removes_pid = False
+    write_pid(tmp_path, os.getpid())
+    _fast_asyncio_sleep(monkeypatch)
+    rc = asyncio.run(cli.cmd_cosmetic_unwatch(_Args(project_dir=tmp_path)))
+    assert rc == 3
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    escalations = [
+        e for e in events if e["event_type"] == "cosmetic_watcher_remote_stop_escalated"
+    ]
+    assert escalations, "expected SIGTERM_TIMEOUT escalation event"
+    payload = escalations[-1]["payload"]
+    assert payload["escalation"] == "SIGTERM_TIMEOUT"
+    assert isinstance(payload["duration_ms"], int)
+    # The wait loop hit the 5 s deadline; duration_ms must reflect
+    # actual elapsed wall time at escalation, not the timeout itself.
+    assert 0 <= payload["duration_ms"] <= 5000
+
+
+def test_unwatch_sigkill_success_records_kill_window_duration(
+    tmp_path: Path,
+    self_signal_safe: FakeSignalState,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SIGKILL success reports elapsed in the SIGKILL window only.
+
+    After SIGKILL is dispatched the elapsed counter is reset, so the
+    SUCCEEDED event's duration_ms covers SIGKILL waiting only — not
+    the SIGTERM+SIGKILL cumulative time. SIGTERM-exit first would
+    never trigger the SIGKILL branch; this test forces the escalation
+    branch by holding liveness through SIGTERM, then dying on SIGKILL.
+    """
+    import json
+
+    _make_mage_dir(tmp_path)
+    self_signal_safe.set_project_dir(tmp_path)
+    self_signal_safe.sigterm_removes_pid = False
+    # alive=True is the default; SIGKILL flips it to False inside fake_kill,
+    # so the SIGKILL wait loop sees liveness-death and exits successfully.
+    write_pid(tmp_path, os.getpid())
+    _fast_asyncio_sleep(monkeypatch)
+    rc = asyncio.run(cli.cmd_cosmetic_unwatch(_Args(project_dir=tmp_path, force=True)))
+    assert rc == 0
+    assert not pid_file_path(tmp_path).exists()
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    succeeded = [
+        e for e in events if e["event_type"] == "cosmetic_watcher_remote_stop_succeeded"
+    ]
+    assert succeeded
+    payload = succeeded[-1]["payload"]
+    assert isinstance(payload["duration_ms"], int)
+    # The SIGKILL window is at most one full timeout.
+    assert 0 <= payload["duration_ms"] <= 5000

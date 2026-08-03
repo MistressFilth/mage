@@ -16,6 +16,7 @@ import asyncio
 import logging
 import os
 import signal
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -52,6 +53,13 @@ async def _request_remote_stop(
     On success, the PID file is removed (either because the watcher
     removed it as part of its shutdown or because the target died).
     Emits audit events into `<project_dir>/events.jsonl` (best-effort).
+
+    Every audit event in this routine uses a single monotonic clock
+    (``start`` at function entry) so the elapsed_ms in the audit log
+    reflects actual wall time at the moment the terminal decision was
+    made. The SIGKILL branch starts a fresh monotonic when SIGKILL
+    is dispatched so the SIGKILL_TIMEOUT escalation reports the
+    SIGKILL-window elapsed, not the cumulative SIGTERM+SIGKILL time.
     """
     log_path = project_dir / "events.jsonl"
     log: EventsLog | None = None
@@ -68,6 +76,11 @@ async def _request_remote_stop(
                 payload=payload,
             )
         )
+
+    start = time.monotonic()
+
+    def _elapsed_ms() -> int:
+        return int((time.monotonic() - start) * 1000)
 
     await _emit(
         EventType.COSMETIC_WATCHER_REMOTE_STOP_REQUESTED,
@@ -103,7 +116,7 @@ async def _request_remote_stop(
                 {
                     "requester_pid": requester_pid,
                     "target_pid": target_pid,
-                    "duration_ms": 0,
+                    "duration_ms": _elapsed_ms(),
                 },
             )
             return True
@@ -115,7 +128,7 @@ async def _request_remote_stop(
                 {
                     "requester_pid": requester_pid,
                     "target_pid": target_pid,
-                    "duration_ms": int(timeout_s * 1000),
+                    "duration_ms": _elapsed_ms(),
                 },
             )
             return True
@@ -126,6 +139,7 @@ async def _request_remote_stop(
                     "requester_pid": requester_pid,
                     "target_pid": target_pid,
                     "escalation": "SIGTERM_TIMEOUT",
+                    "duration_ms": _elapsed_ms(),
                 },
             )
             return False
@@ -139,10 +153,14 @@ async def _request_remote_stop(
                 {
                     "requester_pid": requester_pid,
                     "target_pid": target_pid,
-                    "duration_ms": int(timeout_s * 1000),
+                    "duration_ms": _elapsed_ms(),
                 },
             )
             return True
+        # Fresh monotonic for the SIGKILL window so SIGKILL_TIMEOUT
+        # reports the time spent waiting on SIGKILL alone, not the
+        # SIGTERM+SIGKILL cumulative elapsed.
+        sigkill_start = time.monotonic()
         sigkill_deadline = asyncio.get_event_loop().time() + timeout_s
         if await _wait_for_deadline(sigkill_deadline):
             if path.exists():
@@ -152,7 +170,7 @@ async def _request_remote_stop(
                 {
                     "requester_pid": requester_pid,
                     "target_pid": target_pid,
-                    "duration_ms": int(timeout_s * 1000),
+                    "duration_ms": int((time.monotonic() - sigkill_start) * 1000),
                 },
             )
             return True
@@ -162,6 +180,7 @@ async def _request_remote_stop(
                 "requester_pid": requester_pid,
                 "target_pid": target_pid,
                 "escalation": "SIGKILL_TIMEOUT",
+                "duration_ms": int((time.monotonic() - sigkill_start) * 1000),
             },
         )
         return False
