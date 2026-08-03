@@ -15,7 +15,12 @@ from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
 from mage.artifacts.verdict import VerdictError
-from mage.cosmetic_pid import is_alive, pid_file_path, read_pid, remove_pid
+from mage.cosmetic_pid import (
+    is_alive_with_start,
+    pid_file_path,
+    read_pid,
+    remove_pid,
+)
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import default_check_set, load_host_config
@@ -1002,14 +1007,15 @@ async def cmd_cosmetic_unwatch(args) -> int:
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
     path = pid_file_path(project_dir)
-    pid = read_pid(project_dir)
-    if pid is None:
+    parsed = read_pid(project_dir)
+    if parsed is None:
         print(
             f"mage cosmetic unwatch: no watcher running for {project_dir}",
             file=sys.stderr,
         )
         return 0
-    if not is_alive(pid):
+    pid, start_time = parsed
+    if not is_alive_with_start(pid, start_time):
         remove_pid(project_dir)
         print(
             f"mage cosmetic unwatch: removed stale pid file for pid={pid}",
@@ -1030,6 +1036,7 @@ async def cmd_cosmetic_unwatch(args) -> int:
     await _request_remote_stop(
         project_dir=project_dir,
         target_pid=pid,
+        target_start_time=start_time,
         requester_pid=os.getpid(),
         timeout_s=5.0,
         force=getattr(args, "force", False),

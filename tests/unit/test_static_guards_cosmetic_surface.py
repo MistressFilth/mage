@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from mage.cosmetic_pid import pid_file_path
+from mage.cosmetic_pid import is_alive_with_start, pid_file_path
 from mage.orchestration.events import EventType
 
 PID_PATH_TEXT = str(pid_file_path(Path(".")))
@@ -15,6 +15,44 @@ PID_PATH_TEXT = str(pid_file_path(Path(".")))
 
 def test_pid_file_path_pinned() -> None:
     assert PID_PATH_TEXT == ".mage/cosmetic_watcher.pid"
+
+
+def test_pid_file_format_includes_start_time() -> None:
+    """The PID file format is `<pid>:<start_time>\\n` for identity check.
+
+    Anti-revert: write_pid must capture the live process's start_time
+    from /proc/<pid>/stat field 22; a bare `<pid>\\n` is rejected by
+    `is_alive_with_start` and the file is treated as stale.
+    """
+    from mage.cosmetic_pid import write_pid
+
+    src = inspect.getsource(write_pid)
+    assert "start_time" in src
+    assert "_proc_start_time" in src
+    assert ":" in src  # the format separator
+
+
+def test_is_alive_with_start_present() -> None:
+    """`is_alive_with_start` is the only liveness check before SIGKILL."""
+    assert callable(is_alive_with_start)
+
+
+def test_no_production_sigterm_emulator() -> None:
+    """The cosmetic_watcher module must not install a SIGTERM emulator.
+
+    Important #4 from the fix wave: SIGTERM emulation belongs in test
+    helpers, not in production code (a test-only helper monkeypatches
+    `is_alive_with_start` instead).
+    """
+    from mage.orchestration import cosmetic_watcher as cw
+
+    src = inspect.getsource(cw)
+    assert "_install_sigterm_emulator" not in src
+    # The production code does not install signal.signal(SIGTERM, ...)
+    # from inside _request_remote_stop.
+    assert "_request_remote_stop" in src
+    request_remote_stop_src = inspect.getsource(cw._request_remote_stop)
+    assert "signal.signal" not in request_remote_stop_src
 
 
 @pytest.mark.parametrize(

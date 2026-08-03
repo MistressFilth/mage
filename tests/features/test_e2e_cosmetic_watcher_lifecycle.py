@@ -54,7 +54,12 @@ feature_status: pending
         else:
             pytest.fail("PID file did not appear within 5s")
 
-        assert read_pid(tmp_path) == watch_proc.pid
+        parsed = read_pid(tmp_path)
+        assert parsed is not None
+        recorded_pid, recorded_start_time = parsed
+        assert recorded_pid == watch_proc.pid
+        # start_time is captured from /proc/<pid>/stat for identity check.
+        assert recorded_start_time is not None and recorded_start_time > 0
 
         result = subprocess.run(
             [

@@ -31,9 +31,12 @@ async def test_run_writes_pid_file(project_dir: Path) -> None:
     # Run only until stop is called.
     task = asyncio.create_task(watcher.run())
     await asyncio.sleep(0.05)  # let run() write the PID file
-    pid = read_pid(project_dir)
-    assert pid is not None
+    parsed = read_pid(project_dir)
+    assert parsed is not None
+    pid, start_time = parsed
     assert pid == __import__("os").getpid()
+    # start_time must be recorded for identity verification.
+    assert start_time is not None and start_time > 0
     watcher.stop()
     await task
 
