@@ -33,6 +33,31 @@ if TYPE_CHECKING:
     from mage.orchestration.runner import FeatureRunner
 
 
+def _resolve_feature_id(args: argparse.Namespace) -> str:
+    """Return a non-empty feature_id string, or "" if --feature-id was omitted.
+
+    Rejects empty/whitespace-only values when the flag is explicitly passed.
+    Distinguishes "not passed" (`None`) from "passed empty" (rejected) via
+    argparse's `default=None`.
+
+    On rejection, prints the error to stderr and exits with code 2. This
+    matches the existing `cmd_run` error convention at the top-level guard
+    (cli.py:520-522) where validation failures surface via
+    `print(..., file=sys.stderr); sys.exit(2)` rather than `argparse.error`,
+    since the parser object is not held in scope at command-dispatch time.
+    """
+    value = getattr(args, "feature_id", None)
+    if value is None:
+        return ""
+    if not value.strip():
+        print(
+            "mage run: error: --feature-id cannot be empty or whitespace",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
@@ -79,6 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
     run_parser.add_argument("--dry-run", action="store_true", help="Use stub agents")
     run_parser.add_argument("--model", help="Override the LLM model identifier")
+    run_parser.add_argument(
+        "--feature-id",
+        default=None,
+        help=(
+            "Tag this run with a feature_id for downstream correlation "
+            "(cosmetic queue, inspect journal). Empty or whitespace-only values "
+            "rejected."
+        ),
+    )
 
     # mage review <subcommand>
     review_parser = subparsers.add_parser("review", help="Review operations")
@@ -342,7 +376,7 @@ def _make_dry_run_runner(
     )
 
 
-def _make_dry_run_stages(log, host_config):
+def _make_dry_run_stages(log, host_config, *, feature_id: str = ""):
     """Build the full pipeline stages list in --dry-run mode.
 
     Real-agent stages (decomposition, inscribe, inspect_feature,
@@ -353,7 +387,7 @@ def _make_dry_run_stages(log, host_config):
     """
     from mage.orchestration.automation import AutomationStage
 
-    runner = _make_dry_run_runner(log, host_config)
+    runner = _make_dry_run_runner(log, host_config, feature_id=feature_id)
     return [
         _StubStageNode(log, "decomposition"),
         _StubStageNode(log, "inscribe"),
@@ -480,6 +514,9 @@ async def cmd_run(args):
     log = EventsLog(project_dir / "events.jsonl")
     state_dir = project_dir / ".haileris" / "state"
 
+    # Plan 22: feature_id tag-only threading.
+    feature_id = _resolve_feature_id(args)
+
     mapping_path = project_dir / "mapping.yaml"
     if mapping_path.exists():
         # Brief had MappingArtifact.load(mapping_path, log) but the actual
@@ -492,13 +529,21 @@ async def cmd_run(args):
 
     persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
     saved = persistence.load_state()
-    initial_context = saved or PipelineContext(
-        project_dir=project_dir,
-        mapping=mapping,
-        events_log=log,
-        plan_path=project_dir / "plan.md",
-        iteration=0,
-    )
+    if saved is not None:
+        # Tag-only: rebadge saved state if --feature-id was explicitly passed.
+        if feature_id:
+            initial_context = saved.model_copy(update={"feature_id": feature_id})
+        else:
+            initial_context = saved
+    else:
+        initial_context = PipelineContext(
+            project_dir=project_dir,
+            mapping=mapping,
+            events_log=log,
+            plan_path=project_dir / "plan.md",
+            iteration=0,
+            feature_id=feature_id,
+        )
 
     host_config = load_host_config(project_dir)
     if getattr(args, "model", None):
@@ -510,7 +555,9 @@ async def cmd_run(args):
     # host_config.model is set. `--dry-run` on `mage run` is a no-op kept
     # for backward compatibility; the same flag still controls whether
     # `mage cosmetic apply` writes files / commits.
-    stages = _make_dry_run_stages(log, host_config)
+    stages = _make_dry_run_stages(
+        log, host_config, feature_id=initial_context.feature_id
+    )
 
     graph = PipelineGraph(stages=stages, events_log=log)
     try:
