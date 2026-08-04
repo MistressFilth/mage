@@ -171,7 +171,7 @@ def _make_halting_runner(fail_sub_bid: str) -> Callable:
     from mage.orchestration.etch import ScenarioInspectHalted
     from mage.orchestration.runner import AutomationCursor
 
-    def _factory(log, host_config):
+    def _factory(log, host_config, *, feature_id: str = ""):
         class _RaisingRunner:
             async def run(self, context, targets, *, cursor=None):
                 # Set the cursor first so the persist path captures it.

@@ -28,6 +28,18 @@ mage cosmetic apply <feature-id> --project-dir <path>
 merge locally, push and open a pull request, keep the branch, or discard it.
 Discard requires typing `discard` to confirm.
 
+## Running the pipeline
+
+`mage run` executes the pipeline end-to-end against a project directory. Flags:
+
+- `--project-dir PATH` — project directory (default: current directory).
+- `--dry-run` — use stub agents (no LLM calls).
+- `--model <id>` — override the LLM model identifier.
+- `--feature-id <id>` — tag the run with a feature identifier. Useful for
+  correlating inspect journal entries and cosmetic queue items with a
+  specific feature. Empty string is rejected; omitting the flag preserves
+  the default (`feature_id=""`).
+
 ## Cosmetic queue
 
 `mage cosmetic show <feature-id>` refines the per-feature cosmetic queue and
