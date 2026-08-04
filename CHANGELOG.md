@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `mage run --feature-id <id>` flag for tagging runs with a feature identifier;
+  threaded into `PipelineContext.feature_id` and downstream inspect-loop +
+  cosmetic-queue consumers. Tag-only semantics; omitting the flag preserves
+  the previous `feature_id=""` default.
 - `mage cosmetic unwatch` — stop the cosmetic watcher daemon by PID file
   (`<project_dir>/.mage/cosmetic_watcher.pid`). Supports `--force` to escalate
   to SIGKILL after a 5 s SIGTERM timeout.
