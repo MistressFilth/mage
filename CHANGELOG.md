@@ -8,10 +8,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `mage run --feature-id <id>` flag for tagging runs with a feature identifier;
-  threaded into `PipelineContext.feature_id` and downstream inspect-loop +
-  cosmetic-queue consumers. Tag-only semantics; omitting the flag preserves
-  the previous `feature_id=""` default.
 - `mage cosmetic unwatch` — stop the cosmetic watcher daemon by PID file
   (`<project_dir>/.mage/cosmetic_watcher.pid`). Supports `--force` to escalate
   to SIGKILL after a 5 s SIGTERM timeout.
@@ -38,6 +34,15 @@ All notable changes to this project are documented here. The format follows
 - `make verify-repository` target, `scripts/verify_repository.py`, and `tests/unit/test_verify_repository.py`. Repository rule enforcement is external to this project.
 - `tests/unit/test_repository_compliance.py` and the pytest collection shim in `tests/conftest.py`.
 - Tracked design and plan documents at `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md` and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
+
+## [0.4.1] - 2026-08-04
+
+### Added
+
+- `mage run --feature-id <id>` flag for tagging runs with a feature identifier;
+  threaded into `PipelineContext.feature_id` and downstream inspect-loop +
+  cosmetic-queue consumers. Tag-only semantics; omitting the flag preserves
+  the previous `feature_id=""` default.
 
 ## [0.3.11] - 2026-08-02
 
