@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `mage cosmetic unwatch` — stop the cosmetic watcher daemon by PID file
+  (`<project_dir>/.mage/cosmetic_watcher.pid`). Supports `--force` to escalate
+  to SIGKILL after a 5 s SIGTERM timeout.
+- `mage cosmetic list <feature_id>` — row-per-entry table for the queue, with
+  `--format text|json` and `--filter sub_bid=...` narrowing.
+- `mage cosmetic show --raw` — dump queue entries without LLM refinement.
+- `mage cosmetic show --journal` — append an inspect journal section filtered
+  by feature_id, sorted descending by timestamp. Works with or without `--raw`.
+- `--filter sub_bid=...` (repeatable) on `mage cosmetic {show, list, apply}`.
+- New audit events: `COSMETIC_WATCHER_REMOTE_STOP_REQUESTED`,
+  `COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED`,
+  `COSMETIC_WATCHER_REMOTE_STOP_ESCALATED`,
+  `COSMETIC_WATCHER_STALE_PID_REMOVED`.
+
+### Changed
+
+- `mage cosmetic watch` now writes a PID file on startup and removes it on
+  graceful shutdown. The `COSMETIC_WATCHER_STARTED` event payload gains
+  `pid` and `pid_file_path`; `COSMETIC_WATCHER_STOPPED` gains
+  `pid_file_removed`.
+
 ### Removed
 
 - `make verify-repository` target, `scripts/verify_repository.py`, and `tests/unit/test_verify_repository.py`. Repository rule enforcement is external to this project.

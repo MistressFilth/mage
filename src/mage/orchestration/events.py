@@ -116,6 +116,12 @@ class EventType(str, Enum):
     COSMETIC_WATCHER_APPLIED_FEATURE = "cosmetic_watcher_applied_feature"
     COSMETIC_WATCHER_FAILED = "cosmetic_watcher_failed"
 
+    # Plan 21 — Cosmetic surface expansion (unwatch + list + raw + journal)
+    COSMETIC_WATCHER_REMOTE_STOP_REQUESTED = "cosmetic_watcher_remote_stop_requested"
+    COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED = "cosmetic_watcher_remote_stop_succeeded"
+    COSMETIC_WATCHER_REMOTE_STOP_ESCALATED = "cosmetic_watcher_remote_stop_escalated"
+    COSMETIC_WATCHER_STALE_PID_REMOVED = "cosmetic_watcher_stale_pid_removed"
+
     # Plan 15 — Plan approval gate
     APPROVAL_REQUESTED = "approval_requested"
     APPROVAL_GRANTED = "approval_granted"

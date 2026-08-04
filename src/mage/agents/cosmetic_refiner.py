@@ -66,9 +66,20 @@ class CosmeticRefiner:
             # injected (existing unit tests monkey-patch ``self._agent`` to
             # stub the LLM; that injection must still take precedence).
             if self._is_test_mode and self._agent is None:
-                location = raw.get("location") or {}
-                file_path = location.get("file")
-                line = int(location.get("line", 1))
+                location = raw.get("location")
+                # The spec documents location as `{"file": ..., "line": ...}`
+                # but raw queues may carry a bare string instead. Normalize
+                # both shapes to the dict form so the rest of the function
+                # can stay uniform.
+                if isinstance(location, str):
+                    location = {"file": location, "line": 0}
+                elif not isinstance(location, dict):
+                    location = {}
+                raw_file_path: object = (
+                    location.get("file") if isinstance(location, dict) else None
+                )
+                file_path = raw_file_path if isinstance(raw_file_path, str) else None
+                line = int(location.get("line", 1)) if isinstance(location, dict) else 1
                 text = raw.get("text", "")
                 return CosmeticPatch(
                     sub_bid=raw["sub_bid"],

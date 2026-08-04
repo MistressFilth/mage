@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import os
 import signal
 import sys
 from pathlib import Path
@@ -13,6 +15,12 @@ from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
 from mage.artifacts.verdict import VerdictError
+from mage.cosmetic_pid import (
+    is_alive_with_start,
+    pid_file_path,
+    read_pid,
+    remove_pid,
+)
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import default_check_set, load_host_config
@@ -132,6 +140,44 @@ def build_parser() -> argparse.ArgumentParser:
     cosmetic_show_parser.add_argument(
         "--project-dir", type=Path, default=argparse.SUPPRESS
     )
+    cosmetic_show_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Dump queue entries without LLM refinement",
+    )
+    cosmetic_show_parser.add_argument(
+        "--journal",
+        action="store_true",
+        help="Append a section of inspect journal entries for the feature",
+    )
+    cosmetic_show_parser.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        help="Restrict to sub_bids matching the predicate, e.g. 'sub_bid=01JF...'",
+    )
+
+    # mage cosmetic list
+    cosmetic_list_parser = cosmetic_subparsers.add_parser(
+        "list",
+        help="List cosmetic queue entries for a feature",
+    )
+    cosmetic_list_parser.add_argument("feature_id")
+    cosmetic_list_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_list_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format (default text)",
+    )
+    cosmetic_list_parser.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        help="Restrict to sub_bids matching 'sub_bid=...'",
+    )
 
     # mage cosmetic apply
     cosmetic_apply_parser = cosmetic_subparsers.add_parser(
@@ -151,6 +197,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Pydantic-AI TestModel stub)"
         ),
     )
+    cosmetic_apply_parser.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        help="Restrict apply to the listed sub_bids, e.g. 'sub_bid=01JF...'",
+    )
 
     # mage cosmetic watch
     cosmetic_watch_parser = cosmetic_subparsers.add_parser(
@@ -161,6 +213,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--project-dir", type=Path, default=argparse.SUPPRESS
     )
     cosmetic_watch_parser.add_argument("--poll-interval-ms", type=int, default=250)
+
+    # mage cosmetic unwatch
+    cosmetic_unwatch_parser = cosmetic_subparsers.add_parser(
+        "unwatch",
+        help="Stop the cosmetic watcher daemon (per-project)",
+    )
+    cosmetic_unwatch_parser.add_argument(
+        "--project-dir", type=Path, default=argparse.SUPPRESS
+    )
+    cosmetic_unwatch_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Escalate to SIGKILL after a 5s SIGTERM timeout",
+    )
 
     # mage mapping
     mapping_parser = subparsers.add_parser(
@@ -615,10 +681,27 @@ async def cmd_settle_run(args):
     return 0
 
 
+def _queue_sub_bid(entry: dict) -> str:
+    """Return the queue entry's `sub_bid` as a string, never KeyError/None.
+
+    Some queue entries may be missing `sub_bid` or carry an explicit
+    ``null``. Callers that need a non-empty string use this helper so a
+    malformed entry does not crash `show`/`list`/`apply`.
+    """
+    value = entry.get("sub_bid", "")
+    return value if isinstance(value, str) else ""
+
+
 async def cmd_cosmetic_show(args) -> int:
-    """Refine and display the project's cosmetic queue items."""
-    from mage.agents.cosmetic_refiner import CosmeticRefiner
+    """Show cosmetic queue entries for a feature.
+
+    Default mode refines via the LLM as before. `--raw` skips refinement
+    and emits a stable text dump. `--journal` appends inspect journal
+    entries for the same feature. `--filter sub_bid=...` narrows.
+    """
+    from mage.artifacts.cosmetic_state import load_state
     from mage.artifacts.mapping import MappingArtifact
+    from mage.cosmetic_filters import FilterParseError, parse_filters
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
     mapping_path = project_dir / "mapping.yaml"
@@ -628,18 +711,70 @@ async def cmd_cosmetic_show(args) -> int:
         )
         return 1
     mapping = MappingArtifact.load(mapping_path)
-    host_config = load_host_config(project_dir)
-    refiner = CosmeticRefiner(model=host_config.model)
-    semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
+    raw_filter = getattr(args, "filter", None)
+    try:
+        filters = parse_filters(raw_filter, subcommand="cosmetic show")
+    except FilterParseError as e:
+        print(
+            f"mage cosmetic show: {e.message}",
+            file=sys.stderr,
+        )
+        return 2
     queue = [
         q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
     ]
+    if "sub_bid" in filters:
+        allowed = filters["sub_bid"]
+        # Skip entries with missing/empty sub_bid so they neither validate
+        # nor surface in `missing` — a malformed queue entry must not crash.
+        available = {sb for sb in (_queue_sub_bid(q) for q in queue) if sb}
+        missing = allowed - available
+        if missing:
+            print(
+                f"mage cosmetic show: unknown sub_bid "
+                f"{min(missing)!r} for feature {args.feature_id!r}",
+                file=sys.stderr,
+            )
+            return 2
+        queue = [q for q in queue if _queue_sub_bid(q) in allowed]
+    queue.sort(key=lambda q: _queue_sub_bid(q))
+    state = load_state(project_dir)
+    if getattr(args, "raw", False):
+        for q in queue:
+            sub_bid = _queue_sub_bid(q)
+            applied = state.applied.get(sub_bid)
+            status = "applied" if applied is not None else "pending"
+            print(f"[sub_bid: {sub_bid}]")
+            print(f"  scenario: {q.get('scenario_name', '—')}")
+            print(f"  location: {q.get('location') or '—'}")
+            print(f"  text: {q.get('text', '')}")
+            print(f"  proposed_by: {q.get('proposed_by', '—')}")
+            print(f"  feature_id: {q.get('feature_id', '—')}")
+            print(f"  status: {status}")
+        if getattr(args, "journal", False):
+            _render_journal_section(
+                project_dir=project_dir,
+                feature_id=args.feature_id,
+                mapping=mapping,
+            )
+        return 0
     if not queue:
         print(
             f"mage cosmetic show: no items for feature_id={args.feature_id}",
             file=sys.stderr,
         )
+        if getattr(args, "journal", False):
+            _render_journal_section(
+                project_dir=project_dir,
+                feature_id=args.feature_id,
+                mapping=mapping,
+            )
         return 0
+    from mage.agents.cosmetic_refiner import CosmeticRefiner
+
+    host_config = load_host_config(project_dir)
+    refiner = CosmeticRefiner(model=host_config.model)
+    semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     refined = await asyncio.gather(
         *[refiner.refine(q, semaphore=semaphore) for q in queue]
     )
@@ -649,21 +784,170 @@ async def cmd_cosmetic_show(args) -> int:
             f"{item.sub_bid} {fp}:{item.line_range[0]}-{item.line_range[1]} "
             f"{item.rationale}"
         )
+    if getattr(args, "journal", False):
+        _render_journal_section(
+            project_dir=project_dir,
+            feature_id=args.feature_id,
+            mapping=mapping,
+        )
     return 0
 
 
+def _render_journal_section(*, project_dir: Path, feature_id: str, mapping) -> None:
+    """Print inspect journal entries tagged with `feature_id`, newest first."""
+    by_sub = mapping.inspect_journal or {}
+    flat: list[dict] = []
+    for entries in by_sub.values():
+        for entry in entries:
+            if entry.get("feature_id") == feature_id:
+                flat.append(entry)
+    if not flat:
+        return
+    flat.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    print("## Inspect journal")
+    print(f"[count: {len(flat)}, latest first]")
+    print()
+    for entry in flat:
+        ts = entry.get("timestamp", "")
+        if hasattr(ts, "isoformat"):
+            ts = ts.isoformat()
+        print(
+            f"  {ts}  scenario={entry.get('scenario_id', '')} "
+            f" iter={entry.get('iteration', '')} "
+            f" dimension={entry.get('dimension', '')} "
+            f" severity={entry.get('severity', '')}"
+        )
+        route = entry.get("route", "")
+        finding_id = entry.get("finding_id", "")
+        if route or finding_id:
+            print(f"    route={route}  finding_id={finding_id}")
+        loc = entry.get("location") or "null"
+        print(f"    location={loc}")
+        print(f"    issue: {entry.get('issue', '')}")
+        print(f"    rationale: {entry.get('rationale', '')}")
+
+
 async def cmd_cosmetic_apply(args) -> int:
-    """CLI shim: delegate to apply_for_feature."""
+    """Apply cosmetic items to the feature branch, optionally narrowed."""
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.cosmetic_filters import FilterParseError, parse_filters
     from mage.orchestration.cosmetic_apply import apply_for_feature
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    model = getattr(args, "model", None)
+    mapping_path = project_dir / "mapping.yaml"
+    if not mapping_path.exists():
+        print(
+            f"mage cosmetic apply: no mapping found at {mapping_path}",
+            file=sys.stderr,
+        )
+        return 1
+    mapping = MappingArtifact.load(mapping_path)
+    raw_filter = getattr(args, "filter", None)
+    try:
+        filters = parse_filters(raw_filter, subcommand="cosmetic apply")
+    except FilterParseError as e:
+        print(f"mage cosmetic apply: {e.message}", file=sys.stderr)
+        return 2
+    queue = [
+        q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
+    ]
+    # Filter empty sub_bids so malformed queue entries (missing or null
+    # sub_bid) never enter the available set nor get sent to apply.
+    available = {sb for sb in (_queue_sub_bid(q) for q in queue) if sb}
+    if "sub_bid" in filters:
+        allowed = filters["sub_bid"]
+        missing = allowed - available
+        if missing:
+            print(
+                f"mage cosmetic apply: unknown sub_bid "
+                f"{min(missing)!r} for feature {args.feature_id!r}",
+                file=sys.stderr,
+            )
+            return 2
+        sub_bids = sorted(allowed)
+    else:
+        sub_bids = sorted(available)
     return await apply_for_feature(
         project_dir,
-        args.feature_id,
+        sub_bids,
         dry_run=getattr(args, "dry_run", False),
-        model=model,
+        model=getattr(args, "model", None),
+        feature_id=args.feature_id,
     )
+
+
+async def cmd_cosmetic_list(args) -> int:
+    """List cosmetic queue entries for a feature. Text or JSON output."""
+    from mage.artifacts.cosmetic_state import load_state
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.cosmetic_filters import FilterParseError, parse_filters
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    mapping_path = project_dir / "mapping.yaml"
+    if not mapping_path.exists():
+        print(
+            f"mage cosmetic list: no mapping found at {mapping_path}",
+            file=sys.stderr,
+        )
+        return 1
+    mapping = MappingArtifact.load(mapping_path)
+    state = load_state(project_dir)
+    raw_filter = getattr(args, "filter", None)
+    try:
+        filters = parse_filters(raw_filter, subcommand="cosmetic list")
+    except FilterParseError as e:
+        print(f"mage cosmetic list: {e.message}", file=sys.stderr)
+        return 2
+    queue = [
+        q for q in mapping.cosmetic_findings if q.get("feature_id") == args.feature_id
+    ]
+    if "sub_bid" in filters:
+        allowed = filters["sub_bid"]
+        # Skip empty sub_bids from `available` so malformed entries never
+        # crash the --filter validation set construction.
+        available = {sb for sb in (_queue_sub_bid(q) for q in queue) if sb}
+        missing = allowed - available
+        if missing:
+            print(
+                f"mage cosmetic list: unknown sub_bid "
+                f"{min(missing)!r} for feature {args.feature_id!r}",
+                file=sys.stderr,
+            )
+            return 2
+        queue = [q for q in queue if _queue_sub_bid(q) in allowed]
+    queue.sort(key=lambda q: _queue_sub_bid(q))
+    rows: list[dict] = []
+    for q in queue:
+        sub_bid = _queue_sub_bid(q)
+        applied_record = state.applied.get(sub_bid)
+        # `applied_at` is intentionally omitted: the state model
+        # (CosmeticApplied) does not record a timestamp, so the column
+        # could never carry a real value. Promising a column we
+        # always render as `null` would mislead readers.
+        rows.append(
+            {
+                "feature_id": args.feature_id,
+                "status": "applied" if applied_record is not None else "pending",
+                "sub_bid": sub_bid,
+                "scenario": q.get("scenario_name", ""),
+                "file": q.get("location") or None,
+            }
+        )
+    if getattr(args, "format", "text") == "json":
+        print(json.dumps({"entries": rows}))
+        return 0
+    print(
+        f"{'feature_id':<12}  {'status':<8}  "
+        f"{'sub_bid':<18}  {'scenario':<18}  {'file':<24}"
+    )
+    for row in rows:
+        file_disp = row["file"] or "—"
+        print(
+            f"{row['feature_id']:<12}  {row['status']:<8}  "
+            f"{row['sub_bid']:<18}  {row['scenario']:<18}  "
+            f"{file_disp:<24}"
+        )
+    return 0
 
 
 async def cmd_mapping_save(args) -> int:
@@ -707,6 +991,62 @@ async def cmd_cosmetic_watch(args) -> int:
 
     await watcher.run()
     return 0
+
+
+async def cmd_cosmetic_unwatch(args) -> int:
+    """Stop the cosmetic watcher daemon by PID file, with SIGTERM/SIGKILL escalation."""
+    from datetime import UTC, datetime
+
+    from mage.orchestration.cosmetic_watcher import (
+        _events_log_for,
+        _request_remote_stop,
+    )
+    from mage.orchestration.events import Event, EventType
+
+    project_dir: Path = getattr(args, "project_dir", Path.cwd())
+    path = pid_file_path(project_dir)
+    parsed = read_pid(project_dir)
+    if parsed is None:
+        print(
+            f"mage cosmetic unwatch: no watcher running for {project_dir}",
+            file=sys.stderr,
+        )
+        return 0
+    pid, start_time = parsed
+    if not is_alive_with_start(pid, start_time):
+        remove_pid(project_dir)
+        print(
+            f"mage cosmetic unwatch: removed stale pid file for pid={pid}",
+            file=sys.stderr,
+        )
+        events_log = _events_log_for(project_dir)
+        await events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.COSMETIC_WATCHER_STALE_PID_REMOVED,
+                payload={
+                    "pid_file_path": str(path),
+                    "recorded_pid": pid,
+                },
+            )
+        )
+        return 0
+    await _request_remote_stop(
+        project_dir=project_dir,
+        target_pid=pid,
+        target_start_time=start_time,
+        requester_pid=os.getpid(),
+        timeout_s=5.0,
+        force=getattr(args, "force", False),
+    )
+    if read_pid(project_dir) is None:
+        return 0
+    print(
+        "mage cosmetic unwatch: watcher did not stop after 5000ms; "
+        "pass --force to escalate",
+        file=sys.stderr,
+    )
+    return 3
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -762,10 +1102,14 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_settle_run(args)
     if args.command == "cosmetic" and args.cosmetic_command == "show":
         return await cmd_cosmetic_show(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "list":
+        return await cmd_cosmetic_list(args)
     if args.command == "cosmetic" and args.cosmetic_command == "apply":
         return await cmd_cosmetic_apply(args)
     if args.command == "cosmetic" and args.cosmetic_command == "watch":
         return await cmd_cosmetic_watch(args)
+    if args.command == "cosmetic" and args.cosmetic_command == "unwatch":
+        return await cmd_cosmetic_unwatch(args)
     if args.command == "mapping" and args.mapping_command == "save":
         return await cmd_mapping_save(args)
     parser.print_help()

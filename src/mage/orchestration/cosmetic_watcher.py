@@ -14,15 +14,187 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import signal
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
+from mage.cosmetic_pid import is_alive_with_start, pid_file_path, remove_pid, write_pid
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_pid_path(project_dir: Path) -> str | None:
+    """Return the canonical PID file path string; None if write would fail."""
+    try:
+        return str(write_pid(project_dir, os.getpid()))
+    except OSError:
+        return None
+
+
+async def _request_remote_stop(
+    *,
+    project_dir: Path,
+    target_pid: int,
+    target_start_time: int | None,
+    requester_pid: int,
+    timeout_s: float,
+    force: bool,
+) -> bool:
+    """Signal a remote watcher to stop. Returns True on success, False on hard timeout.
+
+    Liveness is verified via ``is_alive_with_start`` so a SIGKILL can
+    never land on a different process that has reused the recorded PID.
+    On success, the PID file is removed (either because the watcher
+    removed it as part of its shutdown or because the target died).
+    Emits audit events into `<project_dir>/events.jsonl` (best-effort).
+
+    Every audit event in this routine uses a single monotonic clock
+    (``start`` at function entry) so the elapsed_ms in the audit log
+    reflects actual wall time at the moment the terminal decision was
+    made. The SIGKILL branch starts a fresh monotonic when SIGKILL
+    is dispatched so the SIGKILL_TIMEOUT escalation reports the
+    SIGKILL-window elapsed, not the cumulative SIGTERM+SIGKILL time.
+    """
+    log_path = project_dir / "events.jsonl"
+    log: EventsLog | None = None
+    if log_path.parent.exists():
+        log = EventsLog(log_path)
+
+    async def _emit(event_type: EventType, payload: dict) -> None:
+        if log is None:
+            return
+        await log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=event_type,
+                payload=payload,
+            )
+        )
+
+    start = time.monotonic()
+
+    def _elapsed_ms() -> int:
+        return int((time.monotonic() - start) * 1000)
+
+    await _emit(
+        EventType.COSMETIC_WATCHER_REMOTE_STOP_REQUESTED,
+        {
+            "requester_pid": requester_pid,
+            "target_pid": target_pid,
+            "project_dir": str(project_dir),
+        },
+    )
+    path = pid_file_path(project_dir)
+
+    async def _wait_for_deadline(deadline: float) -> bool:
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.05)
+            if (
+                not is_alive_with_start(target_pid, target_start_time)
+                or not path.exists()
+            ):
+                return True
+        return (
+            not is_alive_with_start(target_pid, target_start_time) or not path.exists()
+        )
+
+    try:
+        sigterm_deadline = asyncio.get_event_loop().time() + timeout_s
+        try:
+            os.kill(target_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": _elapsed_ms(),
+                },
+            )
+            return True
+        if await _wait_for_deadline(sigterm_deadline):
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": _elapsed_ms(),
+                },
+            )
+            return True
+        if not force:
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_ESCALATED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "escalation": "SIGTERM_TIMEOUT",
+                    "duration_ms": _elapsed_ms(),
+                },
+            )
+            return False
+        try:
+            os.kill(target_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": _elapsed_ms(),
+                },
+            )
+            return True
+        # Fresh monotonic for the SIGKILL window so SIGKILL_TIMEOUT
+        # reports the time spent waiting on SIGKILL alone, not the
+        # SIGTERM+SIGKILL cumulative elapsed.
+        sigkill_start = time.monotonic()
+        sigkill_deadline = asyncio.get_event_loop().time() + timeout_s
+        if await _wait_for_deadline(sigkill_deadline):
+            if path.exists():
+                remove_pid(project_dir)
+            await _emit(
+                EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
+                {
+                    "requester_pid": requester_pid,
+                    "target_pid": target_pid,
+                    "duration_ms": int((time.monotonic() - sigkill_start) * 1000),
+                },
+            )
+            return True
+        await _emit(
+            EventType.COSMETIC_WATCHER_REMOTE_STOP_ESCALATED,
+            {
+                "requester_pid": requester_pid,
+                "target_pid": target_pid,
+                "escalation": "SIGKILL_TIMEOUT",
+                "duration_ms": int((time.monotonic() - sigkill_start) * 1000),
+            },
+        )
+        return False
+    finally:
+        # No SIGTERM handler installed in production; the SIGTERM
+        # signal flows to whatever is bound (typically the test runner
+        # or the orchestrator). See the test suite for the test-side
+        # helper that intercepts SIGTERM in this process.
+        pass
+
+
+def _events_log_for(project_dir: Path) -> EventsLog:
+    """Return an EventsLog for `<project_dir>/events.jsonl`."""
+    return EventsLog(project_dir / "events.jsonl")
 
 
 class MappingArtifactWatcher:
@@ -30,7 +202,7 @@ class MappingArtifactWatcher:
 
     Tails `events.jsonl` via file-size polling. On each `MAPPING_SAVED`,
     diffs the new `feature_cosmetic_queue` against the last seen snapshot,
-    then calls `apply_for_feature` per feature_id with new entries.
+    then calls `apply_for_feature` per feature_id with the new sub_bids.
 
     `stop()` is the only way to terminate `run()` cleanly. The daemon
     emits `COSMETIC_WATCHER_STARTED` on entry and `COSMETIC_WATCHER_STOPPED`
@@ -56,7 +228,7 @@ class MappingArtifactWatcher:
         self._last_seen: dict[str, frozenset[str]] = {}
 
     def stop(self) -> None:
-        """Request graceful shutdown."""
+        """Request graceful shutdown. Removes PID file (best-effort)."""
         self._stop = True
 
     async def run(self) -> None:
@@ -76,6 +248,8 @@ class MappingArtifactWatcher:
                 payload={
                     "project_dir": str(self.project_dir),
                     "poll_interval_ms": self.poll_interval_ms,
+                    "pid": os.getpid(),
+                    "pid_file_path": _safe_pid_path(self.project_dir),
                 },
             )
         )
@@ -109,11 +283,15 @@ class MappingArtifactWatcher:
                         continue
                     await self._handle_mapping_saved()
         finally:
+            removed = remove_pid(self.project_dir)
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.COSMETIC_WATCHER_STOPPED,
-                    payload={"project_dir": str(self.project_dir)},
+                    payload={
+                        "project_dir": str(self.project_dir),
+                        "pid_file_removed": removed,
+                    },
                 )
             )
 
@@ -146,7 +324,13 @@ class MappingArtifactWatcher:
             new_entries = sub_bids - self._last_seen.get(fid, frozenset())
             if not new_entries:
                 continue
-            rc = await apply_for_feature(self.project_dir, fid)
+            # Pass feature_id so apply_for_feature narrows the queue
+            # by the loop's current feature_id. Without this narrowing,
+            # a sub_bid that exists in another feature would also be
+            # picked up here.
+            rc = await apply_for_feature(
+                self.project_dir, list(new_entries), feature_id=fid
+            )
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),
