@@ -33,6 +33,31 @@ if TYPE_CHECKING:
     from mage.orchestration.runner import FeatureRunner
 
 
+def _resolve_feature_id(args: argparse.Namespace) -> str:
+    """Return a non-empty feature_id string, or "" if --feature-id was omitted.
+
+    Rejects empty/whitespace-only values when the flag is explicitly passed.
+    Distinguishes "not passed" (`None`) from "passed empty" (rejected) via
+    argparse's `default=None`.
+
+    On rejection, prints the error to stderr and exits with code 2. This
+    matches the existing `cmd_run` error convention at the top-level guard
+    (cli.py:520-522) where validation failures surface via
+    `print(..., file=sys.stderr); sys.exit(2)` rather than `argparse.error`,
+    since the parser object is not held in scope at command-dispatch time.
+    """
+    value = getattr(args, "feature_id", None)
+    if value is None:
+        return ""
+    if not value.strip():
+        print(
+            "mage run: error: --feature-id cannot be empty or whitespace",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
@@ -79,6 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
     run_parser.add_argument("--dry-run", action="store_true", help="Use stub agents")
     run_parser.add_argument("--model", help="Override the LLM model identifier")
+    run_parser.add_argument(
+        "--feature-id",
+        default=None,
+        help=(
+            "Tag this run with a feature_id for downstream correlation "
+            "(cosmetic queue, inspect journal). Empty or whitespace-only values "
+            "rejected."
+        ),
+    )
 
     # mage review <subcommand>
     review_parser = subparsers.add_parser("review", help="Review operations")
