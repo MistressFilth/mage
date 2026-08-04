@@ -37,6 +37,21 @@ edits and commits each one. `--dry-run` refines and emits audit events
 persisted at `.haileris/cosmetic_applied.yaml` so re-runs skip sub_bids whose
 content hash matches the prior apply; a different hash re-applies.
 
+### Cosmetic queue control
+
+The cosmetic queue can now be inspected and controlled directly.
+
+| Command | Purpose |
+|---|---|
+| `mage cosmetic watch` | Long-running daemon; writes a PID file at `<project>/.mage/cosmetic_watcher.pid`. |
+| `mage cosmetic unwatch` | Stop the daemon via the PID file (SIGTERM, escalate with `--force`). |
+| `mage cosmetic list <feature_id>` | Row-per-entry table of pending cosmetic items; `--format json`. |
+| `mage cosmetic show <feature_id>` | Refined output (LLM). `--raw` skips the LLM. `--journal` adds the inspect journal for the same feature. |
+| `mage cosmetic apply <feature_id>` | Apply pending items to disk; `--filter sub_bid=...` narrows. |
+
+All four commands (except `watch`) accept repeatable `--filter sub_bid=<sub_bid>` to narrow the
+queue to a literal sub_bid set.
+
 ## Plan approval
 
 When `HostConfig.require_plan_approval=True` (in `.haileris/config.yaml`), the
