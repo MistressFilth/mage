@@ -376,7 +376,7 @@ def _make_dry_run_runner(
     )
 
 
-def _make_dry_run_stages(log, host_config):
+def _make_dry_run_stages(log, host_config, *, feature_id: str = ""):
     """Build the full pipeline stages list in --dry-run mode.
 
     Real-agent stages (decomposition, inscribe, inspect_feature,
@@ -387,7 +387,7 @@ def _make_dry_run_stages(log, host_config):
     """
     from mage.orchestration.automation import AutomationStage
 
-    runner = _make_dry_run_runner(log, host_config)
+    runner = _make_dry_run_runner(log, host_config, feature_id=feature_id)
     return [
         _StubStageNode(log, "decomposition"),
         _StubStageNode(log, "inscribe"),
@@ -514,6 +514,9 @@ async def cmd_run(args):
     log = EventsLog(project_dir / "events.jsonl")
     state_dir = project_dir / ".haileris" / "state"
 
+    # Plan 22: feature_id tag-only threading.
+    feature_id = _resolve_feature_id(args)
+
     mapping_path = project_dir / "mapping.yaml"
     if mapping_path.exists():
         # Brief had MappingArtifact.load(mapping_path, log) but the actual
@@ -526,13 +529,21 @@ async def cmd_run(args):
 
     persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
     saved = persistence.load_state()
-    initial_context = saved or PipelineContext(
-        project_dir=project_dir,
-        mapping=mapping,
-        events_log=log,
-        plan_path=project_dir / "plan.md",
-        iteration=0,
-    )
+    if saved is not None:
+        # Tag-only: rebadge saved state if --feature-id was explicitly passed.
+        if feature_id:
+            initial_context = saved.model_copy(update={"feature_id": feature_id})
+        else:
+            initial_context = saved
+    else:
+        initial_context = PipelineContext(
+            project_dir=project_dir,
+            mapping=mapping,
+            events_log=log,
+            plan_path=project_dir / "plan.md",
+            iteration=0,
+            feature_id=feature_id,
+        )
 
     host_config = load_host_config(project_dir)
     if getattr(args, "model", None):
@@ -544,7 +555,9 @@ async def cmd_run(args):
     # host_config.model is set. `--dry-run` on `mage run` is a no-op kept
     # for backward compatibility; the same flag still controls whether
     # `mage cosmetic apply` writes files / commits.
-    stages = _make_dry_run_stages(log, host_config)
+    stages = _make_dry_run_stages(
+        log, host_config, feature_id=initial_context.feature_id
+    )
 
     graph = PipelineGraph(stages=stages, events_log=log)
     try:
