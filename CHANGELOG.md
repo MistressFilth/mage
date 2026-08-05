@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format follows
   `COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED`,
   `COSMETIC_WATCHER_REMOTE_STOP_ESCALATED`,
   `COSMETIC_WATCHER_STALE_PID_REMOVED`.
+- Static-guard test (`tests/unit/test_static_guards_event_payload_keys.py`)
+  pinning the `EventType.MAPPING_SAVED` payload-key set in code. Closes the
+  Plan 19 deferred follow-up (TODO.md:46).
 
 ### Changed
 
