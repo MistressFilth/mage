@@ -102,6 +102,7 @@ def _write_behaviors_yaml(project_dir: Path, feature_id: str = "feat-1") -> Path
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     },
                 ],
             }
@@ -133,6 +134,7 @@ async def test_inscribe_stage_runs_end_to_end_with_test_model(
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -191,6 +193,7 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -210,6 +213,7 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -301,6 +305,7 @@ async def test_per_scenario_halt_sibling_continues(tmp_path) -> None:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -320,6 +325,7 @@ async def test_per_scenario_halt_sibling_continues(tmp_path) -> None:
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -442,6 +448,7 @@ async def test_existing_scenarios_uses_scenario_name_and_gherkin(
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -469,6 +476,7 @@ async def test_existing_scenarios_uses_scenario_name_and_gherkin(
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -508,18 +516,19 @@ async def test_existing_scenarios_uses_scenario_name_and_gherkin(
 
 
 @pytest.mark.asyncio
-async def test_existing_scenarios_falls_back_to_empty_for_old_data(
+async def test_existing_scenarios_rejects_pre_migration_shape(
     tmp_path,
 ) -> None:
-    """Pre-migration ScenarioEntry with no scenario_name/gherkin_body —
-    the agent receives empty strings, not the sub_bid placeholder."""
-    from mage.agents.inscribe import InscribeAgent
-    from mage.orchestration.events import EventsLog
-    from mage.orchestration.inscribe import InscribeStage
+    """Plan 25 hard-cutover: a mapping.yaml that omits the now-required
+    scenario_name/gherkin_body fields must fail to load. No backward-compat.
+
+    Replaces `test_existing_scenarios_falls_back_to_empty_for_old_data` (v0.6.0).
+    """
+    from pydantic import ValidationError
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
-    log = EventsLog(project_dir / "events.jsonl")
+    EventsLog(project_dir / "events.jsonl")  # ensure file path resolves (smoke)
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
@@ -534,62 +543,37 @@ async def test_existing_scenarios_falls_back_to_empty_for_old_data(
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
         )
     )
 
-    # Pre-migration shape: only the legacy fields.
-    mapping = MappingArtifact.model_validate(
-        {
-            "project_id": "p",
-            "base_bids": [
-                {
-                    "base_bid": "00000",
-                    "behavior_name": "authenticate-user",
-                    "behavior_description": "User logs in",
-                    "depends_on": [],
-                    "notes": "",
-                    "scenarios": [
-                        {
-                            "sub_bid": "00000-0",
-                            "scenario_text_hash": "deadbeef",
-                            "lifecycle_status": "approved",
-                        }
-                    ],
-                    "reversion_log": [],
-                    "post_live_revisions": [],
-                    "cross_behavior_links": [],
-                }
-            ],
-        }
-    )
-    await mapping.save(project_dir / "mapping.yaml")
-
-    context = PipelineContext(
-        project_dir=project_dir,
-        mapping=mapping,
-        events_log=log,
-        plan_path=project_dir / "plan.md",
-    )
-
-    captured: dict = {}
-
-    class CaptureAgent(InscribeAgent):
-        async def run(self, *, behavior, existing_scenarios, mapping, **_):
-            captured["existing_scenarios"] = existing_scenarios
-            from mage.agents.inscribe import InscribeOutput
-
-            return InscribeOutput(scenarios=[])
-
-    host_config = HostConfig(max_iterations=1)
-    stage = InscribeStage(
-        events_log=log,
-        agent=CaptureAgent(model=TestModel(custom_output_args=None)),
-        host_config=host_config,
-        reviewers=[],
-    )
-    await stage.run(context)
-
-    assert captured["existing_scenarios"] == [{"name": "", "gherkin_body": ""}]
+    # Pre-migration shape: only the legacy fields. Must raise.
+    with pytest.raises(ValidationError):
+        MappingArtifact.model_validate(
+            {
+                "project_id": "p",
+                "base_bids": [
+                    {
+                        "base_bid": "00000",
+                        "behavior_name": "authenticate-user",
+                        "behavior_description": "User logs in",
+                        "depends_on": [],
+                        "notes": "",
+                        "scenarios": [
+                            {
+                                "sub_bid": "00000-0",
+                                "scenario_text_hash": "deadbeef",
+                                "lifecycle_status": "approved",
+                            }
+                        ],
+                        "reversion_log": [],
+                        "post_live_revisions": [],
+                        "cross_behavior_links": [],
+                        "behavior_halt": [],
+                    }
+                ],
+            }
+        )

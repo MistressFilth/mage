@@ -12,6 +12,8 @@ def _make_scenario_entry(
 ) -> ScenarioEntry:
     return ScenarioEntry(
         sub_bid="00000-001",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="abc123",
         lifecycle_status=LifecycleStatus.APPROVED,
         supersedes=supersedes,
@@ -32,6 +34,8 @@ def test_scenario_entry_defaults_feature_id_to_none():
     """Legacy callers / legacy YAML produce feature_id=None (no raise)."""
     entry = ScenarioEntry(
         sub_bid="00000-001",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="abc123",
         lifecycle_status=LifecycleStatus.APPROVED,
     )
@@ -39,7 +43,12 @@ def test_scenario_entry_defaults_feature_id_to_none():
 
 
 def test_mapping_artifact_loads_legacy_base_bids_without_feature_id(tmp_path: Path):
-    """A YAML that omits `feature_id` on a ScenarioEntry loads with None."""
+    """A YAML that omits `feature_id` on a ScenarioEntry loads with None.
+
+    Plan 25 hard-cutover: the YAML carries the now-required
+    scenario_name/gherkin_body/behavior_halt fields; only `feature_id`
+    is allowed to be omitted (legacy default `None`).
+    """
     yaml_text = (
         "schema_version: 2\n"
         "project_id: legacy\n"
@@ -51,6 +60,8 @@ def test_mapping_artifact_loads_legacy_base_bids_without_feature_id(tmp_path: Pa
         "    notes: ''\n"
         "    scenarios:\n"
         "      - sub_bid: '00000-001'\n"
+        "        scenario_name: legacy\n"
+        "        gherkin_body: 'Scenario: legacy\\n  Given x\\n'\n"
         "        scenario_text_hash: abc\n"
         "        lifecycle_status: approved\n"
         "        supersedes: null\n"
@@ -60,6 +71,7 @@ def test_mapping_artifact_loads_legacy_base_bids_without_feature_id(tmp_path: Pa
         "    reversion_log: []\n"
         "    post_live_revisions: []\n"
         "    cross_behavior_links: []\n"
+        "    behavior_halt: []\n"
     )
     path = tmp_path / "mapping.yaml"
     path.write_text(yaml_text)

@@ -164,6 +164,8 @@ def test_e2e_settle_emits_supersession_for_supersede_scenario(tmp_path: Path) ->
                 "scenarios": [
                     {
                         "sub_bid": "00000-001",
+                        "scenario_name": "scn",
+                        "gherkin_body": "Scenario: scn\n  Given x\n",
                         "scenario_text_hash": "abc",
                         "lifecycle_status": "approved",
                         "supersedes": "old-Y",
@@ -176,6 +178,7 @@ def test_e2e_settle_emits_supersession_for_supersede_scenario(tmp_path: Path) ->
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     }
