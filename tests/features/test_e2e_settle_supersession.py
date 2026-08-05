@@ -54,7 +54,7 @@ def _seed_project(project: Path) -> None:
     )
     (project / "behaviors.yaml").write_text("behaviors: []\n")
     (project / "plan.md").write_text("# plan\n")
-    (project / ".haileris").mkdir(exist_ok=True)
+    (project / ".mage").mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.email", "e2e@mage"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.name", "e2e"], cwd=project, check=True)

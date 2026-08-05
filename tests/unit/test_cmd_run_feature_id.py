@@ -22,7 +22,7 @@ def _save_pipeline_state(project: Path, feature_id: str) -> None:
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
 
-    state_dir = project / ".haileris" / "state"
+    state_dir = project / ".mage" / "state"
     state_dir.mkdir(parents=True)
     saved = PipelineContext(
         project_dir=project,

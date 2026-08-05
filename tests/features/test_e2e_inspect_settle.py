@@ -103,7 +103,7 @@ class TestE2EInspectSettle:
         assert "settle_cosmetic_queued" in types
 
         # Verify report file
-        report = (tmp_path / ".haileris" / "settle" / "feat-1.md").read_text()
+        report = (tmp_path / ".mage" / "settle" / "feat-1.md").read_text()
         assert "feat-1" in report
         assert "kept" in report
 

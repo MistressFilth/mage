@@ -564,7 +564,7 @@ async def test_graph_stops_on_scenario_inspect_halted(tmp_path):
     assert saved.feature_status == "halted"
     # State was persisted.
     state = FileStatePersistence(
-        state_dir=tmp_path / ".haileris" / "state",
+        state_dir=tmp_path / ".mage" / "state",
         state_type=PipelineContext,
     ).load_state()
     assert state is not None

@@ -15,7 +15,7 @@ def _write_minimal_project(project: Path) -> None:
     (project / "mapping.yaml").write_text(
         "schema_version: 2\nproject_id: e2e\nbase_bids: []\n"
     )
-    (project / ".haileris").mkdir(exist_ok=True)
+    (project / ".mage").mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.email", "e2e@mage"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.name", "e2e"], cwd=project, check=True)

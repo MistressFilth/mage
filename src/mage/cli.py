@@ -512,7 +512,7 @@ async def cmd_run(args):
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
-    state_dir = project_dir / ".haileris" / "state"
+    state_dir = project_dir / ".mage" / "state"
 
     # Plan 22: feature_id tag-only threading.
     feature_id = _resolve_feature_id(args)
@@ -626,7 +626,7 @@ async def cmd_inspect_show(args):
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
-    inspect_dir = project_dir / ".haileris" / "inspect" / args.feature_id
+    inspect_dir = project_dir / ".mage" / "inspect" / args.feature_id
     if not inspect_dir.exists():
         print(f"No inspect directory for feature {args.feature_id!r}", file=sys.stderr)
         return 1

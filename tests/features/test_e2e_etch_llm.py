@@ -9,7 +9,7 @@ def _write_minimal_project(project: Path) -> None:
     (project / "mapping.yaml").write_text(
         "schema_version: 1\nproject_id: e2e\nbase_bids: []\n"
     )
-    (project / ".haileris").mkdir(exist_ok=True)
+    (project / ".mage").mkdir(exist_ok=True)
 
 
 def test_e2e_etch_stage_with_real_llm_wiring(tmp_path):

@@ -43,7 +43,7 @@ Discard requires typing `discard` to confirm.
 prints the planned file edits. `mage cosmetic apply <feature-id>` writes the
 edits and commits each one. `--dry-run` refines and emits audit events
 (`COSMETIC_ITEM_SKIPPED`) without touching files or creating commits. State is
-persisted at `.haileris/cosmetic_applied.yaml` so re-runs skip sub_bids whose
+persisted at `.mage/cosmetic_applied.yaml` so re-runs skip sub_bids whose
 content hash matches the prior apply; a different hash re-applies.
 
 ### Cosmetic queue control
@@ -63,7 +63,7 @@ queue to a literal sub_bid set.
 
 ## Plan approval
 
-When `HostConfig.require_plan_approval=True` (in `.haileris/config.yaml`), the
+When `HostConfig.require_plan_approval=True` (in `.mage/config.yaml`), the
 decomposition stage halts after rendering `plan.md` and waits for an operator
 to clear the gate before the plan is finalized. Two events mark the boundary:
 
@@ -96,7 +96,7 @@ the marker.
 Automated runs should disable the gate at the host config:
 
 ```yaml
-# .haileris/config.yaml
+# .mage/config.yaml
 host_config:
   require_plan_approval: false
 ```

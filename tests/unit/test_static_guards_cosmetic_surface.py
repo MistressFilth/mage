@@ -80,7 +80,6 @@ def test_no_todo_markers_in_changed_files(repo_root: Path) -> None:
         text = (repo_root / sub).read_text()
         for marker in ("TODO(", "FIXME", "XXX"):
             assert marker not in text, f"{sub} contains {marker}"
-        assert "haileris_v2" not in text
 
 
 def test_unwatch_branches_emit_or_exit() -> None:
