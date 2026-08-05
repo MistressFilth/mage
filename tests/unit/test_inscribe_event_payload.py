@@ -39,7 +39,7 @@ def _seed_project(tmp_path: Path) -> Path:
             }
         )
     )
-    (project / ".haileris").mkdir(exist_ok=True)
+    (project / ".mage").mkdir(exist_ok=True)
     return project
 
 

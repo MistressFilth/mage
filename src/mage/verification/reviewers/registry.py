@@ -89,7 +89,7 @@ def aggregate_verdicts(
             any_fail = True
         per_dimension[dimension] = DimensionSummary(
             outcome=verdict.outcome,
-            reviewer_verdict_ref=f".haileris/verdicts/{verdict.draft_hash}/{verdict.dimension}.yaml",
+            reviewer_verdict_ref=f".mage/verdicts/{verdict.draft_hash}/{verdict.dimension}.yaml",
             findings_count=len(verdict.findings),
         )
 

@@ -31,6 +31,7 @@ All notable changes to this project are documented here. The format follows
   graceful shutdown. The `COSMETIC_WATCHER_STARTED` event payload gains
   `pid` and `pid_file_path`; `COSMETIC_WATCHER_STOPPED` gains
   `pid_file_removed`.
+- Runtime state directory renamed from `.haileris/` to `.mage/`. Existing host projects must rename the directory on disk themselves (or delete `.haileris/` and let mage rebuild state under `.mage/` on next run). No automatic migration.
 
 ### Removed
 

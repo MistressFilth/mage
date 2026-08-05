@@ -209,7 +209,7 @@ class InscribeStage(StageNode):
 
                     # C3: verdicts keyed by draft_hash (not iteration) so the
                     # aggregate's reviewer_verdict_ref paths resolve.
-                    verdicts_dir = project_dir / ".haileris" / "verdicts" / draft_hash
+                    verdicts_dir = project_dir / ".mage" / "verdicts" / draft_hash
                     verdicts_dir.mkdir(parents=True, exist_ok=True)
 
                     # C2: honor HostConfig.enabled_reviewers (the host-project
@@ -258,7 +258,7 @@ class InscribeStage(StageNode):
                     per_dimension_verdicts = dict(results)
 
                     # Aggregate (registry builds reviewer_verdict_ref as
-                    # `.haileris/verdicts/{draft_hash}/{dimension}.yaml`).
+                    # `.mage/verdicts/{draft_hash}/{dimension}.yaml`).
                     aggregate = aggregate_verdicts(
                         per_dimension_verdicts, iteration=iteration
                     )

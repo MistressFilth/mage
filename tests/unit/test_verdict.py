@@ -103,7 +103,7 @@ def test_dimension_summary():
 
     s = DimensionSummary(
         outcome="pass",
-        reviewer_verdict_ref=".haileris/verdicts/abc/spec_compliance.yaml",
+        reviewer_verdict_ref=".mage/verdicts/abc/spec_compliance.yaml",
         findings_count=0,
     )
     assert s.outcome == "pass"
@@ -172,7 +172,7 @@ async def test_verdict_artifact_finalize_writes_yaml_and_emits_event(tmp_path):
         reviewed_at=datetime.now(UTC),
         reviewer_id="spec_compliance@v1",
     )
-    path = tmp_path / ".haileris" / "verdicts" / "abc" / "spec_compliance.yaml"
+    path = tmp_path / ".mage" / "verdicts" / "abc" / "spec_compliance.yaml"
     digest = await VerdictArtifact.finalize(path, verdict, log)
 
     assert path.exists()

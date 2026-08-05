@@ -76,11 +76,11 @@ def default_host_config() -> HostConfig:
 
 
 def load_host_config(project_dir: Path) -> HostConfig:
-    """Load host config from `<project_dir>/.haileris/config.yaml`.
+    """Load host config from `<project_dir>/.mage/config.yaml`.
 
     Falls back to defaults if the file doesn't exist.
     """
-    config_path = Path(project_dir) / ".haileris" / "config.yaml"
+    config_path = Path(project_dir) / ".mage" / "config.yaml"
     if not config_path.exists():
         return HostConfig()
     data = yaml.safe_load(config_path.read_text()) or {}

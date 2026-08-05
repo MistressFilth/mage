@@ -149,7 +149,7 @@ async def test_halt_and_resume_cycle(tmp_path):
     assert len(halt_events) == 1
 
     # State persisted
-    state_dir = project_dir / ".haileris" / "state"
+    state_dir = project_dir / ".mage" / "state"
     assert any(state_dir.iterdir()) if state_dir.exists() else False
 
     # External edit of plan.md

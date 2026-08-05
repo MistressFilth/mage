@@ -115,7 +115,7 @@ class PipelineGraph:
             except StageHalted as e:
                 # Plan 15 approval gate halt. Emit HALT_PERSISTED with the
                 # carried reason, save mapping in halted state, exit cleanly.
-                # No .haileris/state write — the marker file is the persistence.
+                # No .mage/state write — the marker file is the persistence.
                 context.mapping = context.mapping.model_copy(
                     update={"feature_status": "halted"}
                 )
@@ -179,7 +179,7 @@ class PipelineGraph:
         )
         await context.events_log.append(halt_event)
 
-        state_dir = context.project_dir / ".haileris" / "state"
+        state_dir = context.project_dir / ".mage" / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
         persistence = FileStatePersistence(
             state_dir=state_dir, state_type=PipelineContext

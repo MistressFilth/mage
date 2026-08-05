@@ -100,7 +100,7 @@ class SettleFeatureStage(StageNode):
 
     @staticmethod
     def _latest_inspect_path(project_dir: Path, feature_id: str) -> Path:
-        inspect_dir = project_dir / ".haileris" / "inspect" / feature_id
+        inspect_dir = project_dir / ".mage" / "inspect" / feature_id
         if not inspect_dir.exists():
             raise SettleNotReadyError(
                 f"No InspectArtifact directory for feature {feature_id!r}"
@@ -489,7 +489,7 @@ class SettleFeatureStage(StageNode):
                 f"expected one of {sorted(_VALID_DISPOSITIONS)}"
             )
 
-        report_path = context.project_dir / ".haileris" / "settle" / f"{feature_id}.md"
+        report_path = context.project_dir / ".mage" / "settle" / f"{feature_id}.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         await self._load_ready_inspect(context, feature_id)
 

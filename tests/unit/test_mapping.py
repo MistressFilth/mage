@@ -294,7 +294,7 @@ class TestPlan4MappingMethods:
 
         m = MappingArtifact(project_id="p1")
         ref = InspectArtifactRef(
-            inspect_path=".haileris/inspect/feat-1/1.yaml",
+            inspect_path=".mage/inspect/feat-1/1.yaml",
             inspect_sha256="abc",
             finalized_at=datetime.now(UTC),
         )

@@ -99,7 +99,7 @@ class TestCosmeticFinding:
 class TestInspectArtifactRef:
     def test_constructs_with_digest(self):
         ref = InspectArtifactRef(
-            inspect_path=".haileris/inspect/feat-1/1.yaml",
+            inspect_path=".mage/inspect/feat-1/1.yaml",
             inspect_sha256="abc123",
             finalized_at=datetime.now(UTC),
         )
