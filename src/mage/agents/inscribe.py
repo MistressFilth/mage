@@ -77,7 +77,7 @@ class InscribeAgent:
         self,
         *,
         behavior: BaseBIDEntry,
-        existing_scenarios: list,
+        existing_scenarios: list[dict[str, str]],
         mapping: MappingArtifact,
     ) -> InscribeOutput:
         existing_str = (

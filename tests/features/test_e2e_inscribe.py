@@ -451,11 +451,6 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     - scenario-B survives the halt intact (already APPROVED, never re-drafted)
     - existing_scenarios on resume carries scenario-B's real name + body
     - scenario-A approves on resume; final mapping has both approved
-
-    TODO(plan-25-followup): remove the `DraftingAgent` override once the fix
-    for the agent's prompt-formatter is verified end-to-end without bypass.
-    The override currently captures existing_scenarios and supplies deterministic
-    drafts for both runs.
     """
     from mage.artifacts.mapping import ScenarioEntry
     from mage.artifacts.verdict import VerdictArtifact
@@ -557,8 +552,15 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     captured: dict = {}
 
     class DraftingAgent(InscribeAgent):
-        """Bypass parent's attribute access on dicts; capture
-        existing_scenarios on resume for the I2 assertion."""
+        """Capture `existing_scenarios` on each run for the I2 assertion.
+
+        The parent's prompt-formatter no longer relies on attribute access
+        (it uses ``.get('name', '')``), so bypassing it is unnecessary for
+        that reason. The override remains solely to record the
+        ``existing_scenarios`` payload the stage passes in, so the test can
+        assert that scenario-B's real ``name`` + ``gherkin_body`` reach the
+        agent on resume.
+        """
 
         async def run(self, *, behavior, existing_scenarios, mapping, **_):
             captured.setdefault("calls", []).append(list(existing_scenarios))
