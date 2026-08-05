@@ -452,13 +452,10 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     - existing_scenarios on resume carries scenario-B's real name + body
     - scenario-A approves on resume; final mapping has both approved
 
-    Note: we override `InscribeAgent.run` rather than invoke the production
-    path because the production run accesses `.name`/`.gherkin_body` as
-    attributes on `existing_scenarios` elements, but the stage passes
-    `existing_scenarios` as a list of dicts (Plan 25 I2 fix). The override
-    mirrors the pattern in `tests/unit/test_inscribe_stage.py` for tests
-    that pre-populate ScenarioEntry. The InscribeStage under test is the
-    real production code.
+    TODO(plan-25-followup): remove the `DraftingAgent` override once the fix
+    for the agent's prompt-formatter is verified end-to-end without bypass.
+    The override currently captures existing_scenarios and supplies deterministic
+    drafts for both runs.
     """
     from mage.artifacts.mapping import ScenarioEntry
     from mage.artifacts.verdict import VerdictArtifact
@@ -648,6 +645,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     final_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
     final_target = next(e for e in final_mapping.base_bids if e.base_bid == "00000")
     final_names = {s.scenario_name for s in final_target.scenarios}
+    assert len(final_target.scenarios) == 2
     assert final_names == {"scenario-A", "scenario-B"}
     assert all(
         s.lifecycle_status == LifecycleStatus.APPROVED for s in final_target.scenarios
