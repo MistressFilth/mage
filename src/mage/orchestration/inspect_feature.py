@@ -250,7 +250,7 @@ class InspectFeatureStage:
         }
         verdict_path = (
             context.project_dir
-            / ".haileris"
+            / ".mage"
             / "verdicts"
             / feature_id
             / sub_bid
@@ -345,7 +345,7 @@ class InspectFeatureStage:
                 events_log=self.events_log,
                 verdict_path=(
                     context.project_dir
-                    / ".haileris"
+                    / ".mage"
                     / "verdicts"
                     / feature_id
                     / f"{reviewer.dimension}.yaml"
@@ -537,7 +537,7 @@ class InspectFeatureStage:
         )
         artifact_path = (
             context.project_dir
-            / ".haileris"
+            / ".mage"
             / "inspect"
             / feature_id
             / f"{iteration}.yaml"

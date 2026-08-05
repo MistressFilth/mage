@@ -9,7 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 _STATE_FILENAME = "cosmetic_applied.yaml"
-_STATE_DIR = ".haileris"
+_STATE_DIR = ".mage"
 
 
 class CosmeticApplied(BaseModel):
