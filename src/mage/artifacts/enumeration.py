@@ -169,6 +169,7 @@ async def enumerate_behaviors(
             depends_on=resolved_depends,
             notes=spec.notes,
             cross_behavior_links=resolved_cross,
+            behavior_halt=[],
         )
         entries.append(entry)
         current = current.increment()
