@@ -34,6 +34,7 @@ All notable changes to this project are documented here. The format follows
 - `make verify-repository` target, `scripts/verify_repository.py`, and `tests/unit/test_verify_repository.py`. Repository rule enforcement is external to this project.
 - `tests/unit/test_repository_compliance.py` and the pytest collection shim in `tests/conftest.py`.
 - Tracked design and plan documents at `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md` and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
+- README.md links to `docs/superpowers/specs/` and `docs/superpowers/plans/` (intro paragraph and Repository status section). The tree was retired on 2026-07-30 (commit `9151fea`); the README still pointed at it. Specs and plans live alongside the repo in the operator's project-notes directory; shipped work is documented in this changelog.
 
 ## [0.4.1] - 2026-08-04
 
