@@ -40,7 +40,10 @@ async def test_assign_bids_continues_from_existing_mapping():
     from mage.artifacts.mapping import BaseBIDEntry
 
     existing = BaseBIDEntry(
-        base_bid="00004", behavior_name="seed", behavior_description="seed"
+        base_bid="00004",
+        behavior_name="seed",
+        behavior_description="seed",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="p", base_bids=[existing])
     specs = [_spec("auth"), _spec("orders")]
@@ -129,7 +132,10 @@ async def test_cross_behavior_link_to_existing_behavior():
     from mage.artifacts.mapping import BaseBIDEntry
 
     existing = BaseBIDEntry(
-        base_bid="00010", behavior_name="payments", behavior_description="payments"
+        base_bid="00010",
+        behavior_name="payments",
+        behavior_description="payments",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="p", base_bids=[existing])
     specs = [_spec("checkout", cross=["payments"])]

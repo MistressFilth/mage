@@ -16,6 +16,8 @@ def _scenario(
 ) -> ScenarioEntry:
     return ScenarioEntry(
         sub_bid=sub_bid,
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="h",
         lifecycle_status=status,
         supersedes=supersedes,
@@ -31,6 +33,7 @@ def _mapping(scenarios: list[ScenarioEntry]) -> MappingArtifact:
                 behavior_name="b",
                 behavior_description="d",
                 scenarios=scenarios,
+                behavior_halt=[],
             )
         ],
     )
@@ -88,12 +91,14 @@ def test_p1_respects_base_bid_ordering():
                 behavior_name="b1",
                 behavior_description="d1",
                 scenarios=[_scenario("A", LifecycleStatus.INSCRIBING)],
+                behavior_halt=[],
             ),
             BaseBIDEntry(
                 base_bid="00000",
                 behavior_name="b0",
                 behavior_description="d0",
                 scenarios=[_scenario("B", LifecycleStatus.INSCRIBING)],
+                behavior_halt=[],
             ),
         ],
     )
@@ -256,6 +261,7 @@ def test_p5_preserves_earlier_reversions():
         behavior_description="d",
         scenarios=[_scenario("A", LifecycleStatus.APPROVED)],
         reversion_log=[earlier],
+        behavior_halt=[],
     )
     m = MappingArtifact(project_id="p", base_bids=[entry])
     out = begin_revision(m, "A", "r2", "s2", _now())
@@ -289,6 +295,7 @@ def test_supersession_begin_sets_supersedes_link_on_new():
         behavior_name="b1",
         behavior_description="d1",
         scenarios=[_scenario("N", LifecycleStatus.INSCRIBING)],
+        behavior_halt=[],
     )
     m = MappingArtifact(
         project_id="p",
@@ -298,6 +305,7 @@ def test_supersession_begin_sets_supersedes_link_on_new():
                 behavior_name="b0",
                 behavior_description="d0",
                 scenarios=[_scenario("O", LifecycleStatus.LIVE)],
+                behavior_halt=[],
             ),
             new_entry,
         ],
@@ -315,6 +323,7 @@ def test_supersession_complete_flips_old_to_deprecated():
         behavior_name="b1",
         behavior_description="d1",
         scenarios=[_scenario("N", LifecycleStatus.APPROVED, supersedes="O")],
+        behavior_halt=[],
     )
     m = MappingArtifact(
         project_id="p",
@@ -324,6 +333,7 @@ def test_supersession_complete_flips_old_to_deprecated():
                 behavior_name="b0",
                 behavior_description="d0",
                 scenarios=[_scenario("O", LifecycleStatus.LIVE)],
+                behavior_halt=[],
             ),
             new_entry,
         ],
@@ -342,6 +352,7 @@ def test_supersession_complete_writes_reversion_log_entry():
         behavior_name="b1",
         behavior_description="d1",
         scenarios=[_scenario("N", LifecycleStatus.APPROVED, supersedes="O")],
+        behavior_halt=[],
     )
     m = MappingArtifact(
         project_id="p",
@@ -351,6 +362,7 @@ def test_supersession_complete_writes_reversion_log_entry():
                 behavior_name="b0",
                 behavior_description="d0",
                 scenarios=[_scenario("O", LifecycleStatus.LIVE)],
+                behavior_halt=[],
             ),
             new_entry,
         ],

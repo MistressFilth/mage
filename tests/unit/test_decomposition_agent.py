@@ -54,6 +54,7 @@ async def test_decomposition_agent_receives_existing_mapping_context():
                 base_bid="00005",
                 behavior_name="existing",
                 behavior_description="existing",
+                behavior_halt=[],
             )
         ],
     )

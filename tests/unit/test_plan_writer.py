@@ -32,12 +32,14 @@ def _two_entries():
             behavior_name="auth",
             behavior_description="User logs in",
             depends_on=[],
+            behavior_halt=[],
         ),
         BaseBIDEntry(
             base_bid="00001",
             behavior_name="orders",
             behavior_description="User places orders",
             depends_on=["00000"],
+            behavior_halt=[],
         ),
     ]
 

@@ -18,7 +18,12 @@ from mage.orchestration.events import EventsLog, EventType
 
 
 def _base(value: str, name: str = "b") -> BaseBIDEntry:
-    return BaseBIDEntry(base_bid=value, behavior_name=name, behavior_description="d")
+    return BaseBIDEntry(
+        base_bid=value,
+        behavior_name=name,
+        behavior_description="d",
+        behavior_halt=[],
+    )
 
 
 def _cosmetic_entry(feature_id: str, sub_bid: str) -> dict:

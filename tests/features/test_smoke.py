@@ -50,6 +50,8 @@ class TestFoundationEndToEnd:
                     scenarios=[
                         ScenarioEntry(
                             sub_bid="A",
+                            scenario_name="scenario-A",
+                            gherkin_body="Scenario: scenario-A\n  Given x\n",
                             scenario_text_hash="hashA",
                             lifecycle_status=LifecycleStatus.LIVE,
                             supersedes=None,
@@ -61,8 +63,10 @@ class TestFoundationEndToEnd:
                     reversion_log=[],
                     post_live_revisions=[],
                     cross_behavior_links=[],
+                    behavior_halt=[],
                 )
             ],
+            behavior_halt=[],
         )
         mapping_path = tmp_project_dir / "mapping.yaml"
         await mapping.save(mapping_path)

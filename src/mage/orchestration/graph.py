@@ -99,9 +99,38 @@ class PipelineGraph:
                 raise SystemExit(0) from e
             except ReviewBudgetExhausted as e:
                 # I1: review-budget halts the same way as plan-revision halts.
-                # The InscribeStage already emitted REVIEW_HALT_PERSISTED and
-                # the halt is visible in the events log; we just need to stop
-                # the graph cleanly.
+                # Plan 25: persist halted_sub_bids onto BaseBIDEntry so the
+                # resume path can reconstruct the per-scenario halt view.
+                if e.halted_sub_bids:
+                    new_bids = [
+                        bid
+                        for bid in context.mapping.base_bids
+                        if bid.base_bid == e.base_bid
+                    ]
+                    if new_bids:
+                        target = new_bids[0]
+                        updated = target.model_copy(
+                            update={
+                                "behavior_halt": sorted(
+                                    set(target.behavior_halt) | set(e.halted_sub_bids)
+                                )
+                            }
+                        )
+                        context.mapping = context.mapping.model_copy(
+                            update={
+                                "base_bids": [
+                                    updated if b.base_bid == e.base_bid else b
+                                    for b in context.mapping.base_bids
+                                ]
+                            }
+                        )
+                        if (
+                            context.project_dir is not None
+                            and context.project_dir.exists()
+                        ):
+                            await context.mapping.save(
+                                context.project_dir / "mapping.yaml"
+                            )
                 last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )

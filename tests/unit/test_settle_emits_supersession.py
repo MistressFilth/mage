@@ -37,6 +37,8 @@ def _make_mapping_with_supersede(
 ) -> MappingArtifact:
     scenario = ScenarioEntry(
         sub_bid="00000-001",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="abc",
         lifecycle_status=LifecycleStatus.APPROVED,
         supersedes=supersedes_old,
@@ -48,6 +50,7 @@ def _make_mapping_with_supersede(
         behavior_name="b",
         behavior_description="d",
         scenarios=[scenario],
+        behavior_halt=[],
     )
     return MappingArtifact(schema_version=2, project_id="p", base_bids=[entry])
 

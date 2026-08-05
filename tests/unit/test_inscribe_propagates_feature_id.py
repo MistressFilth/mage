@@ -78,6 +78,7 @@ def _seed_project(tmp_path: Path) -> Path:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     },
                 ],
             }
@@ -111,6 +112,7 @@ async def test_inscribe_appends_scenarios_with_context_feature_id(tmp_path):
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             },
         ],
     )

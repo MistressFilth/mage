@@ -218,6 +218,7 @@ async def _seed_minimal_project(project_dir: Path, feature_id: str) -> MappingAr
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -236,6 +237,7 @@ async def _seed_minimal_project(project_dir: Path, feature_id: str) -> MappingAr
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )

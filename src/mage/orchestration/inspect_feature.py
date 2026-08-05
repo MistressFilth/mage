@@ -536,11 +536,7 @@ class InspectFeatureStage:
             ledger_markdown=ledger,
         )
         artifact_path = (
-            context.project_dir
-            / ".mage"
-            / "inspect"
-            / feature_id
-            / f"{iteration}.yaml"
+            context.project_dir / ".mage" / "inspect" / feature_id / f"{iteration}.yaml"
         )
         digest = await InspectArtifact.finalize(
             artifact_path,

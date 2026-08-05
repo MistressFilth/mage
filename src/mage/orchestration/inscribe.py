@@ -26,15 +26,28 @@ from mage.verification.reviewers.registry import aggregate_verdicts
 
 
 class ReviewBudgetExhausted(Exception):
-    """Raised when the iteration budget is exhausted without reaching approved."""
+    """Raised when the iteration budget is exhausted without reaching approved.
 
-    def __init__(self, base_bid: str, scenario_name: str, iteration: int) -> None:
+    Plan 25: halted_sub_bids is the list of sub_bids whose per-scenario
+    iteration budget ran out. The behavior-level halt is the union of
+    per-scenario halts in the same behavior.
+    """
+
+    def __init__(
+        self,
+        base_bid: str,
+        scenario_name: str,
+        iteration: int,
+        halted_sub_bids: list[str],
+    ) -> None:
         self.base_bid = base_bid
         self.scenario_name = scenario_name
         self.iteration = iteration
+        self.halted_sub_bids = halted_sub_bids
         super().__init__(
-            f"Review budget exhausted for scenario {scenario_name!r} "
-            f"under base_bid {base_bid!r} at iteration {iteration}"
+            f"Review budget exhausted for behavior {scenario_name!r} "
+            f"under base_bid {base_bid!r} at iteration {iteration} "
+            f"(halted_sub_bids={halted_sub_bids})"
         )
 
 
@@ -96,33 +109,66 @@ class InscribeStage(StageNode):
 
             # Find the BaseBIDEntry
             entry = next(e for e in mapping.base_bids if e.base_bid == base_bid)
-            # I2: existing_scenarios currently uses sub_bid as a placeholder name
-            # and an empty body. ScenarioEntry doesn't carry scenario_name or
-            # gherkin_body, so we can't reconstruct the real on-disk scenario
-            # text without a separate file lookup. Defer the proper lookup to
-            # Plan 6, which adds a richer scenario metadata entry; for now
-            # the agent sees the sub_bid so it doesn't draft duplicates of
-            # the same scenario (the InscribeAgent already keys on sub_bid).
-            # TODO(plan6): replace sub_bid placeholder with real name+gherkin.
+
+            # I2 fix (Plan 25): existing_scenarios uses real scenario_name +
+            # gherkin_body from the prior Scenarios on the BaseBIDEntry. Pre-
+            # migration entries default to empty strings — the agent sees
+            # "" until the next draft pass populates them.
             existing_scenarios = [
-                {"name": s.sub_bid, "gherkin_body": ""} for s in entry.scenarios
+                {"name": s.scenario_name, "gherkin_body": s.gherkin_body}
+                for s in entry.scenarios
             ]
 
-            # Inscribe loop (one behavior → may produce 1+ scenarios, but for Plan 3
-            # the test focuses on a single scenario per behavior).
+            # Plan 25: per-scenario iteration tracking. Each scenario gets
+            # its own iteration counter; halts are per-scenario, not per-
+            # behavior. Sibling scenarios in the same behavior continue
+            # drafting when one of them exhausts its budget.
+            prior_subs = {s.sub_bid for s in entry.scenarios}
+            per_scenario_iter: dict[str, int] = {
+                s.sub_bid: iteration for s in entry.scenarios
+            }
+            halted_scenarios: set[str] = set()
+
             approved = False
-            while iteration < self.host_config.max_iterations and not approved:
-                iteration += 1
-                # Draft scenarios
+            while not approved:
+                # Draft scenarios from the agent.
                 output = await self.agent.run(
                     behavior=entry,
                     existing_scenarios=existing_scenarios,
                     mapping=mapping,
                 )
 
-                # For each scenario, run mechanical pre-check, then 7 reviewers + aggregate
-                approved = True  # assume all approved; revise if any fail
+                # For each scenario in this draft, run the mechanical pre-
+                # check then the reviewer loop. Each scenario gets its own
+                # iteration counter.
+                any_failed = False
                 for scenario_idx, scenario in enumerate(output.scenarios):
+                    # Plan 25: derive the sub_bid up front so iteration
+                    # tracking and halt events can carry it.
+                    parent_bid = Base85BID(value=base_bid)
+                    sub_bid = Base85BID.derive(parent_bid, scenario_idx).value
+                    per_scenario_iter.setdefault(sub_bid, iteration)
+
+                    # Check halt first.
+                    if per_scenario_iter[sub_bid] >= self.host_config.max_iterations:
+                        await self.events_log.append(
+                            Event(
+                                timestamp=datetime.now(UTC),
+                                event_type=EventType.SCENARIO_HALT_PERSISTED,
+                                payload={
+                                    "base_bid": base_bid,
+                                    "behavior_name": behavior_name,
+                                    "sub_bid": sub_bid,
+                                    "scenario_name": scenario.name,
+                                    "iteration": per_scenario_iter[sub_bid],
+                                    "max_iterations": self.host_config.max_iterations,
+                                },
+                            )
+                        )
+                        halted_scenarios.add(sub_bid)
+                        continue
+
+                    # Emit SCENARIO_DRAFTED.
                     await self.events_log.append(
                         Event(
                             timestamp=datetime.now(UTC),
@@ -130,17 +176,12 @@ class InscribeStage(StageNode):
                             payload={
                                 "base_bid": base_bid,
                                 "scenario_name": scenario.name,
-                                "iteration": iteration,
+                                "iteration": per_scenario_iter[sub_bid],
                             },
                         )
                     )
 
-                    # C1: mechanical pre-check BEFORE the reviewer loop.
-                    # Build a ScenarioDraft from the freshly drafted scenario.
-                    # Use a synthetic sub_bid="-" because the real sub_bid is
-                    # only assigned when the scenario is approved; the
-                    # SubBidAssignedCheck still validates Base85 alphabet,
-                    # but the pre-check is best-effort at draft time.
+                    # Mechanical pre-check (unchanged contract).
                     draft_for_precheck = ScenarioDraft(
                         feature_path=project_dir
                         / "scenarios"
@@ -149,8 +190,8 @@ class InscribeStage(StageNode):
                         scenario_name=scenario.name,
                         gherkin_text=scenario.gherkin_body,
                         tags=list(scenario.tags),
-                        sub_bid="-",
-                        parent_base_bid=Base85BID(value=base_bid),
+                        sub_bid=sub_bid,
+                        parent_base_bid=parent_bid,
                         step_texts=[],
                     )
                     precheck_results = self.mechanical_verifier.verify(
@@ -167,7 +208,7 @@ class InscribeStage(StageNode):
                                 payload={
                                     "base_bid": base_bid,
                                     "scenario_name": scenario.name,
-                                    "iteration": iteration,
+                                    "iteration": per_scenario_iter[sub_bid],
                                     "checks_run": len(precheck_results),
                                 },
                             )
@@ -181,39 +222,38 @@ class InscribeStage(StageNode):
                                 payload={
                                     "base_bid": base_bid,
                                     "scenario_name": scenario.name,
-                                    "iteration": iteration,
+                                    "iteration": per_scenario_iter[sub_bid],
                                     "failed_checks": [r.name for r in failed],
                                     "details": {r.name: r.detail for r in failed},
                                 },
                             )
                         )
-                        # Pre-check failure → treat as needs_refactor.
-                        approved = False
+                        # Treat as needs_refactor: halt this scenario.
                         await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
-                                event_type=EventType.SCENARIO_NEEDS_REFACTOR,
+                                event_type=EventType.SCENARIO_HALT_PERSISTED,
                                 payload={
                                     "base_bid": base_bid,
+                                    "behavior_name": behavior_name,
+                                    "sub_bid": sub_bid,
                                     "scenario_name": scenario.name,
+                                    "iteration": per_scenario_iter[sub_bid],
+                                    "max_iterations": self.host_config.max_iterations,
                                     "reason": "mechanical_precheck_failed",
                                 },
                             )
                         )
-                        # Skip the reviewer loop for this scenario; go to next iteration.
-                        break
+                        halted_scenarios.add(sub_bid)
+                        any_failed = True
+                        continue
 
-                    # Compute draft_hash for per-draft verdict storage namespace.
+                    # Reviewer loop (unchanged contract).
                     spec_context = {"behavior_name": behavior_name}
                     draft_hash = compute_draft_hash(scenario, spec_context)
-
-                    # C3: verdicts keyed by draft_hash (not iteration) so the
-                    # aggregate's reviewer_verdict_ref paths resolve.
                     verdicts_dir = project_dir / ".mage" / "verdicts" / draft_hash
                     verdicts_dir.mkdir(parents=True, exist_ok=True)
 
-                    # C2: honor HostConfig.enabled_reviewers (the host-project
-                    # override mechanism). When None, run all reviewers.
                     enabled_set = (
                         set(self.host_config.enabled_reviewers)
                         if self.host_config.enabled_reviewers is not None
@@ -225,7 +265,6 @@ class InscribeStage(StageNode):
                         else list(self.reviewers)
                     )
 
-                    # Run each enabled reviewer; verdicts stored alongside aggregate.
                     semaphore = asyncio.Semaphore(
                         self.host_config.max_concurrent_llm_calls
                     )
@@ -256,43 +295,35 @@ class InscribeStage(StageNode):
                         *[run_one(r) for r in reviewers_to_run]
                     )
                     per_dimension_verdicts = dict(results)
-
-                    # Aggregate (registry builds reviewer_verdict_ref as
-                    # `.mage/verdicts/{draft_hash}/{dimension}.yaml`).
                     aggregate = aggregate_verdicts(
-                        per_dimension_verdicts, iteration=iteration
+                        per_dimension_verdicts,
+                        iteration=per_scenario_iter[sub_bid],
                     )
                     aggregate_path = verdicts_dir / "aggregate.yaml"
-                    # C4: VerdictArtifact.finalize already emits REVIEW_AGGREGATE_RECORDED;
-                    # do NOT manually re-emit it here.
                     await VerdictArtifact.finalize(
                         aggregate_path, aggregate, self.events_log
                     )
 
                     if aggregate.decision == "approved":
-                        # Assign sub-BID
-                        parent_bid = Base85BID(value=base_bid)
-                        sub_bid = Base85BID.derive(parent_bid, scenario_idx)
-                        await acquire_cycle_lock(context, sub_bid.value)
+                        await acquire_cycle_lock(context, sub_bid)
                         scenario_text_hash = hashlib.sha256(
                             scenario.gherkin_body.encode("utf-8")
                         ).hexdigest()
-
                         scenario_entry = ScenarioEntry(
-                            sub_bid=sub_bid.value,
+                            sub_bid=sub_bid,
+                            scenario_name=scenario.name,
+                            gherkin_body=scenario.gherkin_body,
                             scenario_text_hash=scenario_text_hash,
                             lifecycle_status=LifecycleStatus.APPROVED,
                             feature_id=context.feature_id,
                         )
                         mapping = mapping.append_scenario(base_bid, scenario_entry)
-                        # Write scenario file
                         scenario_dir = project_dir / "scenarios" / base_bid
                         scenario_dir.mkdir(parents=True, exist_ok=True)
                         scenario_path = scenario_dir / f"{scenario.name}.feature"
                         scenario_path.write_text(
                             scenario.gherkin_body, encoding="utf-8"
                         )
-
                         await release_cycle_lock(context)
                         await self.events_log.append(
                             Event(
@@ -300,27 +331,42 @@ class InscribeStage(StageNode):
                                 event_type=EventType.SCENARIO_APPROVED,
                                 payload={
                                     "base_bid": base_bid,
-                                    "sub_bid": sub_bid.value,
+                                    "sub_bid": sub_bid,
                                     "scenario_text_hash": scenario_text_hash,
                                 },
                             )
                         )
                     else:
-                        # needs_refactor: loop
-                        approved = False
+                        # needs_refactor: halt this scenario, emit halt event.
                         await self.events_log.append(
                             Event(
                                 timestamp=datetime.now(UTC),
-                                event_type=EventType.SCENARIO_NEEDS_REFACTOR,
+                                event_type=EventType.SCENARIO_HALT_PERSISTED,
                                 payload={
                                     "base_bid": base_bid,
+                                    "behavior_name": behavior_name,
+                                    "sub_bid": sub_bid,
                                     "scenario_name": scenario.name,
+                                    "iteration": per_scenario_iter[sub_bid],
+                                    "max_iterations": self.host_config.max_iterations,
+                                    "reason": "aggregate_needs_refactor",
                                 },
                             )
                         )
+                        halted_scenarios.add(sub_bid)
+                        any_failed = True
 
-            if not approved:
-                # Budget exhausted: emit halt event and raise.
+                    # Increment per-scenario iteration regardless of outcome.
+                    per_scenario_iter[sub_bid] += 1
+
+                # Continue looping if any scenario failed; the next draft
+                # will surface the same set of scenarios for refactor.
+                approved = not any_failed
+
+            # After all scenarios settled: emit REVIEW_HALT_PERSISTED if any
+            # halted, then raise ReviewBudgetExhausted once per behavior.
+            if halted_scenarios:
+                new_halt = sorted(halted_scenarios - prior_subs)
                 await self.events_log.append(
                     Event(
                         timestamp=datetime.now(UTC),
@@ -328,20 +374,19 @@ class InscribeStage(StageNode):
                         payload={
                             "base_bid": base_bid,
                             "behavior_name": behavior_name,
-                            "iteration": iteration,
+                            "halted_sub_bids": sorted(halted_scenarios),
+                            "iteration": max(per_scenario_iter.values()),
                             "max_iterations": self.host_config.max_iterations,
                         },
                     )
                 )
-                # I5: pass behavior_name as the exception's scenario_name for
-                # now; scenario-level granularity (each scenario exhausted
-                # independently) is Plan 6 territory.
-                # TODO(plan6): emit halt per-scenario rather than per-behavior.
-                raise ReviewBudgetExhausted(
-                    base_bid=base_bid,
-                    scenario_name=behavior_name,
-                    iteration=iteration,
-                )
+                if new_halt:
+                    raise ReviewBudgetExhausted(
+                        base_bid=base_bid,
+                        scenario_name=behavior_name,
+                        iteration=max(per_scenario_iter.values()),
+                        halted_sub_bids=sorted(halted_scenarios),
+                    )
 
             await self.events_log.append(
                 Event(

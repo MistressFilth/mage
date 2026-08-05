@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format follows
 - Static-guard test (`tests/unit/test_static_guards_event_payload_keys.py`)
   pinning the `EventType.MAPPING_SAVED` payload-key set in code. Closes the
   Plan 19 deferred follow-up (TODO.md:46).
+- Plan 25: `ScenarioEntry.scenario_name` and `gherkin_body` fields (REQUIRED, no default). Old mapping.yaml files without these fields fail to load — re-inscribe required.
+- Plan 25: `BaseBIDEntry.behavior_halt: list[str]` field (REQUIRED, no default). Old mapping.yaml files without this field fail to load.
+- Plan 25: `EventType.SCENARIO_HALT_PERSISTED` re-emitted per halted scenario.
 
 ### Changed
 
@@ -32,6 +35,9 @@ All notable changes to this project are documented here. The format follows
   `pid` and `pid_file_path`; `COSMETIC_WATCHER_STOPPED` gains
   `pid_file_removed`.
 - Runtime state directory renamed from `.haileris/` to `.mage/`. Existing host projects must rename the directory on disk themselves (or delete `.haileris/` and let mage rebuild state under `.mage/` on next run). No automatic migration.
+- Plan 25: Inscribe loop now tracks per-scenario iteration state. A single scenario's exhausted review budget halts that scenario only; sibling scenarios in the same behavior continue drafting.
+- Plan 25: `ReviewBudgetExhausted` signature gains `halted_sub_bids: list[str]`; the behavior-level halt carries the full halted set.
+- Plan 25: `EventType.REVIEW_HALT_PERSISTED` payload gains `halted_sub_bids: list[str]`.
 
 ### Removed
 
@@ -39,6 +45,8 @@ All notable changes to this project are documented here. The format follows
 - `tests/unit/test_repository_compliance.py` and the pytest collection shim in `tests/conftest.py`.
 - Tracked design and plan documents at `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md` and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
 - README.md links to `docs/superpowers/specs/` and `docs/superpowers/plans/` (intro paragraph and Repository status section). The tree was retired on 2026-07-30 (commit `9151fea`); the README still pointed at it. Specs and plans live alongside the repo in the operator's project-notes directory; shipped work is documented in this changelog.
+- Plan 25: `tests/unit/test_static_guards_plan15.py` (narrow `decomposition.py` sweep) — superseded by `tests/unit/test_static_guards_plan25.py` (whole `src/mage/` sweep).
+- Plan 25: backward-compat fallback for old mapping.yaml files. Hard cutover: any project with mapping.yaml predating this release must be re-inscribed.
 
 ## [0.4.1] - 2026-08-04
 

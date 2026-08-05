@@ -54,6 +54,10 @@ class PostLiveRevisionEntry(BaseModel):
 class ScenarioEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
     sub_bid: str
+    scenario_name: str  # Plan 25: real on-disk scenario name (required, no default)
+    gherkin_body: (
+        str  # Plan 25: real Gherkin text from the agent (required, no default)
+    )
     scenario_text_hash: str
     lifecycle_status: LifecycleStatus
     supersedes: str | None = None
@@ -74,6 +78,10 @@ class BaseBIDEntry(BaseModel):
     reversion_log: list[ReversionLogEntry] = Field(default_factory=list)
     post_live_revisions: list[PostLiveRevisionEntry] = Field(default_factory=list)
     cross_behavior_links: list[str] = Field(default_factory=list)
+    behavior_halt: list[str]
+    # ^ Plan 25: sub_bids the behavior halted on across all drafts. Hard-
+    # cutover: required, no default. Old mapping.yaml files without this
+    # field must be re-inscribed.
 
 
 class MappingArtifact(BaseModel):

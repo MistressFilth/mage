@@ -137,6 +137,9 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
 async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path):
     """I1: ReviewBudgetExhausted raised by InscribeStage is caught by the
     graph; the graph exits cleanly (SystemExit 0) without re-raising.
+
+    Plan 25: halted_sub_bids is persisted onto BaseBIDEntry.behavior_halt so
+    the resume path can reconstruct the per-scenario halt view.
     """
     from mage.orchestration.events import EventsLog
     from mage.orchestration.graph import PipelineGraph
@@ -153,6 +156,7 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
                 base_bid="00000",
                 scenario_name="authenticate-user",
                 iteration=3,
+                halted_sub_bids=["00000-0", "00000-1"],
             )
 
     class NeverRunStage(StageNode):
@@ -168,13 +172,35 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
 
     ctx = PipelineContext(
         project_dir=tmp_path,
-        mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
+        mapping=MappingArtifact(
+            schema_version=2,
+            project_id="t",
+            base_bids=[
+                {
+                    "base_bid": "00000",
+                    "behavior_name": "authenticate-user",
+                    "behavior_description": "test",
+                    "depends_on": [],
+                    "notes": "",
+                    "scenarios": [],
+                    "reversion_log": [],
+                    "post_live_revisions": [],
+                    "cross_behavior_links": [],
+                    "behavior_halt": [],
+                }
+            ],
+        ),
         events_log=log,
     )
 
     with pytest.raises(SystemExit) as exc_info:
         await graph.run(ctx)
     assert exc_info.value.code == 0
+
+    # Plan 25: halted_sub_bids landed on BaseBIDEntry.behavior_halt.
+    saved_mapping = MappingArtifact.load(tmp_path / "mapping.yaml")
+    target = next(e for e in saved_mapping.base_bids if e.base_bid == "00000")
+    assert target.behavior_halt == ["00000-0", "00000-1"]
 
 
 class TestPlan4HaltCatching:

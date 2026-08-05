@@ -32,6 +32,7 @@ def _make_mapping(tmp_path, scenarios: list[ScenarioEntry]) -> MappingArtifact:
                 depends_on=[],
                 notes="",
                 scenarios=scenarios,
+                behavior_halt=[],
             ),
         ],
     )
@@ -51,6 +52,8 @@ def _ctx(tmp_path, mapping: MappingArtifact) -> PipelineContext:
 def _scenario(sub_bid: str, status: LifecycleStatus) -> ScenarioEntry:
     return ScenarioEntry(
         sub_bid=sub_bid,
+        scenario_name=sub_bid,
+        gherkin_body=f"Scenario: {sub_bid}\n  Given x\n",
         scenario_text_hash=str(hash(sub_bid)),
         lifecycle_status=status,
     )

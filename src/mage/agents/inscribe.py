@@ -77,12 +77,18 @@ class InscribeAgent:
         self,
         *,
         behavior: BaseBIDEntry,
-        existing_scenarios: list,
+        existing_scenarios: list[dict[str, str]],
         mapping: MappingArtifact,
     ) -> InscribeOutput:
+        # Plan 25 hard-cutover: existing_scenarios shape is guaranteed by
+        # InscribeStage — the dict always carries "name" + "gherkin_body"
+        # keys (no backward-compat fallback; ScenarioEntry now requires
+        # both fields). Use direct lookup; a missing key surfaces as
+        # KeyError rather than silently blanking.
         existing_str = (
             "\n".join(
-                f"- {s.name}: {s.gherkin_body[:80]}..." for s in existing_scenarios
+                f"- {s['name']}: {s['gherkin_body'][:80]}..."
+                for s in existing_scenarios
             )
             or "(none)"
         )

@@ -39,6 +39,7 @@ async def test_inscribe_agent_run_returns_inscribe_output(
         base_bid="00000",
         behavior_name="Authenticate user",
         behavior_description="User logs in with email and password",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="p", base_bids=[behavior])
 
@@ -46,3 +47,30 @@ async def test_inscribe_agent_run_returns_inscribe_output(
     assert isinstance(output, InscribeOutput)
     assert isinstance(output.scenarios, list)
     assert output.scenarios[0].name == "login succeeds"
+
+
+@pytest.mark.asyncio
+async def test_inscribe_agent_formats_dict_existing_scenarios(
+    canned_output: InscribeOutput,
+):
+    agent = InscribeAgent(model=TestModel(custom_output_args=canned_output))
+    behavior = BaseBIDEntry(
+        base_bid="00000",
+        behavior_name="Authenticate user",
+        behavior_description="User logs in with email and password",
+        behavior_halt=[],
+    )
+    mapping = MappingArtifact(project_id="p", base_bids=[behavior])
+
+    output = await agent.run(
+        behavior=behavior,
+        existing_scenarios=[
+            {
+                "name": "existing-login",
+                "gherkin_body": "Given a registered user\nWhen login\nThen success",
+            }
+        ],
+        mapping=mapping,
+    )
+
+    assert output == canned_output
