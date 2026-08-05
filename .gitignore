@@ -14,3 +14,8 @@ AGENTS.local.md
 
 # mage runtime state (Plan 15 — approval gate marker lives here)
 .mage/
+
+# per-plan scratch artifacts (task reports, review diffs) live in the
+# project notes directory at ~/code/project-notes/mage/superpowers/sdd/
+# — never in the repo
+/.superpowers/
