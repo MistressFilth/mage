@@ -96,16 +96,13 @@ class InscribeStage(StageNode):
 
             # Find the BaseBIDEntry
             entry = next(e for e in mapping.base_bids if e.base_bid == base_bid)
-            # I2: existing_scenarios currently uses sub_bid as a placeholder name
-            # and an empty body. ScenarioEntry doesn't carry scenario_name or
-            # gherkin_body, so we can't reconstruct the real on-disk scenario
-            # text without a separate file lookup. Defer the proper lookup to
-            # Plan 6, which adds a richer scenario metadata entry; for now
-            # the agent sees the sub_bid so it doesn't draft duplicates of
-            # the same scenario (the InscribeAgent already keys on sub_bid).
-            # TODO(plan6): replace sub_bid placeholder with real name+gherkin.
+            # I2 fix (Plan 25): existing_scenarios uses real scenario_name +
+            # gherkin_body from the prior Scenarios on the BaseBIDEntry. Pre-
+            # migration entries default to empty strings — the agent sees
+            # "" until the next draft pass populates them.
             existing_scenarios = [
-                {"name": s.sub_bid, "gherkin_body": ""} for s in entry.scenarios
+                {"name": s.scenario_name, "gherkin_body": s.gherkin_body}
+                for s in entry.scenarios
             ]
 
             # Inscribe loop (one behavior → may produce 1+ scenarios, but for Plan 3

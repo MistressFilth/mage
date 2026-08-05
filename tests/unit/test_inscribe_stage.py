@@ -265,3 +265,184 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
     events = log.read_all()
     event_types = {e.event_type.value for e in events}
     assert "review_halt_persisted" in event_types
+
+
+@pytest.mark.asyncio
+async def test_existing_scenarios_uses_scenario_name_and_gherkin(
+    tmp_path, monkeypatch
+) -> None:
+    """I2 fix: existing_scenarios reflects real scenario_name + gherkin_body
+    on prior ScenarioEntry, not the sub_bid placeholder."""
+    from mage.agents.inscribe import InscribeAgent
+    from mage.artifacts.mapping import LifecycleStatus, ScenarioEntry
+    from mage.orchestration.events import EventsLog
+    from mage.orchestration.inscribe import InscribeStage
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+    (project_dir / "behaviors.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "feature_id": "f",
+                "enumerated_at": "2026-07-27T00:00:00Z",
+                "behaviors": [
+                    {
+                        "id": "00000",
+                        "name": "authenticate-user",
+                        "description": "User logs in",
+                        "depends_on": [],
+                        "notes": "",
+                        "cross_behavior_links": [],
+                    }
+                ],
+            }
+        )
+    )
+
+    prior = ScenarioEntry(
+        sub_bid="00000-0",
+        scenario_name="login-with-creds",
+        gherkin_body="Scenario: login-with-creds\n  Given a user\n  When they log in\n",
+        scenario_text_hash="deadbeef",
+        lifecycle_status=LifecycleStatus.APPROVED,
+    )
+
+    mapping = MappingArtifact(
+        project_id="p",
+        base_bids=[
+            {
+                "base_bid": "00000",
+                "behavior_name": "authenticate-user",
+                "behavior_description": "User logs in",
+                "depends_on": [],
+                "notes": "",
+                "scenarios": [prior.model_dump()],
+                "reversion_log": [],
+                "post_live_revisions": [],
+                "cross_behavior_links": [],
+            }
+        ],
+    )
+    await mapping.save(project_dir / "mapping.yaml")
+
+    context = PipelineContext(
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+        plan_path=project_dir / "plan.md",
+    )
+
+    captured: dict = {}
+
+    class CaptureAgent(InscribeAgent):
+        async def run(self, *, behavior, existing_scenarios, mapping, **_):
+            captured["existing_scenarios"] = existing_scenarios
+            from mage.agents.inscribe import InscribeOutput
+
+            return InscribeOutput(scenarios=[])
+
+    host_config = HostConfig(max_iterations=1)
+    stage = InscribeStage(
+        events_log=log,
+        agent=CaptureAgent(model=TestModel(custom_output_args=None)),
+        host_config=host_config,
+        reviewers=[],
+    )
+    await stage.run(context)
+
+    assert captured["existing_scenarios"] == [
+        {
+            "name": "login-with-creds",
+            "gherkin_body": "Scenario: login-with-creds\n  Given a user\n  When they log in\n",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_existing_scenarios_falls_back_to_empty_for_old_data(
+    tmp_path,
+) -> None:
+    """Pre-migration ScenarioEntry with no scenario_name/gherkin_body —
+    the agent receives empty strings, not the sub_bid placeholder."""
+    from mage.agents.inscribe import InscribeAgent
+    from mage.orchestration.events import EventsLog
+    from mage.orchestration.inscribe import InscribeStage
+
+    project_dir = tmp_path / "proj"
+    project_dir.mkdir()
+    log = EventsLog(project_dir / "events.jsonl")
+    (project_dir / "behaviors.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "feature_id": "f",
+                "enumerated_at": "2026-07-27T00:00:00Z",
+                "behaviors": [
+                    {
+                        "id": "00000",
+                        "name": "authenticate-user",
+                        "description": "User logs in",
+                        "depends_on": [],
+                        "notes": "",
+                        "cross_behavior_links": [],
+                    }
+                ],
+            }
+        )
+    )
+
+    # Pre-migration shape: only the legacy fields.
+    mapping = MappingArtifact.model_validate(
+        {
+            "project_id": "p",
+            "base_bids": [
+                {
+                    "base_bid": "00000",
+                    "behavior_name": "authenticate-user",
+                    "behavior_description": "User logs in",
+                    "depends_on": [],
+                    "notes": "",
+                    "scenarios": [
+                        {
+                            "sub_bid": "00000-0",
+                            "scenario_text_hash": "deadbeef",
+                            "lifecycle_status": "approved",
+                        }
+                    ],
+                    "reversion_log": [],
+                    "post_live_revisions": [],
+                    "cross_behavior_links": [],
+                }
+            ],
+        }
+    )
+    await mapping.save(project_dir / "mapping.yaml")
+
+    context = PipelineContext(
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+        plan_path=project_dir / "plan.md",
+    )
+
+    captured: dict = {}
+
+    class CaptureAgent(InscribeAgent):
+        async def run(self, *, behavior, existing_scenarios, mapping, **_):
+            captured["existing_scenarios"] = existing_scenarios
+            from mage.agents.inscribe import InscribeOutput
+
+            return InscribeOutput(scenarios=[])
+
+    host_config = HostConfig(max_iterations=1)
+    stage = InscribeStage(
+        events_log=log,
+        agent=CaptureAgent(model=TestModel(custom_output_args=None)),
+        host_config=host_config,
+        reviewers=[],
+    )
+    await stage.run(context)
+
+    assert captured["existing_scenarios"] == [{"name": "", "gherkin_body": ""}]
