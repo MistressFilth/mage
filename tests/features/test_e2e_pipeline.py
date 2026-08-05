@@ -78,14 +78,18 @@ async def _plant_fixture(
                 scenarios=[
                     ScenarioEntry(
                         sub_bid=approved_sub_bid,
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash=approved_sub_bid,
                         lifecycle_status=LifecycleStatus.APPROVED,
                         tests=[],
                         derivations=[],
                     ),
                 ],
+                behavior_halt=[],
             ),
         ],
+        behavior_halt=[],
     )
     await mapping.save(project_dir / "mapping.yaml")
 

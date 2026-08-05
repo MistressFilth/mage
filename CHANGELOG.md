@@ -24,9 +24,9 @@ All notable changes to this project are documented here. The format follows
 - Static-guard test (`tests/unit/test_static_guards_event_payload_keys.py`)
   pinning the `EventType.MAPPING_SAVED` payload-key set in code. Closes the
   Plan 19 deferred follow-up (TODO.md:46).
-- Plan 25: `ScenarioEntry.scenario_name` and `gherkin_body` fields (default empty). Old mapping.yaml files load unchanged; new writes round-trip real values.
-- Plan 25: `BaseBIDEntry.behavior_halt: list[str]` field (default empty). Persists across halt + resume so the graph handler can reconstruct the per-scenario halt view.
-- Plan 25: `EventType.SCENARIO_HALT_PERSISTED` re-emitted per halted scenario (was declared-but-unused in v0.3.7; removed in v0.3.8; reinstated here).
+- Plan 25: `ScenarioEntry.scenario_name` and `gherkin_body` fields (REQUIRED, no default). Old mapping.yaml files without these fields fail to load — re-inscribe required.
+- Plan 25: `BaseBIDEntry.behavior_halt: list[str]` field (REQUIRED, no default). Old mapping.yaml files without this field fail to load.
+- Plan 25: `EventType.SCENARIO_HALT_PERSISTED` re-emitted per halted scenario.
 
 ### Changed
 
@@ -46,6 +46,7 @@ All notable changes to this project are documented here. The format follows
 - Tracked design and plan documents at `docs/superpowers/specs/2026-08-02-repository-rules-compliance-design.md` and `docs/superpowers/plans/2026-08-02-repository-rules-compliance.md`.
 - README.md links to `docs/superpowers/specs/` and `docs/superpowers/plans/` (intro paragraph and Repository status section). The tree was retired on 2026-07-30 (commit `9151fea`); the README still pointed at it. Specs and plans live alongside the repo in the operator's project-notes directory; shipped work is documented in this changelog.
 - Plan 25: `tests/unit/test_static_guards_plan15.py` (narrow `decomposition.py` sweep) — superseded by `tests/unit/test_static_guards_plan25.py` (whole `src/mage/` sweep).
+- Plan 25: backward-compat fallback for old mapping.yaml files. Hard cutover: any project with mapping.yaml predating this release must be re-inscribed.
 
 ## [0.4.1] - 2026-08-04
 

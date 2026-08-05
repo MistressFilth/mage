@@ -39,6 +39,7 @@ async def test_inscribe_agent_run_returns_inscribe_output(
         base_bid="00000",
         behavior_name="Authenticate user",
         behavior_description="User logs in with email and password",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="p", base_bids=[behavior])
 
@@ -57,6 +58,7 @@ async def test_inscribe_agent_formats_dict_existing_scenarios(
         base_bid="00000",
         behavior_name="Authenticate user",
         behavior_description="User logs in with email and password",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="p", base_bids=[behavior])
 

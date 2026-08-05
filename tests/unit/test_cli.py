@@ -68,6 +68,7 @@ class TestCli:
                     reversion_log=[],
                     post_live_revisions=[],
                     cross_behavior_links=[],
+                    behavior_halt=[],
                 )
             ],
         )

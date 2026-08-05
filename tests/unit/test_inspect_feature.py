@@ -245,6 +245,7 @@ class TestInspectFeatureStage:
                     base_bid="00000",
                     behavior_name="behavior",
                     behavior_description="description",
+                    behavior_halt=[],
                 )
             ],
         )

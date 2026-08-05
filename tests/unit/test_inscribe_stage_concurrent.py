@@ -76,6 +76,7 @@ def _write_behaviors_yaml(project_dir: Path) -> None:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     },
                 ],
             }
@@ -107,6 +108,7 @@ async def test_inscribe_stage_constructs_semaphore_with_max_concurrent_llm_calls
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             },
         ],
     )

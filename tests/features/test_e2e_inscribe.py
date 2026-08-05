@@ -102,6 +102,7 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -122,6 +123,7 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -192,6 +194,7 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -210,6 +213,7 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -276,6 +280,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -294,6 +299,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -370,6 +376,7 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -388,6 +395,7 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -438,8 +446,9 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
 
     First run: scenario-A fails review and exhausts its budget. The
     InscribeStage raises ReviewBudgetExhausted with halted_sub_bids set.
-    The test then persists behavior_halt onto BaseBIDEntry (the action the
-    PipelineGraph takes in production — see graph.py:104-126).
+    The test then persists behavior_halt onto BaseBIDEntry(the action the
+    PipelineGraph takes in production — see graph.py:104-126,
+    behavior_halt=[]).
 
     Resume: the mapping is reloaded from disk. scenario-A re-drafts; the
     agent receives scenario-B's real scenario_name + gherkin_body in
@@ -474,6 +483,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
                         "description": "User logs in",
                         "depends_on": [],
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -507,6 +517,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )

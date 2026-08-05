@@ -19,7 +19,10 @@ def _ctx(tmp_path):
             project_id="p",
             base_bids=[
                 BaseBIDEntry(
-                    base_bid="00000", behavior_name="b", behavior_description="d"
+                    base_bid="00000",
+                    behavior_name="b",
+                    behavior_description="d",
+                    behavior_halt=[],
                 ),
             ],
         ),

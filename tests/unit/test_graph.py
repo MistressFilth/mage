@@ -186,6 +186,7 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
                     "reversion_log": [],
                     "post_live_revisions": [],
                     "cross_behavior_links": [],
+                    "behavior_halt": [],
                 }
             ],
         ),

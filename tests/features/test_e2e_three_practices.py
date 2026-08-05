@@ -138,6 +138,7 @@ async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
                         "depends_on": [],
                         "notes": "",
                         "cross_behavior_links": [],
+                        "behavior_halt": [],
                     }
                 ],
             }
@@ -158,6 +159,7 @@ async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
                 reversion_log=[],
                 post_live_revisions=[],
                 cross_behavior_links=[],
+                behavior_halt=[],
             ),
         ],
     )
@@ -268,11 +270,15 @@ async def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
 
     old = ScenarioEntry(
         sub_bid="A",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="h_old",
         lifecycle_status=LifecycleStatus.LIVE,
     )
     new = ScenarioEntry(
         sub_bid="B",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="h_new",
         lifecycle_status=LifecycleStatus.INSCRIBING,
     )
@@ -284,6 +290,7 @@ async def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
                 behavior_name="b",
                 behavior_description="d",
                 scenarios=[old, new],
+                behavior_halt=[],
             ),
         ],
     )
@@ -378,11 +385,15 @@ def test_e2e_plan_order_violation() -> None:
     """
     older = ScenarioEntry(
         sub_bid="A",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="h_a",
         lifecycle_status=LifecycleStatus.INSCRIBING,
     )
     newer = ScenarioEntry(
         sub_bid="B",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="h_b",
         lifecycle_status=LifecycleStatus.INSCRIBING,
     )
@@ -394,6 +405,7 @@ def test_e2e_plan_order_violation() -> None:
                 behavior_name="b",
                 behavior_description="d",
                 scenarios=[older, newer],
+                behavior_halt=[],
             ),
         ],
     )

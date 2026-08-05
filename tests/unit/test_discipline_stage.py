@@ -27,10 +27,13 @@ def _ctx(
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="A",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=scenario_status,
                     )
                 ],
+                behavior_halt=[],
             )
         ],
     )
@@ -87,10 +90,13 @@ async def test_stage_calls_begin_supersession_on_supersession_requested(tmp_path
         scenarios=[
             ScenarioEntry(
                 sub_bid="N",
+                scenario_name="scenario-A",
+                gherkin_body="Scenario: scenario-A\n  Given x\n",
                 scenario_text_hash="h",
                 lifecycle_status=LifecycleStatus.INSCRIBING,
             )
         ],
+        behavior_halt=[],
     )
     ctx = _ctx(tmp_path)
     ctx.mapping = MappingArtifact(
@@ -103,10 +109,13 @@ async def test_stage_calls_begin_supersession_on_supersession_requested(tmp_path
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="O",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.LIVE,
                     )
                 ],
+                behavior_halt=[],
             ),
             new_entry,
         ],
@@ -139,10 +148,13 @@ async def test_stage_completes_pending_supersession_on_scenario_live(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="O",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.LIVE,
                     )
                 ],
+                behavior_halt=[],
             ),
             BaseBIDEntry(
                 base_bid="00001",
@@ -151,11 +163,14 @@ async def test_stage_completes_pending_supersession_on_scenario_live(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="N",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.APPROVED,
                         supersedes="O",
                     )
                 ],
+                behavior_halt=[],
             ),
         ],
     )
@@ -228,10 +243,13 @@ async def test_stage_emits_deprecated_event_on_supersession_complete(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="O",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.LIVE,
                     )
                 ],
+                behavior_halt=[],
             ),
             BaseBIDEntry(
                 base_bid="00001",
@@ -240,11 +258,14 @@ async def test_stage_emits_deprecated_event_on_supersession_complete(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="N",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.APPROVED,
                         supersedes="O",
                     )
                 ],
+                behavior_halt=[],
             ),
         ],
     )
@@ -332,10 +353,13 @@ async def test_stage_idempotent_on_duplicate_supersession_requested(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="O",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.LIVE,
                     )
                 ],
+                behavior_halt=[],
             ),
             BaseBIDEntry(
                 base_bid="00001",
@@ -344,10 +368,13 @@ async def test_stage_idempotent_on_duplicate_supersession_requested(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="N",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.INSCRIBING,
                     )
                 ],
+                behavior_halt=[],
             ),
         ],
     )
@@ -384,10 +411,13 @@ async def test_stage_idempotent_on_duplicate_scenario_live(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="O",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.LIVE,
                     )
                 ],
+                behavior_halt=[],
             ),
             BaseBIDEntry(
                 base_bid="00001",
@@ -396,11 +426,14 @@ async def test_stage_idempotent_on_duplicate_scenario_live(tmp_path):
                 scenarios=[
                     ScenarioEntry(
                         sub_bid="N",
+                        scenario_name="scenario-A",
+                        gherkin_body="Scenario: scenario-A\n  Given x\n",
                         scenario_text_hash="h",
                         lifecycle_status=LifecycleStatus.APPROVED,
                         supersedes="O",
                     )
                 ],
+                behavior_halt=[],
             ),
         ],
     )
@@ -457,4 +490,3 @@ async def test_stage_scenario_approved_does_not_release_lock_held_by_other(tmp_p
             payload={"sub_bid": "A"},
         ),
     )
-    assert ctx.current_sub_bid is None

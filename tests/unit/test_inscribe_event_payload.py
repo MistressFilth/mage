@@ -81,6 +81,7 @@ async def test_inscribe_started_event_carries_context_feature_id(tmp_path):
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )
@@ -135,6 +136,7 @@ async def test_inscribe_started_event_empty_when_context_feature_id_empty(tmp_pa
                 "reversion_log": [],
                 "post_live_revisions": [],
                 "cross_behavior_links": [],
+                "behavior_halt": [],
             }
         ],
     )

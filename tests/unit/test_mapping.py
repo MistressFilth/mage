@@ -17,7 +17,12 @@ from mage.artifacts.mapping import (
 
 
 def base(value: str, name: str = "b") -> BaseBIDEntry:
-    return BaseBIDEntry(base_bid=value, behavior_name=name, behavior_description="d")
+    return BaseBIDEntry(
+        base_bid=value,
+        behavior_name=name,
+        behavior_description="d",
+        behavior_halt=[],
+    )
 
 
 class TestLifecycleStatus:
@@ -35,6 +40,8 @@ class TestScenarioEntry:
     def test_minimal_construction(self):
         entry = ScenarioEntry(
             sub_bid="A",
+            scenario_name="scenario-A",
+            gherkin_body="Scenario: scenario-A\n  Given x\n",
             scenario_text_hash="abc123",
             lifecycle_status=LifecycleStatus.INSCRIBING,
         )
@@ -54,6 +61,7 @@ def test_base_bid_entry_has_depends_on_and_notes():
         behavior_description="User logs in with email and password",
         depends_on=[],
         notes="Foundation behavior; everything else depends on this.",
+        behavior_halt=[],
     )
     assert entry.depends_on == []
     assert entry.notes == "Foundation behavior; everything else depends on this."
@@ -67,6 +75,7 @@ async def test_base_bid_entry_round_trip_with_new_fields(tmp_path):
         behavior_description="User places an order",
         depends_on=["00000"],
         notes="Depends on authentication.",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="test-project", base_bids=[entry])
     path = tmp_path / "mapping.yaml"
@@ -94,6 +103,8 @@ class TestMappingArtifact:
     def test_lookup_sub_bid(self):
         scenario = ScenarioEntry(
             sub_bid="A",
+            scenario_name="scenario-A",
+            gherkin_body="Scenario: scenario-A\n  Given x\n",
             scenario_text_hash="h1",
             lifecycle_status=LifecycleStatus.LIVE,
             tests=["test_login"],
@@ -126,6 +137,8 @@ class TestMappingArtifactIO:
                         "scenarios": [
                             ScenarioEntry(
                                 sub_bid="A",
+                                scenario_name="scenario-A",
+                                gherkin_body="Scenario: scenario-A\n  Given x\n",
                                 scenario_text_hash="hash1",
                                 lifecycle_status=LifecycleStatus.APPROVED,
                             )
@@ -160,11 +173,14 @@ def test_append_scenario_adds_to_matching_base_bid():
         base_bid="00000",
         behavior_name="Authenticate user",
         behavior_description="User logs in",
+        behavior_halt=[],
     )
     mapping = MappingArtifact(project_id="p", base_bids=[entry])
 
     new_scenario = ScenarioEntry(
         sub_bid="000000",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="abc123",
         lifecycle_status=LifecycleStatus.APPROVED,
     )
@@ -189,11 +205,18 @@ def test_append_scenario_raises_on_unknown_base_bid():
     mapping = MappingArtifact(
         project_id="p",
         base_bids=[
-            BaseBIDEntry(base_bid="00000", behavior_name="x", behavior_description="y"),
+            BaseBIDEntry(
+                base_bid="00000",
+                behavior_name="x",
+                behavior_description="y",
+                behavior_halt=[],
+            ),
         ],
     )
     scenario = ScenarioEntry(
         sub_bid="000000",
+        scenario_name="scenario-A",
+        gherkin_body="Scenario: scenario-A\n  Given x\n",
         scenario_text_hash="h",
         lifecycle_status=LifecycleStatus.APPROVED,
     )

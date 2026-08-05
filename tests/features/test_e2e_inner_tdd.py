@@ -38,6 +38,8 @@ class TestE2EInnerTDDHappyPath:
         scenarios = [
             ScenarioEntry(
                 sub_bid=f"00000-{i}",
+                scenario_name="scenario-A",
+                gherkin_body="Scenario: scenario-A\n  Given x\n",
                 scenario_text_hash=f"hash-{i}",
                 lifecycle_status=LifecycleStatus.APPROVED,
             )
@@ -51,6 +53,7 @@ class TestE2EInnerTDDHappyPath:
                     behavior_name="happy",
                     behavior_description="x",
                     scenarios=scenarios,
+                    behavior_halt=[],
                 )
             ],
         )
