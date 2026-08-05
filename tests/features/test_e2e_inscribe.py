@@ -160,7 +160,7 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     assert len(scenario_files) >= 1
 
     # Verify verdict files were written
-    verdicts_root = project_dir / ".haileris" / "verdicts"
+    verdicts_root = project_dir / ".mage" / "verdicts"
     assert verdicts_root.exists()
 
     # Verify events

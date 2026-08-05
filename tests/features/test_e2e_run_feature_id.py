@@ -152,7 +152,7 @@ async def test_e2e_run_with_feature_id_threads_to_events(
 
     assert exc_info.value.code == 0
 
-    state_path = project_dir / ".haileris" / "state" / "pipeline-state.yaml"
+    state_path = project_dir / ".mage" / "state" / "pipeline-state.yaml"
     assert state_path.exists(), "pipeline-state.yaml must be written on halt"
 
     state = yaml.safe_load(state_path.read_text())

@@ -37,7 +37,7 @@ async def finalize_inspect(
     iteration: int = 1,
     ready: bool = True,
 ) -> Path:
-    path = project / ".haileris" / "inspect" / path_feature_id / f"{iteration}.yaml"
+    path = project / ".mage" / "inspect" / path_feature_id / f"{iteration}.yaml"
     content = InspectArtifactContent(
         feature_id=content_feature_id,
         inspected_at=datetime.now(UTC),
@@ -197,9 +197,7 @@ class TestSettleReadiness:
     @pytest.mark.asyncio
     async def test_digest_mismatch_aborts_settle(self, tmp_path):
         context = await make_context(tmp_path / "project")
-        inspect_path = (
-            context.project_dir / ".haileris" / "inspect" / "feat-1" / "1.yaml"
-        )
+        inspect_path = context.project_dir / ".mage" / "inspect" / "feat-1" / "1.yaml"
         inspect_path.write_text(inspect_path.read_text() + "# tampered\n")
 
         with pytest.raises(InspectArtifactDigestMismatchError):
@@ -278,8 +276,8 @@ class TestSettleFinalization:
             MappingArtifact.load(context.project_dir / "mapping.yaml")
             == context.mapping
         )
-        report = context.project_dir / ".haileris" / "settle" / "feat-1.md"
-        cosmetic = context.project_dir / ".haileris" / "settle" / "feat-1-cosmetic.md"
+        report = context.project_dir / ".mage" / "settle" / "feat-1.md"
+        cosmetic = context.project_dir / ".mage" / "settle" / "feat-1-cosmetic.md"
         assert report.exists()
         assert cosmetic.exists()
         assert "kept" in report.read_text()
@@ -597,7 +595,7 @@ class TestSettleFinalization:
     ):
         context = await make_context(tmp_path / "project")
         runner = RecordingRunner(context.project_dir)
-        report_path = context.project_dir / ".haileris" / "settle" / "feat-1.md"
+        report_path = context.project_dir / ".mage" / "settle" / "feat-1.md"
         report_path.mkdir(parents=True)
 
         with pytest.raises(IsADirectoryError):

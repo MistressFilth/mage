@@ -38,7 +38,7 @@ from mage.orchestration.events import EventsLog
 # ---------------------------------------------------------------------------
 
 # Path where the persistence layer writes the pipeline state on a halt.
-_STATE_DIR = Path(".haileris") / "state"
+_STATE_DIR = Path(".mage") / "state"
 
 
 async def _plant_fixture(
@@ -303,7 +303,7 @@ async def test_mage_run_resumes_from_persisted_cursor(
     assert exc_info.value.code == 0
 
     # The cursor was persisted.
-    state_dir = project_dir / ".haileris" / "state"
+    state_dir = project_dir / ".mage" / "state"
     persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
     saved = persistence.load_state()
     assert saved is not None

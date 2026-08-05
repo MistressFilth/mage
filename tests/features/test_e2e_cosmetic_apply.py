@@ -26,14 +26,14 @@ def _write_minimal_project(project: Path) -> None:
     """Write a minimal valid mapping.yaml and initialize a git repo.
 
     Creates ``mapping.yaml`` (``schema_version: 2``, ``project_id: e2e``,
-    empty ``base_bids``), the ``.haileris/`` directory, and initializes
+    empty ``base_bids``), the ``.mage/`` directory, and initializes
     a git repo with an initial commit so ``git commit -am`` later in
     ``cmd_cosmetic_apply`` has something to amend onto.
     """
     (project / "mapping.yaml").write_text(
         "schema_version: 2\nproject_id: e2e\nbase_bids: []\n"
     )
-    (project / ".haileris").mkdir(exist_ok=True)
+    (project / ".mage").mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.email", "e2e@mage"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.name", "e2e"], cwd=project, check=True)

@@ -37,7 +37,7 @@ class TestLoadHostConfig:
         assert config.check_set == "default"
 
     def test_loads_config_from_yaml(self, tmp_path: Path):
-        config_dir = tmp_path / ".haileris"
+        config_dir = tmp_path / ".mage"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
             "max_iterations: 5\ncheck_set: default\n"
@@ -46,7 +46,7 @@ class TestLoadHostConfig:
         assert config.max_iterations == 5
 
     def test_partial_config_uses_defaults_for_missing_fields(self, tmp_path: Path):
-        config_dir = tmp_path / ".haileris"
+        config_dir = tmp_path / ".mage"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("max_iterations: 7\n")
         config = load_host_config(tmp_path)
@@ -54,7 +54,7 @@ class TestLoadHostConfig:
         assert config.check_set == "default"  # default preserved
 
     def test_invalid_yaml_raises(self, tmp_path: Path):
-        config_dir = tmp_path / ".haileris"
+        config_dir = tmp_path / ".mage"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text("not: valid: yaml: at all: :::")
         with pytest.raises(yaml.YAMLError):
@@ -109,7 +109,7 @@ def test_host_config_enabled_reviewers_override():
 def test_load_host_config_parses_max_iterations(tmp_path: Path):
     import yaml
 
-    config_dir = tmp_path / ".haileris"
+    config_dir = tmp_path / ".mage"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text(yaml.safe_dump({"max_iterations": 7}))
     config = load_host_config(tmp_path)
@@ -156,7 +156,7 @@ class TestPlan5SettleHostConfig:
 
         from mage.verification.host_overrides import load_host_config
 
-        config_dir = tmp_path / ".haileris"
+        config_dir = tmp_path / ".mage"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
             yaml.safe_dump(

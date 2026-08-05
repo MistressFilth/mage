@@ -48,7 +48,7 @@ class TestCli:
         feature_path.write_text(
             "Feature: Test\n\n  Scenario: Valid\n    Given x\n    When y\n    Then z\n"
         )
-        config_dir = tmp_project_dir / ".haileris"
+        config_dir = tmp_project_dir / ".mage"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
             "max_iterations: 3\ncheck_set: default\n"
@@ -811,7 +811,7 @@ class TestInspectShow:
         # Build a minimal project with an InspectArtifact
         project = tmp_path / "proj"
         project.mkdir()
-        inspect_dir = project / ".haileris" / "inspect" / "feat-1"
+        inspect_dir = project / ".mage" / "inspect" / "feat-1"
         inspect_dir.mkdir(parents=True)
         log = EventsLog(project / "events.jsonl")
         artifact = InspectArtifactContent(
@@ -875,7 +875,7 @@ class TestSettleRun:
         self._install_runner(monkeypatch, project)
 
         # Build a ready-to-merge InspectArtifact
-        inspect_dir = project / ".haileris" / "inspect" / "feat-1"
+        inspect_dir = project / ".mage" / "inspect" / "feat-1"
         inspect_dir.mkdir(parents=True)
         artifact = InspectArtifactContent(
             feature_id="feat-1",
@@ -931,7 +931,7 @@ class TestSettleRun:
         log = EventsLog(project / "events.jsonl")
         self._install_runner(monkeypatch, project, test_returncode=1)
         await InspectArtifact.finalize(
-            project / ".haileris" / "inspect" / "feat-1" / "1.yaml",
+            project / ".mage" / "inspect" / "feat-1" / "1.yaml",
             InspectArtifactContent(
                 feature_id="feat-1",
                 inspected_at=datetime.now(UTC),
