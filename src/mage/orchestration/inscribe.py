@@ -128,7 +128,6 @@ class InscribeStage(StageNode):
                 s.sub_bid: iteration for s in entry.scenarios
             }
             halted_scenarios: set[str] = set()
-            pending_sub_bids: set[str] = set()
 
             approved = False
             while not approved:
@@ -148,7 +147,6 @@ class InscribeStage(StageNode):
                     # tracking and halt events can carry it.
                     parent_bid = Base85BID(value=base_bid)
                     sub_bid = Base85BID.derive(parent_bid, scenario_idx).value
-                    pending_sub_bids.add(sub_bid)
                     per_scenario_iter.setdefault(sub_bid, iteration)
 
                     # Check halt first.
