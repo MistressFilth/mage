@@ -6,9 +6,6 @@ Spec-driven development pipeline: a staged engine that decomposes a feature
 into behaviors, inscribes Gherkin scenarios, drives an inner TDD loop, inspects
 the result, and finalizes the branch.
 
-See `docs/superpowers/specs/` for the design documents and
-`docs/superpowers/plans/` for the implementation plans.
-
 ## Install
 
 ```bash
@@ -124,20 +121,11 @@ make help    # all targets
 
 ## Repository status and policy
 
-Design documents and implementation plans are tracked in the repository:
-
-- [Design documents](docs/superpowers/specs/)
-- [Implementation plans](docs/superpowers/plans/)
-
 Repository publication and branch-protection rulesets are external to this
 repo. The intended `main` policy is documented in
 [AGENTS.md](AGENTS.md): protected history, pull requests, squash-only merges,
 and an aggregating `check` status gate. Verify the live ruleset before
 publishing because this README cannot assert the current GitHub state.
-
-## Version
-
-The current development version is `0.3.11`.
 
 ## Links
 
