@@ -6,7 +6,6 @@ __pycache__/
 .coverage
 dist/
 build/
-*.haileris/
 mapping.yaml
 events.jsonl
 pipeline-state.yaml
