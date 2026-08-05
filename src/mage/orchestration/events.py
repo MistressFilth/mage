@@ -53,6 +53,7 @@ class EventType(str, Enum):
     SCENARIO_APPROVED = "scenario_approved"
     SCENARIO_NEEDS_REFACTOR = "scenario_needs_refactor"
     REVIEW_HALT_PERSISTED = "review_halt_persisted"
+    SCENARIO_HALT_PERSISTED = "scenario_halt_persisted"
 
     # Plan 4 — Etch stage
     ETCH_STARTED = "etch_started"
