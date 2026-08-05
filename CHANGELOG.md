@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-05
+
 ### Added
 
 - `mage cosmetic unwatch` — stop the cosmetic watcher daemon by PID file
