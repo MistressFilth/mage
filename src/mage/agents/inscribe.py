@@ -82,7 +82,8 @@ class InscribeAgent:
     ) -> InscribeOutput:
         existing_str = (
             "\n".join(
-                f"- {s.name}: {s.gherkin_body[:80]}..." for s in existing_scenarios
+                f"- {s.get('name', '')}: {(s.get('gherkin_body') or '')[:80]}..."
+                for s in existing_scenarios
             )
             or "(none)"
         )
