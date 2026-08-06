@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from subprocess import CompletedProcess
 
 import pytest
 
@@ -36,78 +35,6 @@ class _StubAgent:
         return self._output
 
 
-class _RecordingRunner:
-    def __init__(self, stdout: str = "diff --git a/foo.py\n+new line\n") -> None:
-        self.stdout = stdout
-        self.calls: list[tuple[list[str], Path]] = []
-
-    def __call__(self, command: list[str], *, cwd: Path) -> CompletedProcess[str]:
-        self.calls.append((list(command), Path(cwd)))
-        return CompletedProcess(command, 0, stdout=self.stdout, stderr="")
-
-
-@pytest.mark.asyncio
-async def test_run_increment_returns_increment_result_with_diff(tmp_path):
-    ctx = _context(tmp_path)
-    target = ScenarioTarget(
-        base_bid="00001",
-        sub_bid="00001-0001",
-        scenario_name="happy",
-        gherkin_body="",
-        steps=["seed"],
-    )
-    increment = Increment(
-        index=0, step="seed", red_test_path="t.py", red_test_code="..."
-    )
-    agent = _StubAgent(RealizeOutput(files_changed=["foo.py", "bar.py"], summary="ok"))
-    runner = _RecordingRunner(stdout="diff payload")
-    stage = RealizeStage(
-        ctx.events_log,
-        agent=agent,  # type: ignore[arg-type, ty:invalid-argument-type]
-        command_runner=runner,
-        host_config=HostConfig(),
-    )
-
-    result = await stage.run_increment(ctx, target=target, increment=increment)
-
-    assert result.files_changed == ["foo.py", "bar.py"]
-    assert result.summary == "ok"
-    assert result.diff == "diff payload"
-    assert len(runner.calls) == 1
-    command, _cwd = runner.calls[0]
-    assert command[:3] == ["git", "diff", "--unified=10"]
-    assert command[-3:] == ["--", "foo.py", "bar.py"]
-
-
-@pytest.mark.asyncio
-async def test_run_increment_uses_default_runner_when_none_provided(
-    tmp_path, monkeypatch
-):
-    """The default runner must exist and be callable; tests don't hit real git."""
-    ctx = _context(tmp_path)
-    target = ScenarioTarget(
-        base_bid="00001",
-        sub_bid="00001-0001",
-        scenario_name="happy",
-        gherkin_body="",
-        steps=["seed"],
-    )
-    increment = Increment(
-        index=0, step="seed", red_test_path="t.py", red_test_code="..."
-    )
-    agent = _StubAgent(RealizeOutput(files_changed=[], summary="nothing"))
-
-    def fake_run(command, *, cwd):
-        return CompletedProcess(command, 0, stdout="", stderr="")
-
-    monkeypatch.setattr("mage.orchestration.realize._default_command_runner", fake_run)
-    stage = RealizeStage(ctx.events_log, agent=agent, host_config=HostConfig())  # type: ignore[arg-type, ty:invalid-argument-type]
-
-    result = await stage.run_increment(ctx, target=target, increment=increment)
-
-    assert result.diff == ""
-
-
 @pytest.mark.asyncio
 async def test_run_increment_emits_realize_increment_done(tmp_path):
     ctx = _context(tmp_path)
@@ -122,11 +49,9 @@ async def test_run_increment_emits_realize_increment_done(tmp_path):
         index=0, step="seed", red_test_path="t.py", red_test_code="..."
     )
     agent = _StubAgent(RealizeOutput(files_changed=["x.py"], summary=""))
-    runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
         ctx.events_log,
         agent=agent,  # type: ignore[arg-type, ty:invalid-argument-type]
-        command_runner=runner,
         host_config=HostConfig(),
     )
 
@@ -187,11 +112,9 @@ async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
         index=0, step="seed", red_test_path="t.py", red_test_code="..."
     )
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
-    runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
         ctx.events_log,
         agent=agent,
-        command_runner=runner,
         host_config=HostConfig(),
     )
 
@@ -226,11 +149,9 @@ async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp
         index=0, step="seed", red_test_path="t.py", red_test_code="..."
     )
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
-    runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
         ctx.events_log,
         agent=agent,
-        command_runner=runner,
         host_config=HostConfig(),
     )
 
@@ -269,11 +190,9 @@ async def test_run_increment_carry_forward_window_respects_size(tmp_path):
         index=0, step="seed", red_test_path="t.py", red_test_code="..."
     )
     agent = _RecordingAgent(RealizeOutput(files_changed=[], summary=""))
-    runner = _RecordingRunner(stdout="")
     stage = RealizeStage(
         ctx.events_log,
         agent=agent,
-        command_runner=runner,
         host_config=HostConfig(per_scenario_window=2),
     )
 
@@ -286,3 +205,70 @@ async def test_run_increment_carry_forward_window_respects_size(tmp_path):
 
     carry_forward = agent.calls[0]["carry_forward"]
     assert [e.finding_id for e in carry_forward] == ["b", "c"]
+
+
+def _git_init(tmp_path: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=tmp_path, check=True)
+
+
+@pytest.mark.asyncio
+async def test_run_increment_diff_emits_incomplete_event_on_path_traversal(
+    tmp_path: Path,
+) -> None:
+    _git_init(tmp_path)
+    ctx = _context(tmp_path)
+    target = ScenarioTarget(
+        base_bid="00001", sub_bid="00001-0001",
+        scenario_name="happy", gherkin_body="", steps=["seed"],
+    )
+    increment = Increment(
+        index=0, step="seed", red_test_path="t.py", red_test_code="..."
+    )
+    agent = _StubAgent(RealizeOutput(files_changed=["../escape.txt"], summary=""))
+    stage = RealizeStage(
+        ctx.events_log, agent, host_config=HostConfig(),  # type: ignore[arg-type, ty:invalid-argument-type]
+    )
+
+    result = await stage.run_increment(ctx, target=target, increment=increment)
+
+    types = [e.event_type.value for e in ctx.events_log.read_all()]
+    assert "realize_increment_diff_incomplete" in types
+    assert result.diff == ""
+
+
+def test_run_increment_diff_excludes_prior_increment_changes(tmp_path: Path) -> None:
+    """The repro from P26 findings: prior-increment dirty change must NOT
+    appear in the current increment's diff.
+
+    Exercises `compute_unified_diff` directly with a pre-snapshot taken
+    between increment 1's dirty write and increment 2's edits. The
+    increment-relative diff must show only increment 2's additions; the
+    increment 1 line is pre-existing context and must not be marked `-`.
+    """
+    import subprocess
+
+    from mage.orchestration.increment_diff import compute_unified_diff, snapshot_tree
+
+    _git_init(tmp_path)
+    (tmp_path / "foo.py").write_text("v1\n")
+    subprocess.run(["git", "add", "foo.py"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=tmp_path, check=True)
+
+    # Seed a tracked-unstaged change from "increment 1"
+    (tmp_path / "foo.py").write_text("v1\nINCREMENT1_DIRTY\n")
+
+    pre = snapshot_tree(tmp_path)
+    (tmp_path / "foo.py").write_text("v1\nINCREMENT1_DIRTY\nINCREMENT2_EDIT\n")
+    (tmp_path / "bar.py").write_text("NEW FILE\n")
+    diff, warnings = compute_unified_diff(tmp_path, ["foo.py", "bar.py"], pre)
+
+    assert "INCREMENT2_EDIT" in diff
+    assert "NEW FILE" in diff
+    assert "+INCREMENT2_EDIT" in diff
+    # The increment 1 dirty line must show only as context, not as a deletion.
+    assert "-INCREMENT1_DIRTY" not in diff
+    assert warnings == []

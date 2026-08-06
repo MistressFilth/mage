@@ -1,41 +1,28 @@
 """RealizeStage: drives one increment of the inner TDD loop, with diff capture.
 
-Plan 6: this stage is no longer a StageNode. It now rebuilds the
+Plan 6: this stage is no longer a StageNode. It rebuilds the
 carry-forward and cross-scenario observations windows from the mapping's
 inspect_journal before calling the agent (R3 / R21). It returns an
 `IncrementResult` so `InspectLoopStage.inspect_increment` can hand the
 diff to the reviewer without keyword-argument guesswork.
+
+P27: diff capture is now increment-relative via `increment_diff`
+(snapshot pre-agent, diff post-agent). The previous `git diff -- <paths>`
+implementation was repository-relative — cumulative prior-increment edits,
+omitted staged, empty for new untracked files — and is removed.
 """
 
 from __future__ import annotations
 
-import subprocess
-from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
-from subprocess import CompletedProcess
 
 from mage.agents.realize import RealizeAgent
 from mage.artifacts.inspect import InspectJournalEntry
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.orchestration.increment_diff import compute_unified_diff, snapshot_tree
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
 from mage.verification.host_overrides import HostConfig
-
-CommandRunner = Callable[..., CompletedProcess[str]]
-
-# Window sizes are host-configurable via HostConfig.per_scenario_window
-# and HostConfig.cross_scenario_window (Spec R3 / R21).
-
-
-def _default_command_runner(command: list[str], *, cwd: Path) -> CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
 
 
 class RealizeStage:
@@ -46,12 +33,10 @@ class RealizeStage:
         events_log: EventsLog,
         agent: RealizeAgent,
         *,
-        command_runner: CommandRunner | None = None,
         host_config: HostConfig,
     ) -> None:
         self.events_log = events_log
         self.agent = agent
-        self.command_runner = command_runner or _default_command_runner
         self.host_config = host_config
 
     def _build_carry_forward(
@@ -103,11 +88,12 @@ class RealizeStage:
         increment: Increment,
         carry_forward: list | None = None,
     ) -> IncrementResult:
-        """Run the agent, compute the diff, return an IncrementResult.
+        """Run the agent, compute the increment-relative diff, return result.
 
-        Builds the per-scenario carry-forward and cross-scenario observations
-        from the mapping's inspect_journal before invoking the agent. An
-        optional `carry_forward` override is reserved for tests / Plan 7+8.
+        Pre-agent: snapshot the project tree. Post-agent: compute the diff
+        for `output.files_changed` against the snapshot. Emit
+        `REALIZE_INCREMENT_DIFF_INCOMPLETE` when the diff builder reports
+        warnings (path traversal, both-missing, read errors).
         """
         if carry_forward is None:
             carry_forward = self._build_carry_forward(context, target.sub_bid)
@@ -115,6 +101,7 @@ class RealizeStage:
             context, target.sub_bid
         )
 
+        pre = snapshot_tree(context.project_dir)
         output = await self.agent.run(
             step=increment.step,
             scenario_context={"sub_bid": target.sub_bid},
@@ -122,13 +109,9 @@ class RealizeStage:
             carry_forward=carry_forward,
             cross_scenario_observations=cross_scenario,
         )
-        diff = ""
-        if output.files_changed:
-            result = self.command_runner(
-                ["git", "diff", "--unified=10", "--", *output.files_changed],
-                cwd=context.project_dir,
-            )
-            diff = result.stdout
+        diff, warnings = compute_unified_diff(
+            context.project_dir, list(output.files_changed), pre
+        )
         await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
@@ -140,6 +123,18 @@ class RealizeStage:
                 },
             )
         )
+        if warnings:
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.REALIZE_INCREMENT_DIFF_INCOMPLETE,
+                    payload={
+                        "sub_bid": target.sub_bid,
+                        "step": increment.step,
+                        "warnings": warnings,
+                    },
+                )
+            )
         return IncrementResult(
             files_changed=list(output.files_changed),
             summary=output.summary,
