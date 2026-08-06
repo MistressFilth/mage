@@ -51,7 +51,7 @@ async def test_run_increment_emits_realize_increment_done(tmp_path):
     agent = _StubAgent(RealizeOutput(files_changed=["x.py"], summary=""))
     stage = RealizeStage(
         ctx.events_log,
-        agent=agent,  # type: ignore[arg-type, ty:invalid-argument-type]
+        agent=agent,  # ty: ignore[invalid-argument-type]
         host_config=HostConfig(),
     )
 
@@ -86,7 +86,7 @@ def _journal_entry(
         iteration=1,
         dimension="increment_quality",
         severity="major",
-        route=route,  # type: ignore[arg-type, ty:invalid-argument-type]
+        route=route,  # ty: ignore[invalid-argument-type]
         finding_id=finding_id,
         location=f"{sub_bid}.py:1",
         issue="issue",
@@ -234,8 +234,8 @@ async def test_run_increment_diff_emits_incomplete_event_on_path_traversal(
     agent = _StubAgent(RealizeOutput(files_changed=["../escape.txt"], summary=""))
     stage = RealizeStage(
         ctx.events_log,
-        agent,
-        host_config=HostConfig(),  # type: ignore[arg-type, ty:invalid-argument-type]
+        agent,  # ty: ignore[invalid-argument-type]
+        host_config=HostConfig(),
     )
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
