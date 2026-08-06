@@ -103,6 +103,7 @@ class EventType(str, Enum):
     SCENARIO_REVERTED_TO_INSCRIBING = "scenario_reverted_to_inscribing"
     SCENARIO_REVISION_REQUESTED = "scenario_revision_requested"
     SCENARIO_SUPERSESSION_REQUESTED = "scenario_supersession_requested"
+    SCENARIO_SUPERSESSION_RESOLVED = "scenario_supersession_resolved"
     SCENARIO_DEPRECATED = "scenario_deprecated"
 
     # Plan 9 — Cosmetic apply pipeline

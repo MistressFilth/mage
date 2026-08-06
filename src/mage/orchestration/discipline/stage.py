@@ -7,6 +7,8 @@ through Policy methods and emits audit events. It does not run agents.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from mage.orchestration.discipline.policy import (
     begin_revision,
     begin_supersession,
@@ -125,18 +127,53 @@ class DisciplineStage(StageNode):
             if key in self._seen_events:
                 return
             self._seen_events.add(key)
-            # Check if this scenario supersedes another
-            for entry in context.mapping.base_bids:
-                for s in entry.scenarios:
-                    if s.sub_bid == new_sub_bid and s.supersedes is not None:
-                        context.mapping = complete_supersession(
-                            mapping=context.mapping,
-                            new_sub_bid=new_sub_bid,
-                            timestamp=event.timestamp,
-                        )
-                        await self._emit(
-                            EventType.SCENARIO_DEPRECATED,
-                            {"old_sub_bid": s.supersedes, "new_sub_bid": new_sub_bid},
-                        )
-                        return
+            await self._resolve_supersession_for_new_live(
+                context=context,
+                new_sub_bid=new_sub_bid,
+                timestamp=event.timestamp,
+            )
             return
+
+        if et == EventType.SCENARIO_SUPERSESSION_RESOLVED:
+            new_sub_bid = payload["new_sub_bid"]
+            key = (et, new_sub_bid)
+            if key in self._seen_events:
+                return
+            self._seen_events.add(key)
+            await self._resolve_supersession_for_new_live(
+                context=context,
+                new_sub_bid=new_sub_bid,
+                timestamp=event.timestamp,
+            )
+            return
+
+    async def _resolve_supersession_for_new_live(
+        self,
+        context: PipelineContext,
+        new_sub_bid: str,
+        timestamp: datetime,
+    ) -> None:
+        """If the new scenario supersedes an old one, deprecate the old.
+
+        Looks up the new scenario in the mapping; if it has a
+        ``supersedes`` link, calls ``complete_supersession`` to flip
+        the old scenario to ``DEPRECATED`` and emits a
+        ``SCENARIO_DEPRECATED`` event. No-op if the new scenario is not
+        a superseder or has no ``supersedes`` link.
+        """
+        for entry in context.mapping.base_bids:
+            for s in entry.scenarios:
+                if s.sub_bid == new_sub_bid and s.supersedes is not None:
+                    context.mapping = complete_supersession(
+                        mapping=context.mapping,
+                        new_sub_bid=new_sub_bid,
+                        timestamp=timestamp,
+                    )
+                    await self._emit(
+                        EventType.SCENARIO_DEPRECATED,
+                        {
+                            "old_sub_bid": s.supersedes,
+                            "new_sub_bid": new_sub_bid,
+                        },
+                    )
+                    return
