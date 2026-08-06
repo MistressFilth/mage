@@ -102,9 +102,7 @@ async def test_resolved_event_emits_scenario_deprecated(tmp_path: Path) -> None:
         ),
     )
     events = ctx.events_log.read_all()
-    deprecated = [
-        e for e in events if e.event_type == EventType.SCENARIO_DEPRECATED
-    ]
+    deprecated = [e for e in events if e.event_type == EventType.SCENARIO_DEPRECATED]
     assert len(deprecated) == 1
     assert deprecated[0].payload.get("old_sub_bid") == "OLD"
     assert deprecated[0].payload.get("new_sub_bid") == "NEW"
@@ -131,8 +129,6 @@ async def test_resolved_event_is_idempotent_on_repeat(tmp_path: Path) -> None:
     # Second dispatch is a no-op (seen-events guard).
     await stage._handle_event(ctx, evt)
     events = ctx.events_log.read_all()
-    deprecated = [
-        e for e in events if e.event_type == EventType.SCENARIO_DEPRECATED
-    ]
+    deprecated = [e for e in events if e.event_type == EventType.SCENARIO_DEPRECATED]
     assert len(deprecated) == 1
     assert len(ctx.mapping.base_bids[0].reversion_log) == first_log_len
