@@ -5,15 +5,11 @@ RealizeStage integration tests live in tests/unit/test_realize_stage.py.
 
 from __future__ import annotations
 
-import os
 import stat
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from mage.orchestration.increment_diff import (
-    FileSnapshot,
     compute_unified_diff,
     snapshot_tree,
 )
