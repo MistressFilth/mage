@@ -139,29 +139,39 @@ def test_scenario_live_branch_delegates_to_helper() -> None:
     # The helper must be called from within the SCENARIO_LIVE branch.
     assert "_resolve_supersession_for_new_live" in src
     # And the SCENARIO_LIVE branch must NOT inline complete_supersession
-    # calls anymore.
+    # calls or SCENARIO_DEPRECATED emits anymore — both belong to the
+    # helper now. Walk for the `if` statement whose test compares
+    # `et == EventType.SCENARIO_LIVE`; unparse the whole `if` so the
+    # check sees the body, not just the comparator expression.
     live_branch = ""
     in_live = False
     for node in ast.walk(handle):
         if (
-            isinstance(node, ast.Compare)
-            and isinstance(node.left, ast.Name)
-            and node.left.id == "et"
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name)
+            and node.test.left.id == "et"
             and any(
                 isinstance(c, ast.Attribute)
                 and isinstance(c.value, ast.Name)
                 and c.value.id == "EventType"
                 and c.attr == "SCENARIO_LIVE"
-                for c in node.comparators
+                for c in node.test.comparators
             )
         ):
             in_live = True
             live_branch = ast.unparse(node)
+            break
     assert in_live, "SCENARIO_LIVE branch not found"
     assert "complete_supersession" not in live_branch, (
         "SCENARIO_LIVE branch must delegate to "
         "_resolve_supersession_for_new_live; do not inline "
         "complete_supersession here."
+    )
+    assert "EventType.SCENARIO_DEPRECATED" not in live_branch, (
+        "SCENARIO_LIVE branch must delegate to "
+        "_resolve_supersession_for_new_live; do not inline "
+        "SCENARIO_DEPRECATED emission here."
     )
 
 

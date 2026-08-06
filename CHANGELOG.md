@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 
 - `RealizeStage.run_increment` now captures an increment-relative diff instead of a repository-relative `git diff`. Prior increments' dirty changes no longer leak into the diff handed to `InspectLoopStage.inspect_increment`, and new untracked files now appear in the diff (previously empty). See [P27 spec](~/code/project-notes/mage/superpowers/specs/2026-08-05-p27-realize-increment-diff-design.md) for details. New event `REALIZE_INCREMENT_DIFF_INCOMPLETE` emitted when the diff builder reports warnings (path traversal, read errors, both-missing paths).
+- P28a static guard 3b (`test_scenario_live_branch_delegates_to_helper`) now inspects the body of the `if et == EventType.SCENARIO_LIVE:` statement, not just the comparator expression, and also asserts `EventType.SCENARIO_DEPRECATED` is absent. Re-inlining of `complete_supersession` or `SCENARIO_DEPRECATED` emission in the SCENARIO_LIVE branch now trips the guard.
 
 ## [0.6.0] - 2026-08-05
 
