@@ -63,6 +63,7 @@ class EventType(str, Enum):
     # Plan 4 — Realize stage
     REALIZE_STARTED = "realize_started"
     REALIZE_INCREMENT_DONE = "realize_increment_done"
+    REALIZE_INCREMENT_DIFF_INCOMPLETE = "realize_increment_diff_incomplete"
     REALIZE_COMPLETED = "realize_completed"
     SCENARIO_OUTER_GREEN = "scenario_outer_green"
     SCENARIO_LIVE = "scenario_live"

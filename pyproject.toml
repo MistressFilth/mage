@@ -4,13 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mage"
-version = "0.6.0"
+version = "0.6.1"
 description = "mage execution engine: spec-driven development pipeline"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.6",
     "pydantic-ai>=0.0.30",
     "pydantic-graph>=0.0.30",
+    "pathspec>=0.12",
     "pyyaml>=6.0",
 ]
 
