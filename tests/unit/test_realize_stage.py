@@ -240,7 +240,7 @@ async def test_run_increment_diff_emits_incomplete_event_on_path_traversal(
     assert result.diff == ""
 
 
-def test_run_increment_diff_excludes_prior_increment_changes(tmp_path: Path) -> None:
+def test_increment_diff_excludes_prior_changes(tmp_path: Path) -> None:
     """The repro from P26 findings: prior-increment dirty change must NOT
     appear in the current increment's diff.
 
