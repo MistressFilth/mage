@@ -134,6 +134,19 @@ class DisciplineStage(StageNode):
             )
             return
 
+        if et == EventType.SCENARIO_SUPERSESSION_RESOLVED:
+            new_sub_bid = payload["new_sub_bid"]
+            key = (et, new_sub_bid)
+            if key in self._seen_events:
+                return
+            self._seen_events.add(key)
+            await self._resolve_supersession_for_new_live(
+                context=context,
+                new_sub_bid=new_sub_bid,
+                timestamp=event.timestamp,
+            )
+            return
+
     async def _resolve_supersession_for_new_live(
         self,
         context: PipelineContext,
