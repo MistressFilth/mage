@@ -50,7 +50,7 @@ def test_default_command_runner_removed() -> None:
     )
 
 
-def test_realize_run_increment_does_not_call_subprocess() -> None:
+def test_realize_does_not_call_subprocess_or_git() -> None:
     """No `subprocess.run`, `subprocess.check_*`, or `git diff` invocation."""
     tree = ast.parse(REALIZE_PATH.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
@@ -73,7 +73,7 @@ def test_realize_run_increment_does_not_call_subprocess() -> None:
             isinstance(func, ast.Attribute)
             and isinstance(func.value, ast.Name)
             and func.value.id == "self"
-            and func.attr in {"command_runner"}
+            and func.attr == "command_runner"
         ):
             raise AssertionError(
                 f"RealizeStage must not use self.command_runner after P27 "

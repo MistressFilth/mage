@@ -39,7 +39,7 @@ _IGNORED_TOP_LEVEL = {".git", ".mage", "__pycache__", ".pytest_cache", ".ruff_ca
 
 
 def _load_gitignore_spec(project_dir: Path) -> pathspec.PathSpec | None:
-    """Load .gitignore from project_dir root. Return None if missing or pathspec unavailable."""
+    """Load .gitignore from project_dir root. Return None if missing or `.gitignore` malformed."""
     gi = project_dir / ".gitignore"
     if not gi.is_file():
         return None
@@ -173,7 +173,7 @@ def _diff_one_file(
         body = "".join(f"-{line}" for line in lines)
         return header + body, warnings
 
-    # Both exist — compare content (or mode if content equal)
+    # Both exist — compare content only. Mode is captured but not diffed.
     try:
         post_data = target.read_bytes()
     except OSError as exc:
