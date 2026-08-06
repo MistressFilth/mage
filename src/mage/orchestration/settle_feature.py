@@ -10,6 +10,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 
 from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
+from mage.artifacts.mapping import LifecycleStatus, ScenarioEntry
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.verification.host_overrides import HostConfig
@@ -549,6 +550,45 @@ class SettleFeatureStage(StageNode):
             disposition=disposition,
             environment=environment,
         )
+
+        # Plan 28a: emit SCENARIO_SUPERSESSION_RESOLVED for every
+        # in-feature supersession pair where the new scenario is already
+        # LIVE and the old is not yet DEPRECATED. The discipline handler
+        # then calls complete_supersession + emits SCENARIO_DEPRECATED.
+        # Gated on disposition != "discarded" to match the existing
+        # SCENARIO_SUPERSESSION_REQUESTED skip behavior.
+        if disposition != "discarded":
+            old_by_sub_bid: dict[str, ScenarioEntry] = {
+                s.sub_bid: s
+                for entry in context.mapping.base_bids
+                for s in entry.scenarios
+                if s.feature_id == feature_id
+            }
+            for entry in context.mapping.base_bids:
+                for scenario in entry.scenarios:
+                    if scenario.feature_id != feature_id:
+                        continue
+                    if scenario.supersedes is None:
+                        continue
+                    if scenario.lifecycle_status != LifecycleStatus.LIVE:
+                        continue
+                    old = old_by_sub_bid.get(scenario.supersedes)
+                    if (
+                        old is None
+                        or old.lifecycle_status == LifecycleStatus.DEPRECATED
+                    ):
+                        continue
+                    await self.events_log.append(
+                        Event(
+                            timestamp=datetime.now(UTC),
+                            event_type=EventType.SCENARIO_SUPERSESSION_RESOLVED,
+                            payload={
+                                "new_sub_bid": scenario.sub_bid,
+                                "old_sub_bid": scenario.supersedes,
+                                "originating_stage": "settle",
+                            },
+                        )
+                    )
 
         # Write the report before flipping the mapping: a failed write must not
         # leave a persisted "settled" status with no record of what happened.
