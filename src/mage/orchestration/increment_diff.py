@@ -187,8 +187,7 @@ def _diff_one_file(
         if pre.content == post_data:
             return "", warnings
         return (
-            f"diff --git a/{rel} b/{rel}\n"
-            f"Binary files a/{rel} and b/{rel} differ\n"
+            f"diff --git a/{rel} b/{rel}\nBinary files a/{rel} and b/{rel} differ\n"
         ), warnings
 
     if pre.content == post_data:

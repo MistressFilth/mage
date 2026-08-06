@@ -222,15 +222,20 @@ async def test_run_increment_diff_emits_incomplete_event_on_path_traversal(
     _git_init(tmp_path)
     ctx = _context(tmp_path)
     target = ScenarioTarget(
-        base_bid="00001", sub_bid="00001-0001",
-        scenario_name="happy", gherkin_body="", steps=["seed"],
+        base_bid="00001",
+        sub_bid="00001-0001",
+        scenario_name="happy",
+        gherkin_body="",
+        steps=["seed"],
     )
     increment = Increment(
         index=0, step="seed", red_test_path="t.py", red_test_code="..."
     )
     agent = _StubAgent(RealizeOutput(files_changed=["../escape.txt"], summary=""))
     stage = RealizeStage(
-        ctx.events_log, agent, host_config=HostConfig(),  # type: ignore[arg-type, ty:invalid-argument-type]
+        ctx.events_log,
+        agent,
+        host_config=HostConfig(),  # type: ignore[arg-type, ty:invalid-argument-type]
     )
 
     result = await stage.run_increment(ctx, target=target, increment=increment)
