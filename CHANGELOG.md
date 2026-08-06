@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `RealizeStage.run_increment` now captures an increment-relative diff instead of a repository-relative `git diff`. Prior increments' dirty changes no longer leak into the diff handed to `InspectLoopStage.inspect_increment`, and new untracked files now appear in the diff (previously empty). See [P27 spec](~/code/project-notes/mage/superpowers/specs/2026-08-05-p27-realize-increment-diff-design.md) for details. New event `REALIZE_INCREMENT_DIFF_INCOMPLETE` emitted when the diff builder reports warnings (path traversal, read errors, both-missing paths).
+
 ## [0.6.0] - 2026-08-05
 
 ### Added
