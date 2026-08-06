@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- P26 stage audit findings report at `~/code/project-notes/mage/features/2026-08-05-p26-stage-audit/findings.md`. Read-only audit of the behavioral subgraph (settle, realize, etch, cosmetic_apply, cosmetic_watcher, inspect_loop). No code changes.
+
 ## [0.6.0] - 2026-08-05
 
 ### Added
