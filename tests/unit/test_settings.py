@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import SecretStr
+from pytest_mock import MockerFixture
 
 from mage.settings import (
     MageConfigAlreadyExists,
@@ -43,7 +44,7 @@ class TestSchema:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            MageSettings(unknown_field="x")  # type: ignore[call-arg]
+            MageSettings.model_validate({"unknown_field": "x"})
 
     def test_host_model_api_key_uses_secretstr(self) -> None:
         s = MageSettings(host_model_api_key="secret-token")
@@ -131,7 +132,7 @@ class TestInitializeConfig:
         s = load_settings()
         assert s.log_level == "info"
 
-    def test_atomic_publish(self, mocker: pytest.Mocker) -> None:
+    def test_atomic_publish(self, mocker: MockerFixture) -> None:
         """No half-written file is observable."""
         # Spy on os.link to confirm it's used.
         spy = mocker.spy(__import__("os"), "link")
