@@ -8,7 +8,8 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from mage.artifacts.mapping import MappingArtifact
-from mage.orchestration.events import EventsLog
+from mage.orchestration.etch import ScenarioInspectHalted
+from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.inspect_loop import InspectLoopStage
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, IncrementResult, ScenarioTarget
@@ -97,6 +98,10 @@ async def test_clean_increment_returns_none(tmp_path):
 
     assert route is None
     assert mech.scopes == ["increment"]
+    events = ctx.events_log.read_all()
+    assert any(e.event_type == EventType.INSPECT_LOOP_PASSED for e in events), (
+        "INSPECT_LOOP_PASSED must be emitted on the clean-pass path"
+    )
 
 
 @pytest.mark.asyncio
@@ -125,6 +130,12 @@ async def test_code_route_re_loops(tmp_path):
     )
 
     assert route == "code"
+    events = ctx.events_log.read_all()
+    failed = [e for e in events if e.event_type == EventType.INSPECT_LOOP_FAILED]
+    assert len(failed) == 1
+    assert failed[0].payload["reason"] == "code_route"
+    assert failed[0].payload["code_finding_count"] == 1
+    assert failed[0].payload["sub_bid"] == "00001-0001"
 
 
 @pytest.mark.asyncio
@@ -157,6 +168,11 @@ async def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
     assert route is None
     cosmetic = ctx.mapping.cosmetic_findings
     assert len(cosmetic) == 1
+    events = ctx.events_log.read_all()
+    completed = [e for e in events if e.event_type == EventType.INSPECT_LOOP_COMPLETED]
+    assert len(completed) == 1
+    assert completed[0].payload["cosmetic_finding_count"] == 1
+    assert completed[0].payload["sub_bid"] == "00001-0001"
 
 
 @pytest.mark.asyncio
@@ -185,3 +201,45 @@ async def test_spec_route_returns_spec(tmp_path):
     )
 
     assert route == "spec"
+    events = ctx.events_log.read_all()
+    failed = [e for e in events if e.event_type == EventType.INSPECT_LOOP_FAILED]
+    assert len(failed) == 1
+    assert failed[0].payload["reason"] == "spec_route"
+    assert failed[0].payload["sub_bid"] == "00001-0001"
+
+    revision = [
+        e for e in events if e.event_type == EventType.SCENARIO_REVISION_REQUESTED
+    ]
+    assert len(revision) == 1
+
+
+@pytest.mark.asyncio
+async def test_budget_exceeded_emits_failed_then_raises(tmp_path):
+    """Per the per-loop budget guard: when iteration > per_loop_max_iterations,
+    inspect_increment must emit INSPECT_LOOP_FAILED with reason='per_loop_budget_exceeded'
+    BEFORE raising ScenarioInspectHalted."""
+    ctx = _context(tmp_path)
+    ctx.iteration = 3
+    reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[]))
+    mech = _Mechanical([])
+    stage = InspectLoopStage(
+        ctx.events_log,
+        mechanical_verifier=mech,
+        increment_quality_reviewer=reviewer,
+        host_config=HostConfig(
+            test_runner_command=["pytest"], per_loop_max_iterations=2
+        ),
+    )
+    result = IncrementResult(files_changed=["a.py"], summary="", diff="")
+
+    with pytest.raises(ScenarioInspectHalted):
+        await stage.inspect_increment(
+            ctx, target=_target(), increment=_increment(), result=result
+        )
+
+    events = ctx.events_log.read_all()
+    failed = [e for e in events if e.event_type == EventType.INSPECT_LOOP_FAILED]
+    assert len(failed) == 1
+    assert failed[0].payload["reason"] == "per_loop_budget_exceeded"
+    assert failed[0].payload["sub_bid"] == "00001-0001"
+    assert failed[0].payload["iteration"] == 3
