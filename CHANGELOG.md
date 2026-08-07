@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-07
+
 ### Fixed
 
 - `mage config show` emitted invalid TOML whenever a secret was set: the redaction placeholder rendered as a bare `***` rather than the quoted string `"***"`, so `tomllib.loads()` rejected the whole document for any user with `MAGE_HOST_MODEL_API_KEY` exported. Every `TestConfigShow` case now asserts a full TOML round-trip instead of a substring match, which is what let the bug through.
@@ -34,7 +36,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Removed
 
-- `os.environ` reads are now confined to `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` and pinned by a static guard (`tests/unit/test_static_guards_p30.py`), which rejects both the call form (`os.environ.get("FOO")`) and the subscript form (`os.environ["FOO"]`) anywhere else in `src/mage/`.
+- `os.environ` reads are now confined to `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` and pinned by a static guard (`tests/unit/test_static_guards_p30.py`), which rejects any call into `os.environ` outside those modules. (Subscript-form coverage added in 0.7.1.)
 
 ### Fixed
 
