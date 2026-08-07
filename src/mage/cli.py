@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mage import cli_config
+from mage import settings as mage_settings  # noqa: F401  substrate import-time exercise
 from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
@@ -275,6 +277,27 @@ def build_parser() -> argparse.ArgumentParser:
     mapping_save_parser.add_argument(
         "--project-dir", type=Path, default=argparse.SUPPRESS
     )
+
+    # mage config <subcommand>
+    config = subparsers.add_parser(
+        "config", help="Inspect or bootstrap the user config"
+    )
+    config_subparsers = config.add_subparsers(dest="config_command", required=True)
+
+    config_path = config_subparsers.add_parser(
+        "path", help="Print the resolved config file path"
+    )
+    config_path.set_defaults(func=cli_config.cmd_config_path)
+
+    config_init = config_subparsers.add_parser(
+        "init", help="Initialize the config file with defaults"
+    )
+    config_init.set_defaults(func=cli_config.cmd_config_init)
+
+    config_show = config_subparsers.add_parser(
+        "show", help="Print the effective settings as TOML"
+    )
+    config_show.set_defaults(func=cli_config.cmd_config_show)
 
     return parser
 
@@ -1159,6 +1182,12 @@ async def _main(argv: list[str] | None = None) -> int:
         return await cmd_cosmetic_unwatch(args)
     if args.command == "mapping" and args.mapping_command == "save":
         return await cmd_mapping_save(args)
+    if args.command == "config" and args.config_command == "path":
+        return cli_config.cmd_config_path()
+    if args.command == "config" and args.config_command == "init":
+        return cli_config.cmd_config_init()
+    if args.command == "config" and args.config_command == "show":
+        return cli_config.cmd_config_show()
     parser.print_help()
     raise SystemExit(1)
 

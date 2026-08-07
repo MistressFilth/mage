@@ -25,6 +25,63 @@ mage cosmetic apply <feature-id> --project-dir <path>
 merge locally, push and open a pull request, keep the branch, or discard it.
 Discard requires typing `discard` to confirm.
 
+## Configuration
+
+mage resolves user directories per the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/) on Linux, and the platform's native directories on macOS and Windows.
+
+| Role | Linux | macOS | Windows |
+|------|-------|-------|---------|
+| Config | `$XDG_CONFIG_HOME/mage` or `~/.config/mage` | `~/Library/Application Support/Mage` | `%LOCALAPPDATA%\Mage` |
+| Data | `$XDG_DATA_HOME/mage` or `~/.local/share/mage` | `~/Library/Application Support/Mage` | `%LOCALAPPDATA%\Mage` |
+| Cache | `$XDG_CACHE_HOME/mage` or `~/.cache/mage` | `~/Library/Caches/Mage` | `%LOCALAPPDATA%\Mage\Cache` |
+| State | `$XDG_STATE_HOME/mage` or `~/.local/state/mage` | same as data | same as data |
+| Runtime | `$XDG_RUNTIME_DIR/mage` (fallback: `<state>/mage/run`) | same | `%LOCALAPPDATA%\Mage` |
+
+You can override any of these roots with `MAGE_XDG_*` env vars (e.g., `MAGE_XDG_CONFIG_HOME=/custom/path`). The freedesktop-spec `XDG_*` vars are also honored on macOS and Windows as an opt-in escape hatch.
+
+### Config file
+
+Bootstrap with:
+
+```bash
+mage config init
+```
+
+This writes a TOML file with built-in defaults to `<config>/mage/config.toml`. Subsequent invocations of `mage config init` refuse to overwrite — move the file aside first.
+
+Inspect the effective settings:
+
+```bash
+mage config show
+```
+
+Print the resolved config path:
+
+```bash
+mage config path
+```
+
+Settings load in this order (highest priority first):
+
+1. Explicit CLI arguments.
+2. `MAGE_*` environment variables.
+3. The TOML config file.
+4. Baked-in defaults.
+
+Available settings today: `log_level`, `host_model_api_key`. Provider model selection and per-subagent overrides arrive in a future release.
+
+### Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `MAGE_LOG_LEVEL` | One of `debug`, `info`, `warning`, `error`. |
+| `MAGE_HOST_MODEL_API_KEY` | API key for the host model provider. Treated as a secret. |
+| `MAGE_XDG_DATA_HOME` | Override the user-data root. |
+| `MAGE_XDG_CONFIG_HOME` | Override the user-config root. |
+| `MAGE_XDG_CACHE_HOME` | Override the user-cache root. |
+| `MAGE_XDG_STATE_HOME` | Override the user-state root. |
+| `MAGE_XDG_RUNTIME_DIR` | Override the user-runtime root. |
+
 ## Running the pipeline
 
 `mage run` executes the pipeline end-to-end against a project directory. Flags:

@@ -4,21 +4,29 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mage"
-version = "0.6.5"
+version = "0.7.0"
 description = "mage execution engine: spec-driven development pipeline"
 requires-python = ">=3.12"
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
 dependencies = [
     "pydantic>=2.6",
     "pydantic-ai>=0.0.30",
     "pydantic-graph>=0.0.30",
     "pathspec>=0.12",
     "pyyaml>=6.0",
+    "platformdirs>=4.0",
+    "pydantic-settings[toml]>=2.14.2,<3",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
+    "pytest-mock>=3.12",
     "ty==0.0.65",
     "ruff>=0.4",
 ]
@@ -36,4 +44,5 @@ pythonpath = ["src", "scripts"]
 [dependency-groups]
 dev = [
     "pytest-asyncio>=1.4.0",
+    "pre-commit>=4.6.1",
 ]

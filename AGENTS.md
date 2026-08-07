@@ -8,8 +8,12 @@ a spec-driven development pipeline.
 Before opening or merging a PR:
 
 1. **Bump the version per SemVer.** Patch for fixes, minor for features, major
-   for breaking changes. The version surfaces are `pyproject.toml` (`version`,
-   PEP 440 form) and the git tag `vX.Y.Z` (SemVer form).
+   for breaking changes — but while the project is pre-1.0, a breaking change
+   rides a minor bump rather than declaring 1.0.0. The version surfaces are
+   `pyproject.toml` (`version`, PEP 440 form) and the git tag `vX.Y.Z` (SemVer
+   form). Do not add a third: `mage.__version__` derives from installed package
+   metadata via `importlib.metadata`, so `pyproject.toml` stays the only place
+   a version literal is written.
 2. **Update `CHANGELOG.md`.** Add the entry under `[Unreleased]` in the correct
    `### Added` / `### Changed` / `### Fixed` group.
 3. **Update `README.md`.** New commands, config options, install steps, and
@@ -32,6 +36,9 @@ escalate it. Do not label it out-of-scope.
   `EtchAgent`).
 - `src/mage/verification/` — mechanical checks, reviewers, and the host-project
   override mechanism (`HostConfig`).
+- `src/mage/xdg.py` — XDG root resolution chain (`MAGE_XDG_*` → `XDG_*` → `platformdirs`).
+- `src/mage/paths.py` — App directory composition (`<root>/mage/<role>`).
+- `src/mage/settings.py` — pydantic-settings substrate with TOML config file and `MAGE_*` env chain.
 - `src/mage/cli.py` — the `mage` entry point.
 - `tests/unit/` — unit tests. `tests/features/` — behavior tests (`test_e2e_*`
   plus the smoke test). `tests/conftest.py` holds fixtures shared by both.
@@ -47,6 +54,7 @@ escalate it. Do not label it out-of-scope.
 - **Destructive git operations are guarded.** Worktree cleanup requires a
   `.worktrees` path component; HEAD is re-read immediately before a delete.
 - **The string `haileris_v2` is forbidden** anywhere in the tree.
+- Configuration flows through `mage.settings.load_settings()`. Direct `os.environ` reads outside `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` are forbidden (enforced by `tests/unit/test_static_guards_p30.py`).
 - Commits follow Conventional Commits. No `Co-Authored-By` trailers.
 
 ## Common tasks
