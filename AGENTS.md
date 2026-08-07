@@ -32,6 +32,9 @@ escalate it. Do not label it out-of-scope.
   `EtchAgent`).
 - `src/mage/verification/` — mechanical checks, reviewers, and the host-project
   override mechanism (`HostConfig`).
+- `src/mage/xdg.py` — XDG root resolution chain (`MAGE_XDG_*` → `XDG_*` → `platformdirs`).
+- `src/mage/paths.py` — App directory composition (`<root>/mage/<role>`).
+- `src/mage/settings.py` — pydantic-settings substrate with TOML config file and `MAGE_*` env chain.
 - `src/mage/cli.py` — the `mage` entry point.
 - `tests/unit/` — unit tests. `tests/features/` — behavior tests (`test_e2e_*`
   plus the smoke test). `tests/conftest.py` holds fixtures shared by both.
@@ -47,6 +50,7 @@ escalate it. Do not label it out-of-scope.
 - **Destructive git operations are guarded.** Worktree cleanup requires a
   `.worktrees` path component; HEAD is re-read immediately before a delete.
 - **The string `haileris_v2` is forbidden** anywhere in the tree.
+- Configuration flows through `mage.settings.load_settings()`. Direct `os.environ` reads outside `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` are forbidden (enforced by `tests/unit/test_static_guards_p30.py`).
 - Commits follow Conventional Commits. No `Co-Authored-By` trailers.
 
 ## Common tasks

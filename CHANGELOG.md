@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `mage config {init,show,path}` subcommands for inspecting and bootstrapping the user config file.
+- `mage.settings` substrate: pydantic-settings with TOML config at `<XDG_CONFIG_HOME>/mage/config.toml`, `MAGE_*` env-var override chain, and XDG Base Directory compliance on Linux (native defaults on macOS/Windows with `MAGE_XDG_*` opt-in overrides).
+
+### Changed
+
+- `HOST_MODEL_API_KEY` env var renamed to `MAGE_HOST_MODEL_API_KEY` (hard cutover).
+
+### Removed
+
+- Direct `os.environ` reads throughout `src/mage/` — all access goes through `mage.settings`.
+
 ### Fixed
 
 - `RealizeStage.run_increment` now captures an increment-relative diff instead of a repository-relative `git diff`. Prior increments' dirty changes no longer leak into the diff handed to `InspectLoopStage.inspect_increment`, and new untracked files now appear in the diff (previously empty). See [P27 spec](~/code/project-notes/mage/superpowers/specs/2026-08-05-p27-realize-increment-diff-design.md) for details. New event `REALIZE_INCREMENT_DIFF_INCOMPLETE` emitted when the diff builder reports warnings (path traversal, read errors, both-missing paths).
