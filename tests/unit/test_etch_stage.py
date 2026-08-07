@@ -64,7 +64,8 @@ async def test_run_scenario_emits_one_increment_per_step(tmp_path):
     types = [e.event_type.value for e in ctx.events_log.read_all()]
     assert types.count("etch_started") == 1
     assert types.count("etch_red_confirmed") == 3
-    assert types.count("etch_completed") == 3
+    # 3 per-step ETCH_COMPLETED + 1 final emit after the for-loop (P29).
+    assert types.count("etch_completed") == 4
 
 
 @pytest.mark.asyncio

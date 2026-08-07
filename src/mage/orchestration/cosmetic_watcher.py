@@ -228,7 +228,11 @@ class MappingArtifactWatcher:
         self._last_seen: dict[str, frozenset[str]] = {}
 
     def stop(self) -> None:
-        """Request graceful shutdown. Removes PID file (best-effort)."""
+        """Request graceful shutdown.
+
+        The PID file is removed by ``run()``'s ``finally:`` after the
+        poll loop exits (best-effort).
+        """
         self._stop = True
 
     async def run(self) -> None:

@@ -26,8 +26,13 @@ __all__ = ["InspectLoopStage", "InspectRoute"]
 
 
 def _normalize_mechanical_findings(items) -> list:
-    """Plan 4 introduced an adapter for the (CheckResult | MechanicalFinding)
-    return shape. Kept here verbatim so the new file builds the same contract."""
+    """Adapter for the mechanical verifier's per-increment return shape.
+
+    Today ``verify(scope="increment")`` returns an empty list (see
+    ``mechanical.py:103-105``); this function is kept as a stable API
+    surface and a defensive adapter in case future per-increment checks
+    emit findings.
+    """
     out = []
     for item in items:
         finding_id = getattr(item, "finding_id", None) or getattr(item, "id", None)

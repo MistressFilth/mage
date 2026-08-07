@@ -103,4 +103,21 @@ class EtchStage:
                     },
                 )
             )
+        # P29: emit a final ETCH_COMPLETED after the loop closes, regardless
+        # of whether any iterations ran. The empty-steps path no longer
+        # leaves the audit trail dangling on ETCH_STARTED.
+        red_test_count = len(target.steps)
+        final_payload: dict = {
+            "scenario_name": target.scenario_name,
+            "red_test_count": red_test_count,
+        }
+        if red_test_count == 0:
+            final_payload["reason"] = "no_steps"
+        await self.events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.ETCH_COMPLETED,
+                payload=final_payload,
+            )
+        )
         return increments
