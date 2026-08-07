@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-07
+
 ### Added
 
 - `mage config {init,show,path}` subcommands for inspecting and bootstrapping the user config file.
@@ -13,7 +15,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- `HOST_MODEL_API_KEY` env var renamed to `MAGE_HOST_MODEL_API_KEY` (hard cutover).
+- **BREAKING:** `HOST_MODEL_API_KEY` env var renamed to `MAGE_HOST_MODEL_API_KEY` (hard cutover — the legacy name is not read as a fallback, and `tests/unit/test_static_guards_p30.py` fails if it reappears in `src/mage/`). Export the new name before running any real-LLM pipeline or E2E test.
+- `mage.__version__` is now derived from installed package metadata via `importlib.metadata.version("mage")` instead of a hardcoded literal, so `pyproject.toml` is the single version surface.
 
 ### Removed
 
@@ -21,6 +24,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `mage.__version__` had been stranded at `0.3.11` since that release while `pyproject.toml` advanced to `0.6.5`. Nothing imported it, so the drift went unnoticed; it is now derived from package metadata and cannot drift again.
 - `RealizeStage.run_increment` now captures an increment-relative diff instead of a repository-relative `git diff`. Prior increments' dirty changes no longer leak into the diff handed to `InspectLoopStage.inspect_increment`, and new untracked files now appear in the diff (previously empty). See [P27 spec](~/code/project-notes/mage/superpowers/specs/2026-08-05-p27-realize-increment-diff-design.md) for details. New event `REALIZE_INCREMENT_DIFF_INCOMPLETE` emitted when the diff builder reports warnings (path traversal, read errors, both-missing paths).
 - `SettleFeatureStage` now emits `SCENARIO_SUPERSESSION_RESOLVED` after a successful disposition (`kept`, `pr_opened`, or `merged`), and the discipline stage deprecates the old scenario in response. Previously, when both old and new scenarios were already `LIVE` at settle time, the old scenario stayed `LIVE` indefinitely because no fresh `SCENARIO_LIVE` event would ever fire for the new scenario to trigger `complete_supersession`. (P28a)
 - P28a static guard 3b (`test_scenario_live_branch_delegates_to_helper`) now inspects the body of the `if et == EventType.SCENARIO_LIVE:` statement, not just the comparator expression, and also asserts `EventType.SCENARIO_DEPRECATED` is absent. Re-inlining of `complete_supersession` or `SCENARIO_DEPRECATED` emission in the SCENARIO_LIVE branch now trips the guard.
