@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from mage import paths, xdg
 
@@ -71,7 +72,7 @@ class TestAppRuntimeDir:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        mocker: pytest.Mocker,
+        mocker: MockerFixture,
     ) -> None:
         """If XDG_RUNTIME_DIR is unwritable, fall back to state/run."""
         unwritable = tmp_path / "unwritable"

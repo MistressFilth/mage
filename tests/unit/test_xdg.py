@@ -1,10 +1,12 @@
 """Cross-platform user-directory resolution."""
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from mage import xdg
 
@@ -49,34 +51,26 @@ class TestEnvPath:
 
 
 class TestPrecedence:
-    def test_mage_xdg_wins_over_xdg(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_mage_xdg_wins_over_xdg(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MAGE_XDG_DATA_HOME", "/mage")
         monkeypatch.setenv("XDG_DATA_HOME", "/xdg")
         assert xdg.data_home() == Path("/mage")
 
     def test_xdg_wins_over_platform_default(
-        self, monkeypatch: pytest.MonkeyPatch, mocker: pytest.Mocker
+        self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
     ) -> None:
         monkeypatch.setenv("XDG_DATA_HOME", "/xdg")
-        mocker.patch(
-            "platformdirs.user_data_dir", return_value="/native"
-        )
+        mocker.patch("platformdirs.user_data_dir", return_value="/native")
         assert xdg.data_home() == Path("/xdg")
 
-    def test_falls_back_to_platform_default(
-        self, mocker: pytest.Mocker
-    ) -> None:
-        mocker.patch(
-            "platformdirs.user_data_dir", return_value="/native"
-        )
+    def test_falls_back_to_platform_default(self, mocker: MockerFixture) -> None:
+        mocker.patch("platformdirs.user_data_dir", return_value="/native")
         assert xdg.data_home() == Path("/native")
 
 
 class TestSanitizedEnv:
     def test_invalid_relative_xdg_value_is_ignored(
-        self, monkeypatch: pytest.MonkeyPatch, mocker: pytest.Mocker
+        self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
     ) -> None:
         """A relative XDG_DATA_HOME must not leak through platformdirs."""
         monkeypatch.setenv("XDG_DATA_HOME", "relative")
@@ -92,7 +86,7 @@ class TestSanitizedEnv:
         assert captured["XDG_DATA_HOME"] is None
 
     def test_valid_absolute_xdg_value_passes_through(
-        self, monkeypatch: pytest.MonkeyPatch, mocker: pytest.Mocker
+        self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
     ) -> None:
         monkeypatch.setenv("XDG_DATA_HOME", "/xdg")
         mocker.patch("platformdirs.user_data_dir", return_value="/native")
