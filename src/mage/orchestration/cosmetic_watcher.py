@@ -235,27 +235,28 @@ class MappingArtifactWatcher:
         """Long-running loop. Returns on `stop()`."""
         log_path = self.events_log.log_path
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        # Emit the STARTED event first, then snapshot the file size and
-        # catch up on any MAPPING_SAVED that landed *before* the watcher
-        # was ready. The previous order — offset-before-STARTED — could
-        # race with a concurrent `mage mapping save` and silently drop
-        # the event (the file-size snapshot would already include the
-        # MAPPING_SAVED bytes, so the poll loop would skip past them).
-        await self.events_log.append(
-            Event(
-                timestamp=datetime.now(UTC),
-                event_type=EventType.COSMETIC_WATCHER_STARTED,
-                payload={
-                    "project_dir": str(self.project_dir),
-                    "poll_interval_ms": self.poll_interval_ms,
-                    "pid": os.getpid(),
-                    "pid_file_path": _safe_pid_path(self.project_dir),
-                },
-            )
-        )
-        await self._handle_mapping_saved()
-        offset = log_path.stat().st_size if log_path.exists() else 0
+        # Plan 28b: the try/finally now wraps the STARTED append, the
+        # catch-up _handle_mapping_saved(), and the poll loop. Before P28b
+        # the catch-up ran outside the try:, so a ValidationError or
+        # refiner network error left the audit trail dangling on
+        # COSMETIC_WATCHER_STARTED and the PID file on disk. The previous
+        # order — STARTED-before-catch-up — is preserved; the try: scope
+        # is widened to cover both the STARTED append and the catch-up.
         try:
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.COSMETIC_WATCHER_STARTED,
+                    payload={
+                        "project_dir": str(self.project_dir),
+                        "poll_interval_ms": self.poll_interval_ms,
+                        "pid": os.getpid(),
+                        "pid_file_path": _safe_pid_path(self.project_dir),
+                    },
+                )
+            )
+            await self._handle_mapping_saved()
+            offset = log_path.stat().st_size if log_path.exists() else 0
             while not self._stop:
                 await asyncio.sleep(self.poll_interval_ms / 1000)
                 current_size = log_path.stat().st_size if log_path.exists() else 0
