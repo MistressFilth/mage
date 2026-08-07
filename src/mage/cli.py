@@ -284,20 +284,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     config_subparsers = config.add_subparsers(dest="config_command", required=True)
 
-    config_path = config_subparsers.add_parser(
-        "path", help="Print the resolved config file path"
-    )
-    config_path.set_defaults(func=cli_config.cmd_config_path)
-
-    config_init = config_subparsers.add_parser(
+    # Dispatch is the manual `args.command` / `args.config_command` chain in
+    # `_main`, matching every other command in this parser.
+    config_subparsers.add_parser("path", help="Print the resolved config file path")
+    config_subparsers.add_parser(
         "init", help="Initialize the config file with defaults"
     )
-    config_init.set_defaults(func=cli_config.cmd_config_init)
-
-    config_show = config_subparsers.add_parser(
-        "show", help="Print the effective settings as TOML"
-    )
-    config_show.set_defaults(func=cli_config.cmd_config_show)
+    config_subparsers.add_parser("show", help="Print the effective settings as TOML")
 
     return parser
 

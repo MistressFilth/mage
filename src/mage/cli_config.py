@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 from pydantic import SecretStr
@@ -41,7 +42,9 @@ def cmd_config_show() -> int:
     for field_name in loaded.__class__.model_fields:
         value = getattr(loaded, field_name)
         if isinstance(value, SecretStr):
-            rendered = "***"
+            # Quoted: the redaction placeholder is a TOML string value, and a
+            # bare `***` makes the whole document unparseable.
+            rendered = '"***"'
         else:
             rendered = _toml_basic_string(value)
         out_lines.append(f"{field_name} = {rendered}")
@@ -57,8 +60,6 @@ def _toml_basic_string(value: object) -> str:
     ``ensure_ascii=False`` round-trip semantics as
     :func:`mage.settings.serialize_config`.
     """
-    import json
-
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
