@@ -29,12 +29,11 @@ async def apply_for_feature(
 ) -> int:
     """Apply cosmetic queue items for the given sub_bids.
 
-    When `feature_id` is provided, the queue is narrowed to that
-    feature's entries before matching sub_bids. This is the
-    feature-scoped path used by the cosmetic watcher, which fans
-    out per feature_id. The CLI pass supplies `None` (or the
-    positional feature_id from args) and the queue is pre-filtered
-    in `cmd_cosmetic_apply` before reaching this function.
+    The cosmetic watcher passes `feature_id=<per-feature fid>` so a
+    sub_bid shared between features is processed under its correct
+    feature only. The CLI pass supplies `args.feature_id` (a required
+    positional) and the available sub_bids are pre-filtered to that
+    feature in `cmd_cosmetic_apply` before reaching this function.
 
     Returns 0 on success (including no-op when the requested set is empty
     or all entries resolve to a no-op), 1 if mapping.yaml is missing.

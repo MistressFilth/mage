@@ -67,7 +67,15 @@ def _default_command_runner(
 
 
 class SettleFeatureStage(StageNode):
-    """Validate Inspect readiness, hand off cosmetics, and finalize the branch."""
+    """Validate Inspect readiness and finalize the feature branch.
+
+    The disposition (merge, PR, keep, or discard) is supplied at
+    construction; the stage runs tests, detects the git environment,
+    and applies the disposition. Cosmetic queue handling lives
+    elsewhere — the cosmetic watcher reads `mapping.cosmetic_findings`
+    directly off YAML on `MAPPING_SAVED`, not from any output of this
+    stage.
+    """
 
     name = "settle_feature"
 
