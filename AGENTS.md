@@ -8,8 +8,12 @@ a spec-driven development pipeline.
 Before opening or merging a PR:
 
 1. **Bump the version per SemVer.** Patch for fixes, minor for features, major
-   for breaking changes. The version surfaces are `pyproject.toml` (`version`,
-   PEP 440 form) and the git tag `vX.Y.Z` (SemVer form).
+   for breaking changes — but while the project is pre-1.0, a breaking change
+   rides a minor bump rather than declaring 1.0.0. The version surfaces are
+   `pyproject.toml` (`version`, PEP 440 form) and the git tag `vX.Y.Z` (SemVer
+   form). Do not add a third: `mage.__version__` derives from installed package
+   metadata via `importlib.metadata`, so `pyproject.toml` stays the only place
+   a version literal is written.
 2. **Update `CHANGELOG.md`.** Add the entry under `[Unreleased]` in the correct
    `### Added` / `### Changed` / `### Fixed` group.
 3. **Update `README.md`.** New commands, config options, install steps, and
