@@ -442,6 +442,13 @@ class SettleFeatureStage(StageNode):
         environment: GitEnvironment,
     ) -> None:
         if disposition == "kept":
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.SETTLE_BRANCH_KEPT,
+                    payload={"feature_id": feature_id},
+                )
+            )
             return
 
         branch = self._require_feature_branch(environment)
