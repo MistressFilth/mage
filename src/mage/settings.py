@@ -8,7 +8,7 @@ Configuration loads from three sources, in increasing priority:
 2. **The XDG config file** — ``$XDG_CONFIG_HOME/mage/config.toml``,
    applied by :class:`XdgTomlSettingsSource`.
 3. **Environment variables** — ``MAGE_HOST_MODEL_API_KEY`` and
-   ``MAGE_LOG_LEVEL``, applied by :class:`LegacyEnvSettingsSource`.
+   ``MAGE_LOG_LEVEL``, applied by :class:`MageEnvSettingsSource`.
 4. **Explicit arguments** to :func:`load_settings` — win over every
    source above; used by the CLI for overrides.
 
@@ -96,7 +96,7 @@ class MageSettings(BaseSettings):
         del env_settings, dotenv_settings, file_secret_settings
         return (
             init_settings,
-            LegacyEnvSettingsSource(settings_cls),
+            MageEnvSettingsSource(settings_cls),
             XdgTomlSettingsSource(settings_cls),
         )
 
@@ -106,7 +106,7 @@ class MageSettings(BaseSettings):
 # ---------------------------------------------------------------------------
 
 
-class LegacyEnvSettingsSource(PydanticBaseSettingsSource):
+class MageEnvSettingsSource(PydanticBaseSettingsSource):
     """Flat ``MAGE_*`` environment variables."""
 
     def get_field_value(
@@ -144,10 +144,11 @@ class MageConfigurationError(RuntimeError):
 
     The default wording is "invalid" because the common case is a
     read-side validation failure (malformed TOML, unknown keys, wrong
-    types). Write-side failures during :func:`initialize_config` pass
-    ``kind="could not write"`` so the message accurately describes the
-    failure mode — a permission error or a full disk is not an invalid
-    configuration file.
+    types). Other failure modes pass a ``kind`` that describes them
+    accurately: ``kind="could not write"`` for write-side failures
+    during :func:`initialize_config`, and ``kind="existing"`` for
+    :class:`MageConfigAlreadyExists`. Neither a permission error nor an
+    untouched pre-existing file is an invalid configuration file.
     """
 
     def __init__(self, path: Path, detail: str, *, kind: str = "invalid") -> None:
@@ -161,11 +162,18 @@ class MageConfigAlreadyExists(MageConfigurationError):
     The pre-existing file is left exactly as it was —
     :func:`initialize_config` does not parse it. The user can move it
     aside, or call :func:`load_settings` to inspect it.
+
+    Rendered with ``kind="existing"``: an untouched, unparsed file has
+    not been judged invalid, and saying so would misdirect a library
+    consumer reading the message. The CLI prints its own wording, so
+    this text surfaces only to programmatic callers.
     """
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        MageConfigurationError.__init__(self, path, "configuration already exists")
+        MageConfigurationError.__init__(
+            self, path, "refusing to overwrite", kind="existing"
+        )
 
 
 def config_file() -> Path:

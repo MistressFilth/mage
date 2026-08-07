@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `mage config show` emitted invalid TOML whenever a secret was set: the redaction placeholder rendered as a bare `***` rather than the quoted string `"***"`, so `tomllib.loads()` rejected the whole document for any user with `MAGE_HOST_MODEL_API_KEY` exported. Every `TestConfigShow` case now asserts a full TOML round-trip instead of a substring match, which is what let the bug through.
+- `tests/unit/test_static_guards_p30.py` only walked `ast.Call` nodes, so the subscript form `os.environ["FOO"]` passed the guard unseen; a dead `os.environ.__getitem__` comparator was the abandoned attempt at covering it. The guard now walks `ast.Subscript` as well and carries a self-test that feeds it both forms.
+
+### Changed
+
+- `LegacyEnvSettingsSource` renamed to `MageEnvSettingsSource` — it reads the current `MAGE_*` variables, not legacy ones. Internal to `mage.settings`; never exported via `__all__`.
+- `MageConfigAlreadyExists` now renders as `existing configuration at <path>` rather than `invalid configuration at <path>`. An untouched, unparsed file has not been judged invalid. The CLI prints its own message, so only library consumers see this text.
+
+### Removed
+
+- Dead `set_defaults(func=...)` wiring on the three `mage config` subparsers. Dispatch runs through the manual `args.command` chain, matching every other command; the callbacks were never invoked.
+
 ## [0.7.0] - 2026-08-07
 
 ### Added
@@ -20,7 +34,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Removed
 
-- Direct `os.environ` reads throughout `src/mage/` — all access goes through `mage.settings`.
+- `os.environ` reads are now confined to `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` and pinned by a static guard (`tests/unit/test_static_guards_p30.py`), which rejects both the call form (`os.environ.get("FOO")`) and the subscript form (`os.environ["FOO"]`) anywhere else in `src/mage/`.
 
 ### Fixed
 

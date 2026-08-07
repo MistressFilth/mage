@@ -79,6 +79,17 @@ def _sanitized_env() -> Iterator[None]:
     to say treated as unset. That is exactly what this does. Valid
     values are left in place so the delegation still benefits from
     platformdirs' own handling where it exists.
+
+    **Not thread-safe, by choice.** The removal and restore mutate the
+    process-global ``os.environ``, so a concurrent reader inside the
+    ``with`` block observes the sanitized environment rather than the
+    real one, and two overlapping invocations can restore stale values.
+    This is sound only because every caller is on the single-threaded
+    CLI path, where resolution happens once during startup. A lock is
+    deliberately not taken here: it would buy nothing today and hide
+    the constraint. Revisit when concurrent paths land — any caller
+    reaching this from a thread or an executor invalidates the
+    assumption and needs the guard made real.
     """
     removed: dict[str, str] = {}
     for var in _SPEC_VARS:

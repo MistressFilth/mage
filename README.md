@@ -75,7 +75,7 @@ Available settings today: `log_level`, `host_model_api_key`. Provider model sele
 | Variable | Effect |
 |----------|--------|
 | `MAGE_LOG_LEVEL` | One of `debug`, `info`, `warning`, `error`. |
-| `MAGE_HOST_MODEL_API_KEY` | API key for the host model provider. Treated as a secret. |
+| `MAGE_HOST_MODEL_API_KEY` | API key for the host model provider. Treated as a secret. Wired to provider credential resolution in a future release — currently surfaces via `mage config show` only. |
 | `MAGE_XDG_DATA_HOME` | Override the user-data root. |
 | `MAGE_XDG_CONFIG_HOME` | Override the user-config root. |
 | `MAGE_XDG_CACHE_HOME` | Override the user-cache root. |
