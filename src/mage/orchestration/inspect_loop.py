@@ -97,6 +97,17 @@ class InspectLoopStage:
         if iteration > self.host_config.per_loop_max_iterations:
             from mage.orchestration.etch import ScenarioInspectHalted
 
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.INSPECT_LOOP_FAILED,
+                    payload={
+                        "sub_bid": target.sub_bid,
+                        "iteration": iteration,
+                        "reason": "per_loop_budget_exceeded",
+                    },
+                )
+            )
             raise ScenarioInspectHalted(
                 f"per-loop budget exhausted for sub-bid {target.sub_bid!r}"
             )
@@ -150,12 +161,24 @@ class InspectLoopStage:
             recent_journal_window=recent_window,
         )
         if not verdict.findings:
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.INSPECT_LOOP_PASSED,
+                    payload={
+                        "sub_bid": target.sub_bid,
+                        "iteration": iteration,
+                        "finding_count": 0,
+                    },
+                )
+            )
             return None
 
         # 3. Route findings. Route is now an explicit field; no prefix parsing.
         spec_route: InspectRoute | None = None
         spec_finding = None
         code_count = 0
+        cosmetic_count = 0
         for f in verdict.findings:
             route: InspectRoute = f.route
             if route == "spec":
@@ -167,6 +190,7 @@ class InspectLoopStage:
             elif route == "code":
                 code_count += 1
             elif route == "cosmetic":
+                cosmetic_count += 1
                 context.mapping = context.mapping.append_cosmetic_finding(
                     context.feature_id,
                     CosmeticFinding(
@@ -234,7 +258,42 @@ class InspectLoopStage:
                     },
                 )
             )
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.INSPECT_LOOP_FAILED,
+                    payload={
+                        "sub_bid": target.sub_bid,
+                        "iteration": iteration,
+                        "reason": "spec_route",
+                        "finding_id": getattr(spec_finding, "id", None),
+                    },
+                )
+            )
             return "spec"
         if code_count:
+            await self.events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.INSPECT_LOOP_FAILED,
+                    payload={
+                        "sub_bid": target.sub_bid,
+                        "iteration": iteration,
+                        "reason": "code_route",
+                        "code_finding_count": code_count,
+                    },
+                )
+            )
             return "code"
+        await self.events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.INSPECT_LOOP_COMPLETED,
+                payload={
+                    "sub_bid": target.sub_bid,
+                    "iteration": iteration,
+                    "cosmetic_finding_count": cosmetic_count,
+                },
+            )
+        )
         return None
