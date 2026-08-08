@@ -233,6 +233,25 @@ def initialize_config() -> Path:
     target = config_file()
     if target.exists():
         raise MageConfigAlreadyExists(target)
+    # Probe writability on the highest existing ancestor before
+    # attempting mkdir + mkstemp. On POSIX, ``chmod 0o500`` denies
+    # write access and mkdir fails as expected. On Windows, the
+    # same chmod sets only FILE_ATTRIBUTE_READONLY on the
+    # directory, which mkdir / mkstemp silently ignore — a real
+    # ACL probe via ``os.access(parent, os.W_OK)`` is what catches
+    # the case there. Without the probe, the mkdir try/except below
+    # would succeed and the test suite's "filesystem failure"
+    # scenario would silently write into a directory the user
+    # meant to lock.
+    ancestor = target.parent
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+    if not os.access(ancestor, os.W_OK):
+        raise MageConfigurationError(
+            target,
+            f"parent directory {ancestor} is not writable",
+            kind="could not write",
+        )
     fd = -1
     temporary: Path | None = None
     descriptor_open = False
