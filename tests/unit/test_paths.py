@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import sys
+from pathlib import Path, PurePosixPath
 
 import pytest
 from pytest_mock import MockerFixture
@@ -48,6 +49,14 @@ class TestAppRuntimeDir:
         assert result.exists()
         assert result.is_dir()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "WindowsPath has no POSIX mode bits; chmod(0o700) on a "
+            "WindowsPath sets FILE_ATTRIBUTE_READONLY instead and the "
+            "stat-st_mode 0o700 assertion cannot hold."
+        ),
+    )
     def test_applies_chmod_on_posix(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -68,6 +77,15 @@ class TestAppRuntimeDir:
         result = paths.app_runtime_dir()
         assert result.exists()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "chmod(0o500) on Windows sets FILE_ATTRIBUTE_READONLY and does "
+            "not block directory writes; the production code's mkdir "
+            "fallback path cannot be triggered without OS-specific ACL "
+            "manipulation."
+        ),
+    )
     def test_falls_back_on_mkdir_failure(
         self,
         tmp_path: Path,
