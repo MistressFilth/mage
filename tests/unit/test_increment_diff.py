@@ -27,7 +27,9 @@ def _make_git_repo(tmp_path: Path) -> Path:
 
 
 def test_snapshot_files_records_existence_and_content(tmp_path: Path) -> None:
-    (tmp_path / "present.txt").write_text("hi\n")
+    # Use binary mode so line endings are preserved across platforms
+    # (text mode on Windows would translate "\n" to "\r\n").
+    (tmp_path / "present.txt").write_bytes(b"hi\n")
     snap = snapshot_tree(tmp_path)
     assert "present.txt" in snap
     s = snap["present.txt"]
