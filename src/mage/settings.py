@@ -243,6 +243,14 @@ def initialize_config() -> Path:
     # would succeed and the test suite's "filesystem failure"
     # scenario would silently write into a directory the user
     # meant to lock.
+    #
+    # On Windows ``os.access(W_OK)`` consults the Win32 ACL and can
+    # return True for a ``chmod 0o500`` ancestor because the POSIX
+    # mode bits did not translate to a deny-write ACE. ``tempfile.mkstemp``
+    # is the authoritative write probe — it actually attempts the
+    # open(2) call. The probe runs in the ancestor dir (not the target
+    # dir which may not yet exist), cleans up its own temp file, and
+    # treats any OSError as a hard writability failure.
     ancestor = target.parent
     while not ancestor.exists():
         ancestor = ancestor.parent
@@ -252,6 +260,13 @@ def initialize_config() -> Path:
             f"parent directory {ancestor} is not writable",
             kind="could not write",
         )
+    probe_fd, probe_path = tempfile.mkstemp(prefix=".mage_write_probe.", dir=ancestor)
+    try:
+        os.close(probe_fd)
+    except OSError:
+        pass
+    finally:
+        Path(probe_path).unlink(missing_ok=True)
     fd = -1
     temporary: Path | None = None
     descriptor_open = False
