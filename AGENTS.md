@@ -42,6 +42,12 @@ escalate it. Do not label it out-of-scope.
 - `src/mage/cli.py` — the `mage` entry point.
 - `tests/unit/` — unit tests. `tests/features/` — behavior tests (`test_e2e_*`
   plus the smoke test). `tests/conftest.py` holds fixtures shared by both.
+- `.pre-commit-config.yaml` — local hooks delegate to `make` targets (`make lint`,
+  `make typecheck`, `make format`, `make test`); installed by `make init`.
+- `.github/workflows/check.yml` — `matrix-check` (ubuntu/macos/windows) +
+  aggregating `check` job that produces the branch-protection-required status
+  context. The aggregating job is required because a matrix job reports as
+  `check (<os>)` and would not satisfy the ruleset's exact-context requirement.
 
 ## Conventions
 
@@ -55,6 +61,7 @@ escalate it. Do not label it out-of-scope.
   `.worktrees` path component; HEAD is re-read immediately before a delete.
 - **The string `haileris_v2` is forbidden** anywhere in the tree.
 - Configuration flows through `mage.settings.load_settings()`. Direct `os.environ` reads outside `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` are forbidden (enforced by `tests/unit/test_static_guards_p30.py`).
+- Commits run the local pre-commit hooks (lint, typecheck, format, test). `git commit --no-verify` is allowed but CI re-runs `pre-commit run --all-files` against every push and PR to catch bypassed commits.
 - Commits follow Conventional Commits. No `Co-Authored-By` trailers.
 
 ## Common tasks
