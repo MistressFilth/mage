@@ -37,6 +37,19 @@ class TestConfigInit:
         captured = capsys.readouterr()
         assert "already exists" in captured.err
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "Python's chmod(0o500) on Windows sets the FILE_ATTRIBUTE_READONLY "
+            "bit, which does not block directory writes (it only blocks file "
+            "content modification). The equivalent of POSIX deny-write ACLs "
+            "requires Win32 icacls calls not exposed via the standard library. "
+            "The production code's mkstemp write-probe (see settings.py "
+            "initialize_config) IS cross-platform correct; the test fixture "
+            "cannot simulate the failure on Windows without OS-specific ACL "
+            "manipulation."
+        ),
+    )
     def test_filesystem_failure_exits_2(
         self,
         capsys: pytest.CaptureFixture[str],
