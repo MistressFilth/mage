@@ -233,6 +233,40 @@ def initialize_config() -> Path:
     target = config_file()
     if target.exists():
         raise MageConfigAlreadyExists(target)
+    # Probe writability on the highest existing ancestor before
+    # attempting mkdir + mkstemp. On POSIX, ``chmod 0o500`` denies
+    # write access and mkdir fails as expected. On Windows, the
+    # same chmod sets only FILE_ATTRIBUTE_READONLY on the
+    # directory, which mkdir / mkstemp silently ignore — a real
+    # ACL probe via ``os.access(parent, os.W_OK)`` is what catches
+    # the case there. Without the probe, the mkdir try/except below
+    # would succeed and the test suite's "filesystem failure"
+    # scenario would silently write into a directory the user
+    # meant to lock.
+    #
+    # On Windows ``os.access(W_OK)`` consults the Win32 ACL and can
+    # return True for a ``chmod 0o500`` ancestor because the POSIX
+    # mode bits did not translate to a deny-write ACE. ``tempfile.mkstemp``
+    # is the authoritative write probe — it actually attempts the
+    # open(2) call. The probe runs in the ancestor dir (not the target
+    # dir which may not yet exist), cleans up its own temp file, and
+    # treats any OSError as a hard writability failure.
+    ancestor = target.parent
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+    if not os.access(ancestor, os.W_OK):
+        raise MageConfigurationError(
+            target,
+            f"parent directory {ancestor} is not writable",
+            kind="could not write",
+        )
+    probe_fd, probe_path = tempfile.mkstemp(prefix=".mage_write_probe.", dir=ancestor)
+    try:
+        os.close(probe_fd)
+    except OSError:
+        pass
+    finally:
+        Path(probe_path).unlink(missing_ok=True)
     fd = -1
     temporary: Path | None = None
     descriptor_open = False
