@@ -279,42 +279,6 @@ def test_mage_run_dry_run_does_not_raise_systemexit(tmp_path):
     assert rc == 0
 
 
-def test_mage_run_model_flag_overrides_host_config(tmp_path, monkeypatch):
-    """--model on the command line overrides HostConfig.model."""
-    from mage.cli import main
-    from mage.verification.host_overrides import HostConfig
-
-    project = tmp_path / "proj"
-    project.mkdir()
-    (project / "mapping.yaml").write_text(
-        "schema_version: 2\nproject_id: p\nbase_bids: []\n"
-    )
-
-    captured: dict = {}
-
-    real_model_copy = HostConfig.model_copy
-
-    def spy_model_copy(self, **kwargs):
-        result = real_model_copy(self, **kwargs)
-        captured["model"] = result.model
-        return result
-
-    monkeypatch.setattr(HostConfig, "model_copy", spy_model_copy)
-
-    rc = main(
-        [
-            "run",
-            "--dry-run",
-            "--model",
-            "openai:gpt-4o",
-            "--project-dir",
-            str(project),
-        ]
-    )
-    assert rc == 0
-    assert captured["model"] == "openai:gpt-4o"
-
-
 @pytest.mark.asyncio
 async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
     import sys

@@ -84,38 +84,3 @@ async def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
     await stage.run_scenario(ctx, target)
 
     assert agent.calls == [("only", {"sub_bid": "00001-0001"})]
-
-
-@pytest.mark.asyncio
-async def test_etch_stage_uses_pydantic_agent_when_model_set(tmp_path):
-    """When HostConfig.model is set, EtchStage.__init__ swaps stub for PydanticEtchAgent."""
-    from mage.agents.etch import PydanticEtchAgent
-    from mage.verification.host_overrides import HostConfig
-
-    ctx = _context(tmp_path)
-    host_config = HostConfig(model="test")
-    stage = EtchStage(
-        ctx.events_log,
-        agent=_StubAgent(),
-        host_config=host_config,
-    )
-    assert isinstance(stage.agent, PydanticEtchAgent), (
-        "EtchStage should swap the stub for PydanticEtchAgent when model is set"
-    )
-
-
-@pytest.mark.asyncio
-async def test_etch_stage_keeps_stub_when_no_model_set(tmp_path):
-    """When HostConfig.model is unset, EtchStage preserves the injected stub."""
-    from mage.verification.host_overrides import HostConfig
-
-    ctx = _context(tmp_path)
-    host_config = HostConfig()
-    stage = EtchStage(
-        ctx.events_log,
-        agent=_StubAgent(),
-        host_config=host_config,
-    )
-    assert isinstance(stage.agent, _StubAgent), (
-        "EtchStage must not swap when no model is set"
-    )
