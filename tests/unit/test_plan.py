@@ -148,7 +148,9 @@ async def test_revise_writes_new_content_and_emits_event(tmp_path):
         events_log=log,
     )
 
-    assert plan_path.read_text() == "# v2 — fixed ordering\n"
+    # Explicit UTF-8: Windows opens text files in the active code page
+    # by default and mojibake's the em-dash (U+2014).
+    assert plan_path.read_text(encoding="utf-8") == "# v2 — fixed ordering\n"
 
     revised = [e for e in log.read_all() if e.event_type == EventType.PLAN_REVISED]
     assert len(revised) == 1
