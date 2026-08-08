@@ -12,12 +12,20 @@ from mage.providers.errors import (
     MageProviderError,
     MageUnknownProviderError,
 )
+from mage.providers.registry import (
+    KNOWN_PROVIDERS,
+    build_model,
+    register_provider,
+)
 
 __all__ = [
+    "KNOWN_PROVIDERS",
     "MageInvalidModelStringError",
     "MageMissingApiKeyError",
     "MageProviderError",
     "MageUnknownProviderError",
     "ProviderConfig",
+    "build_model",
     "load_xdg_providers",
+    "register_provider",
 ]
