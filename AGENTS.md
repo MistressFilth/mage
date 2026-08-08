@@ -39,9 +39,16 @@ escalate it. Do not label it out-of-scope.
 - `src/mage/xdg.py` — XDG root resolution chain (`MAGE_XDG_*` → `XDG_*` → `platformdirs`).
 - `src/mage/paths.py` — App directory composition (`<root>/mage/<role>`).
 - `src/mage/settings.py` — pydantic-settings substrate with TOML config file and `MAGE_*` env chain.
+- `src/mage/cosmetic_pid.py` — PID-file lifecycle for the cosmetic watcher daemon (atomic write via raw fd ops; `_proc_start_time` via `psutil.Process.create_time()`).
 - `src/mage/cli.py` — the `mage` entry point.
 - `tests/unit/` — unit tests. `tests/features/` — behavior tests (`test_e2e_*`
   plus the smoke test). `tests/conftest.py` holds fixtures shared by both.
+- `.pre-commit-config.yaml` — local hooks delegate to `make` targets (`make lint`,
+  `make typecheck`, `make format`, `make test`); installed by `make init`.
+- `.github/workflows/check.yml` — `matrix-check` (ubuntu/macos/windows) +
+  aggregating `check` job that produces the branch-protection-required status
+  context. The aggregating job is required because a matrix job reports as
+  `check (<os>)` and would not satisfy the ruleset's exact-context requirement.
 - `.pre-commit-config.yaml` — local hooks delegate to `make` targets (`make lint`,
   `make typecheck`, `make format`, `make test`); installed by `make init`.
 - `.github/workflows/check.yml` — `matrix-check` (ubuntu/macos/windows) +
