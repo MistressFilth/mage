@@ -49,7 +49,7 @@ def write_pid(project_dir: Path, pid: int) -> Path:
     path = pid_file_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     start_time = _proc_start_time(pid)
-    payload = f"{pid}:{start_time if start_time is not None else ''}\n".encode("utf-8")
+    payload = f"{pid}:{start_time if start_time is not None else ''}\n".encode()
     tmp = path.with_suffix(path.suffix + ".tmp")
     # Use raw fd ops (not fdopen/text wrappers). On Windows, fsync
     # requires a handle opened with write access — opening RDONLY
