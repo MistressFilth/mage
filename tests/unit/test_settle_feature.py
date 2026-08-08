@@ -598,7 +598,10 @@ class TestSettleFinalization:
         report_path = context.project_dir / ".mage" / "settle" / "feat-1.md"
         report_path.mkdir(parents=True)
 
-        with pytest.raises(IsADirectoryError):
+        # POSIX raises IsADirectoryError; Windows raises PermissionError
+        # ("[Errno 13] Permission denied") for the same operation. The
+        # common base OSError covers both.
+        with pytest.raises(OSError):
             await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
