@@ -6,13 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-08
+
 ### Added
 
 - `.github/workflows/check.yml` mirroring prose-craft: `matrix-check` job runs `make check` + `make test` on `ubuntu-latest`, `macos-latest`, and `windows-latest`; aggregating `check` job produces the status context the branch-protection ruleset (`rules/20430241`) requires.
+- `.pre-commit-config.yaml` (via PR #35) hooks delegate to `make` targets so a developer's local pre-commit run produces the same feedback CI would on Linux: `make lint`, `make typecheck`, `make format`, `make test`.
 
 ### Changed
 
-- Pre-commit hooks (already in place via PR #35) delegate to `make` targets so a developer's local pre-commit run produces the same feedback CI would on Linux: `make lint`, `make typecheck`, `make format`, `make test`.
+- `src/mage/cli.py:845` + `src/mage/orchestration/cosmetic_apply.py:170` — `Path.as_posix()` for cosmetic file paths in CLI output. On Windows, `str(Path("src/example.py"))` produced `src\example.py` (backslash), which broke tests expecting forward-slash. Now forward-slash cross-platform.
+- `src/mage/cosmetic_pid.py` — `write_pid` rewritten to use raw `os.open` / `os.write` / `os.fsync` / `os.close` instead of `os.fdopen` + `os.fsync(fd)`. On Windows, `os.fdopen` invalidates the raw fd, so the subsequent `os.fsync` raised `OSError: [Errno 9] Bad file descriptor`.
+- `src/mage/cosmetic_pid.py::_proc_start_time` — switched from `/proc/<pid>/stat` parsing (Linux-only) to `psutil.Process(pid).create_time()` (cross-platform). New runtime dep: `psutil>=5.9`.
+- `src/mage/orchestration/cosmetic_watcher.py` — `signal.SIGKILL` guard for Windows compatibility. The conditional force-kill signal is `signal.SIGKILL` on POSIX, `signal.SIGTERM` on Windows (the only signal Windows supports for `os.kill`).
+- `src/mage/settings.py::initialize_config` — writability probe switched from `os.access(parent, os.W_OK)` to `tempfile.mkstemp` probe. On Windows, `os.access` consults the Win32 ACL and returns `True` for a `chmod 0o500` ancestor (because POSIX mode bits do not translate to deny-write ACEs); `mkstemp` is the authoritative write probe.
+
+### Fixed
+
+- `tests/unit/test_cosmetic_pid.py::test_captures_start_time_for_current_process` — accepted `float` for the start-time field; `psutil.Process.create_time()` returns a Unix timestamp with sub-second precision, so the previous `(int, NoneType)` type guard was too strict.
+- `tests/unit/test_increment_diff.py` — switched test file writes to `write_bytes` so line endings are preserved cross-platform. On Windows, `Path.write_text` translates `\n` to `\r\n`, breaking byte-count assertions.
 
 ## [0.7.1] - 2026-08-07
 
