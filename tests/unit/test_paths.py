@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import pytest
 from pytest_mock import MockerFixture
