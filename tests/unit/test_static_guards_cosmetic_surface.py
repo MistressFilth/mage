@@ -10,7 +10,7 @@ import pytest
 from mage.cosmetic_pid import is_alive_with_start, pid_file_path
 from mage.orchestration.events import EventType
 
-PID_PATH_TEXT = str(pid_file_path(Path(".")))
+PID_PATH_TEXT = pid_file_path(Path(".")).as_posix()
 
 
 def test_pid_file_path_pinned() -> None:
