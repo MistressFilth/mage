@@ -68,15 +68,21 @@ def write_pid(project_dir: Path, pid: int) -> Path:
     path = pid_file_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     start_time = _proc_start_time(pid)
-    payload = f"{pid}:{start_time if start_time is not None else ''}\n"
+    payload = f"{pid}:{start_time if start_time is not None else ''}\n".encode("utf-8")
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(payload)
-    fd = os.open(tmp, os.O_RDONLY)
+    # Use raw fd ops (not fdopen/text wrappers). On Windows, fsync
+    # requires a handle opened with write access — opening RDONLY
+    # then calling fsync raises OSError: [Errno 9] Bad file
+    # descriptor. Keeping the whole write under raw os.write/os.fsync
+    # also avoids the TextIOWrapper / fd ownership transfer that
+    # os.fdopen triggers on POSIX, which has bitten earlier versions.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
     try:
+        os.write(fd, payload)
         os.fsync(fd)
     finally:
         os.close(fd)
-    tmp.replace(path)
+    os.replace(tmp, path)
     return path
 
 
