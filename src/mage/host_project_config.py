@@ -86,7 +86,7 @@ class MageTomlConfig(BaseModel):
         """
         if "__default__" in self._resolved:
             return self._resolved["__default__"]
-        model, pname, mname, _ = resolve_model(
+        model, pname, mname, source = resolve_model(
             None, providers, default_provider, self, env
         )
         if events_log is not None and pname:
@@ -100,7 +100,7 @@ class MageTomlConfig(BaseModel):
                         "agent_name": None,
                         "provider": pname,
                         "model_name": mname,
-                        "source": "default_tier",
+                        "source": source,
                     },
                 )
             )

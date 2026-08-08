@@ -42,9 +42,7 @@ def _resolve(
         raise MageUnknownProviderError(chosen)
     api_key = os.getenv(provider.api_key_env)
     if api_key is None:
-        raise MageMissingApiKeyError(
-            env_var=provider.api_key_env, provider=chosen
-        )
+        raise MageMissingApiKeyError(env_var=provider.api_key_env, provider=chosen)
     model = build_model(chosen, provider, mname)
     return model, chosen, mname
 
@@ -94,9 +92,7 @@ def resolve_model(
     provider = providers.get(default_provider)
     if provider is not None:
         try:
-            model = build_model(
-                default_provider, provider, provider.default_model
-            )
+            model = build_model(default_provider, provider, provider.default_model)
             return model, default_provider, provider.default_model, "xdg_default"
         except Exception:  # noqa: BLE001, S110 — intentional silent fallthrough
             pass
