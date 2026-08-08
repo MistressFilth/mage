@@ -13,6 +13,7 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
 ]
 dependencies = [
+    "psutil>=5.9",
     "pydantic>=2.6",
     "pydantic-ai>=0.0.30",
     "pydantic-graph>=0.0.30",
