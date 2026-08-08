@@ -103,6 +103,15 @@ class TestSanitizedEnv:
         assert result == Path("/native")
         assert captured["XDG_DATA_HOME"] is None
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "On Windows the test's POSIX-style '/xdg' is not absolute (Path.is_absolute "
+            "requires a drive letter), so env_path rejects it and the override chain "
+            "collapses to the mocked platformdirs default — the assertion is "
+            "POSIX-specific."
+        ),
+    )
     def test_valid_absolute_xdg_value_passes_through(
         self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
     ) -> None:
