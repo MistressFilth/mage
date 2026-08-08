@@ -7,8 +7,8 @@ Configuration loads from three sources, in increasing priority:
 1. **Defaults baked into the model** — :data:`DEFAULT_LOG_LEVEL`.
 2. **The XDG config file** — ``$XDG_CONFIG_HOME/mage/config.toml``,
    applied by :class:`XdgTomlSettingsSource`.
-3. **Environment variables** — ``MAGE_HOST_MODEL_API_KEY`` and
-   ``MAGE_LOG_LEVEL``, applied by :class:`MageEnvSettingsSource`.
+3. **Environment variables** — ``MAGE_LOG_LEVEL``,
+   applied by :class:`MageEnvSettingsSource`.
 4. **Explicit arguments** to :func:`load_settings` — win over every
    source above; used by the CLI for overrides.
 
@@ -32,7 +32,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import field_validator
 from pydantic.fields import FieldInfo
 from pydantic_core import ValidationError
 from pydantic_settings import (
@@ -71,7 +71,6 @@ class MageSettings(BaseSettings):
 
     model_config = SettingsConfigDict(extra="forbid")
 
-    host_model_api_key: SecretStr | None = None
     log_level: LogLevel = DEFAULT_LOG_LEVEL
 
     @field_validator("log_level", mode="before")
@@ -118,9 +117,6 @@ class MageEnvSettingsSource(PydanticBaseSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         values: dict[str, Any] = {}
-        api_key = os.environ.get("MAGE_HOST_MODEL_API_KEY")
-        if api_key is not None:
-            values["host_model_api_key"] = api_key
         log_level = os.environ.get("MAGE_LOG_LEVEL")
         if log_level is not None:
             values["log_level"] = log_level
@@ -183,7 +179,6 @@ def config_file() -> Path:
 
 def load_settings(
     *,
-    host_model_api_key: str | None = None,
     log_level: str | None = None,
 ) -> MageSettings:
     """Build :class:`MageSettings` honoring all four precedence layers.
@@ -194,8 +189,6 @@ def load_settings(
     field to the next source down."
     """
     values: dict[str, Any] = {}
-    if host_model_api_key is not None:
-        values["host_model_api_key"] = host_model_api_key
     if log_level is not None:
         values["log_level"] = log_level
     try:

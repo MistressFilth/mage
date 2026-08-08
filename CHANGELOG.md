@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING:** `MageSettings.host_model_api_key` field removed, along with the `MAGE_HOST_MODEL_API_KEY` env-var read and the `host_model_api_key` kwarg on `load_settings()`. Provider configuration now flows through the new P31 provider registry (`mage/providers/`) + `mage/host_project_config.py`. `SecretStr` is no longer imported in `mage.settings`. The hard-cutover removes the legacy path; this is a breaking change for any caller that constructed `MageSettings(host_model_api_key=...)` or exported `MAGE_HOST_MODEL_API_KEY`.
+
 ## [0.7.2] - 2026-08-08
 
 ### Added
