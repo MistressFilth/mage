@@ -167,7 +167,10 @@ async def apply_for_feature(
                     event_type=EventType.COSMETIC_ITEM_APPLIED
                     if not dry_run
                     else EventType.COSMETIC_ITEM_SKIPPED,
-                    payload={"sub_bid": item.sub_bid, "file": str(item.file_path)},
+                    payload={
+                        "sub_bid": item.sub_bid,
+                        "file": Path(item.file_path).as_posix(),
+                    },
                 )
             )
         except (yaml.YAMLError, OSError, subprocess.CalledProcessError) as exc:
