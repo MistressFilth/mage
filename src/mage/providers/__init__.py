@@ -17,6 +17,7 @@ from mage.providers.registry import (
     build_model,
     register_provider,
 )
+from mage.providers.resolver import resolve_model
 
 __all__ = [
     "KNOWN_PROVIDERS",
@@ -28,4 +29,5 @@ __all__ = [
     "build_model",
     "load_xdg_providers",
     "register_provider",
+    "resolve_model",
 ]
