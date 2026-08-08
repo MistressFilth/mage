@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -146,6 +147,10 @@ def test_unwatch_stale_pid_returns_0_and_removes(
     assert "stale" in out.err
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_self_clean_stop_returns_0(
     tmp_path: Path, self_signal_safe: FakeSignalState
 ) -> None:
@@ -164,6 +169,10 @@ def test_unwatch_self_clean_stop_returns_0(
     assert any(sig == signal.SIGTERM for _pid, sig in self_signal_safe.kills)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_force_succeeds_on_alive_pid(
     tmp_path: Path, self_signal_safe: FakeSignalState
 ) -> None:
@@ -203,6 +212,10 @@ def _fast_asyncio_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("mage.orchestration.cosmetic_watcher.asyncio.sleep", _no_sleep)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_timeout_returns_3(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
@@ -230,6 +243,10 @@ def test_unwatch_timeout_returns_3(
     assert signal.SIGKILL not in sigs
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_force_sigkill_kills_before_timeout(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
@@ -284,6 +301,10 @@ def test_unwatch_project_dir_default_is_cwd(
     assert rc == 0
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_sigterm_timeout_event_records_elapsed(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
@@ -324,6 +345,10 @@ def test_unwatch_sigterm_timeout_event_records_elapsed(
     assert 0 <= payload["duration_ms"] <= 5000
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_sigkill_success_records_kill_window_duration(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
