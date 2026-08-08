@@ -68,7 +68,9 @@ class TestRead:
         assert parsed is not None
         pid, start_time = parsed
         assert pid == 4242
-        assert isinstance(start_time, (int, type(None)))
+        # psutil.Process.create_time() returns a float Unix timestamp
+        # with sub-second precision; accept int or float (legacy or new).
+        assert isinstance(start_time, (int, float, type(None)))
 
     def test_returns_none_on_garbage(self, mage_dir: Path) -> None:
         path = pid_file_path(mage_dir)

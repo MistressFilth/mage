@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `.github/workflows/check.yml` mirroring prose-craft: `matrix-check` job runs `make check` + `make test` on `ubuntu-latest`, `macos-latest`, and `windows-latest`; aggregating `check` job produces the status context the branch-protection ruleset (`rules/20430241`) requires.
+
+### Changed
+
+- Pre-commit hooks (already in place via PR #35) delegate to `make` targets so a developer's local pre-commit run produces the same feedback CI would on Linux: `make lint`, `make typecheck`, `make format`, `make test`.
+
 ## [0.7.1] - 2026-08-07
 
 ### Fixed

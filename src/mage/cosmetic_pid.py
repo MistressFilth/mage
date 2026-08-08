@@ -5,8 +5,7 @@ rename + fsync). Best-effort removal on stop. The daemon does not
 block on file write or read; the file is coordination, not state.
 
 File format (single line): ``<pid>:<start_time>\n``. ``start_time`` is
-the value of the 22nd field in ``/proc/<pid>/stat`` (the kernel's
-clock-tick count at process start). It is captured at write time and
+the process creation time as a Unix timestamp. It is captured at write time and
 verified at liveness time so the daemon cannot SIGKILL a different
 process that has reused the same integer PID.
 """
@@ -15,6 +14,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+
+import psutil
 
 _PID_DIR = Path(".mage")
 _PID_FILE = "cosmetic_watcher.pid"
@@ -25,31 +26,11 @@ def pid_file_path(project_dir: Path) -> Path:
     return project_dir / _PID_DIR / _PID_FILE
 
 
-def _proc_start_time(pid: int) -> int | None:
-    """Return field 22 (starttime) of ``/proc/<pid>/stat`` as an int.
-
-    Returns None when the field cannot be read. Linux only.
-    """
+def _proc_start_time(pid: int) -> float | None:
+    """Return the process creation time as a Unix timestamp."""
     try:
-        text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii", errors="replace")
-    except (OSError, UnicodeDecodeError):
-        return None
-    # The `comm` field can contain spaces and parens; the safe parse
-    # anchor is the LAST `)` of the comm field. Everything after that
-    # is whitespace-separated fields, starting with `state`.
-    close = text.rfind(")")
-    if close < 0 or close + 1 >= len(text):
-        return None
-    tail = text[close + 1 :].split()
-    # After `)`: state(1), ppid(2), pgrp(3), session(4), tty_nr(5),
-    # tpgid(6), flags(7), minflt(8), cminflt(9), majflt(10), cmajflt(11),
-    # utime(12), stime(13), cutime(14), cstime(15), priority(16),
-    # nice(17), num_threads(18), itrealvalue(19), starttime(20).
-    if len(tail) < 20:
-        return None
-    try:
-        return int(tail[19])
-    except ValueError:
+        return float(psutil.Process(pid).create_time())
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
         return None
 
 
@@ -68,15 +49,21 @@ def write_pid(project_dir: Path, pid: int) -> Path:
     path = pid_file_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     start_time = _proc_start_time(pid)
-    payload = f"{pid}:{start_time if start_time is not None else ''}\n"
+    payload = f"{pid}:{start_time if start_time is not None else ''}\n".encode()
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(payload)
-    fd = os.open(tmp, os.O_RDONLY)
+    # Use raw fd ops (not fdopen/text wrappers). On Windows, fsync
+    # requires a handle opened with write access — opening RDONLY
+    # then calling fsync raises OSError: [Errno 9] Bad file
+    # descriptor. Keeping the whole write under raw os.write/os.fsync
+    # also avoids the TextIOWrapper / fd ownership transfer that
+    # os.fdopen triggers on POSIX, which has bitten earlier versions.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
     try:
+        os.write(fd, payload)
         os.fsync(fd)
     finally:
         os.close(fd)
-    tmp.replace(path)
+    os.replace(tmp, path)
     return path
 
 
@@ -90,12 +77,12 @@ def remove_pid(project_dir: Path) -> bool:
         return False
 
 
-def read_pid(project_dir: Path) -> tuple[int, int | None] | None:
+def read_pid(project_dir: Path) -> tuple[int, float | None] | None:
     """Parse the PID file. Returns ``(pid, start_time)`` or None.
 
     ``start_time`` is None when the file has no start_time field (the
     legacy format, or the new format written on a host where
-    ``/proc/<pid>/stat`` was unreadable). Callers that need identity
+    process metadata was unreadable). Callers that need identity
     verification must use ``is_alive_with_start`` and treat a None
     start_time as "stale".
     """
@@ -112,7 +99,7 @@ def read_pid(project_dir: Path) -> tuple[int, int | None] | None:
         except ValueError:
             return None
         try:
-            start_time: int | None = int(tail) if tail else None
+            start_time: float | None = float(tail) if tail else None
         except ValueError:
             start_time = None
         return pid, start_time
@@ -142,7 +129,7 @@ def is_alive(pid: int) -> bool:
         return False
 
 
-def is_alive_with_start(pid: int, start_time: int | None) -> bool:
+def is_alive_with_start(pid: int, start_time: float | None) -> bool:
     """Verify a PID is alive AND matches the recorded start_time.
 
     Returns False when:

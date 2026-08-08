@@ -16,6 +16,7 @@ import asyncio
 import logging
 import os
 import signal
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,9 @@ from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
 
 logger = logging.getLogger(__name__)
+
+# Windows has no SIGKILL; SIGTERM is its strongest os.kill signal.
+_FORCE_KILL_SIGNAL = signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM
 
 
 def _safe_pid_path(project_dir: Path) -> str | None:
@@ -41,7 +45,7 @@ async def _request_remote_stop(
     *,
     project_dir: Path,
     target_pid: int,
-    target_start_time: int | None,
+    target_start_time: float | None,
     requester_pid: int,
     timeout_s: float,
     force: bool,
@@ -144,7 +148,7 @@ async def _request_remote_stop(
             )
             return False
         try:
-            os.kill(target_pid, signal.SIGKILL)
+            os.kill(target_pid, _FORCE_KILL_SIGNAL)
         except ProcessLookupError:
             if path.exists():
                 remove_pid(project_dir)

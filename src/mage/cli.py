@@ -842,7 +842,7 @@ async def cmd_cosmetic_show(args) -> int:
         *[refiner.refine(q, semaphore=semaphore) for q in queue]
     )
     for item in refined:
-        fp = str(item.file_path) if item.file_path else "<unresolved>"
+        fp = Path(item.file_path).as_posix() if item.file_path else "<unresolved>"
         print(
             f"{item.sub_bid} {fp}:{item.line_range[0]}-{item.line_range[1]} "
             f"{item.rationale}"

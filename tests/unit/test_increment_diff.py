@@ -27,14 +27,19 @@ def _make_git_repo(tmp_path: Path) -> Path:
 
 
 def test_snapshot_files_records_existence_and_content(tmp_path: Path) -> None:
-    (tmp_path / "present.txt").write_text("hi\n")
+    # Use binary mode so line endings are preserved across platforms
+    # (text mode on Windows would translate "\n" to "\r\n").
+    (tmp_path / "present.txt").write_bytes(b"hi\n")
     snap = snapshot_tree(tmp_path)
     assert "present.txt" in snap
     s = snap["present.txt"]
     assert s.exists is True
     assert s.content == b"hi\n"
     assert s.mode is not None
-    assert stat.S_IMODE(s.mode) == 0o644
+    # Compare against the actual file's mode rather than pinning a literal
+    # (Linux reports 0o644, Windows reports 0o666 — both are valid creation
+    # defaults; we only care that the snapshot reflects the real mode).
+    assert s.mode == stat.S_IMODE((tmp_path / "present.txt").stat().st_mode)
 
 
 def test_snapshot_tree_excludes_dotgit_directory(tmp_path: Path) -> None:

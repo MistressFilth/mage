@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -21,6 +22,10 @@ def _mage() -> list[str]:
     return [binary]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows spawns an intermediate launcher process; watch_proc.pid doesn't match the PID recorded inside the actual mage subprocess",
+)
 def test_watch_then_unwatch(tmp_path: Path) -> None:
     mapping_yaml = """
 schema_version: 2

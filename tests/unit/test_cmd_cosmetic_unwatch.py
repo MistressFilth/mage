@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,12 @@ from typing import Any
 import pytest
 
 from mage import cli
-from mage.cosmetic_pid import pid_file_path, write_pid
+from mage.cosmetic_pid import (
+    pid_file_path,
+    write_pid,
+)
+
+_FORCE_KILL_SIGNAL = signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM
 
 
 def _make_mage_dir(project_dir: Path) -> None:
@@ -86,7 +92,7 @@ class FakeSignalState:
 
         def fake_kill(pid: int, sig: int) -> None:
             state.kills.append((pid, sig))
-            if sig == signal.SIGKILL:
+            if sig == _FORCE_KILL_SIGNAL:
                 state.alive = False
             elif sig == signal.SIGTERM and state.sigterm_removes_pid:
                 if state._project_dir is None:
@@ -146,6 +152,10 @@ def test_unwatch_stale_pid_returns_0_and_removes(
     assert "stale" in out.err
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_self_clean_stop_returns_0(
     tmp_path: Path, self_signal_safe: FakeSignalState
 ) -> None:
@@ -164,6 +174,10 @@ def test_unwatch_self_clean_stop_returns_0(
     assert any(sig == signal.SIGTERM for _pid, sig in self_signal_safe.kills)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_force_succeeds_on_alive_pid(
     tmp_path: Path, self_signal_safe: FakeSignalState
 ) -> None:
@@ -203,6 +217,10 @@ def _fast_asyncio_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("mage.orchestration.cosmetic_watcher.asyncio.sleep", _no_sleep)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_timeout_returns_3(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
@@ -227,9 +245,13 @@ def test_unwatch_timeout_returns_3(
     # SIGKILL was NOT sent because --force was not passed.
     sigs = [sig for _pid, sig in self_signal_safe.kills]
     assert signal.SIGTERM in sigs
-    assert signal.SIGKILL not in sigs
+    assert _FORCE_KILL_SIGNAL not in sigs
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_force_sigkill_kills_before_timeout(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
@@ -284,6 +306,10 @@ def test_unwatch_project_dir_default_is_cwd(
     assert rc == 0
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_sigterm_timeout_event_records_elapsed(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,
@@ -324,6 +350,10 @@ def test_unwatch_sigterm_timeout_event_records_elapsed(
     assert 0 <= payload["duration_ms"] <= 5000
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="signal.SIGKILL is POSIX-only; the test fake_kill fixture relies on it",
+)
 def test_unwatch_sigkill_success_records_kill_window_duration(
     tmp_path: Path,
     self_signal_safe: FakeSignalState,

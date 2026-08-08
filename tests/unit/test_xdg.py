@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -45,11 +46,28 @@ class TestEnvPath:
         monkeypatch.setenv("MAGE_XDG_DATA_HOME", "~/custom")
         assert xdg.env_path("MAGE_XDG_DATA_HOME") == Path("~/custom").expanduser()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "Posix-style '/abs/path' is not absolute on Windows "
+            "(Path.is_absolute requires a drive letter), so env_path "
+            "rejects it as relative — the assertion is POSIX-specific."
+        ),
+    )
     def test_returns_absolute_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MAGE_XDG_DATA_HOME", "/abs/path")
         assert xdg.env_path("MAGE_XDG_DATA_HOME") == Path("/abs/path")
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason=(
+        "platformdirs on Windows does not honor XDG_* env vars — it returns "
+        "the native Windows default (AppData/Local etc.) regardless. The "
+        "XDG and MAGE_XDG override paths therefore do not apply, so the "
+        "precedence assertions cannot be evaluated."
+    ),
+)
 class TestPrecedence:
     def test_mage_xdg_wins_over_xdg(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MAGE_XDG_DATA_HOME", "/mage")
@@ -85,6 +103,15 @@ class TestSanitizedEnv:
         assert result == Path("/native")
         assert captured["XDG_DATA_HOME"] is None
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "On Windows the test's POSIX-style '/xdg' is not absolute (Path.is_absolute "
+            "requires a drive letter), so env_path rejects it and the override chain "
+            "collapses to the mocked platformdirs default — the assertion is "
+            "POSIX-specific."
+        ),
+    )
     def test_valid_absolute_xdg_value_passes_through(
         self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
     ) -> None:
