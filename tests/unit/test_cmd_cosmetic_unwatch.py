@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,12 @@ from typing import Any
 import pytest
 
 from mage import cli
-from mage.cosmetic_pid import pid_file_path, write_pid
+from mage.cosmetic_pid import (
+    pid_file_path,
+    write_pid,
+)
+
+_FORCE_KILL_SIGNAL = signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM
 
 
 def _make_mage_dir(project_dir: Path) -> None:
@@ -86,7 +92,7 @@ class FakeSignalState:
 
         def fake_kill(pid: int, sig: int) -> None:
             state.kills.append((pid, sig))
-            if sig == signal.SIGKILL:
+            if sig == _FORCE_KILL_SIGNAL:
                 state.alive = False
             elif sig == signal.SIGTERM and state.sigterm_removes_pid:
                 if state._project_dir is None:
@@ -227,7 +233,7 @@ def test_unwatch_timeout_returns_3(
     # SIGKILL was NOT sent because --force was not passed.
     sigs = [sig for _pid, sig in self_signal_safe.kills]
     assert signal.SIGTERM in sigs
-    assert signal.SIGKILL not in sigs
+    assert _FORCE_KILL_SIGNAL not in sigs
 
 
 def test_unwatch_force_sigkill_kills_before_timeout(
