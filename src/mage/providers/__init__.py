@@ -5,6 +5,13 @@ Public surface re-exported from submodules.
 
 from __future__ import annotations
 
+from mage.providers.errors import (
+    MageInvalidModelStringError,
+    MageMissingApiKeyError,
+    MageProviderError,
+    MageUnknownProviderError,
+)
+
 __all__ = [
     "MageInvalidModelStringError",
     "MageMissingApiKeyError",
