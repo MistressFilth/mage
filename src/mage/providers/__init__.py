@@ -5,7 +5,7 @@ Public surface re-exported from submodules.
 
 from __future__ import annotations
 
-from mage.providers.config import ProviderConfig, load_xdg_providers  # noqa: E402, F401
+from mage.providers.config import ProviderConfig, load_xdg_providers
 from mage.providers.errors import (
     MageInvalidModelStringError,
     MageMissingApiKeyError,

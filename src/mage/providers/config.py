@@ -6,7 +6,6 @@ tables plus a top-level ``default_provider`` string.
 
 from __future__ import annotations
 
-import os
 import tomllib
 from pathlib import Path
 from typing import Any

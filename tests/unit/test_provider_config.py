@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import textwrap
-from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from mage.providers.config import (
     ProviderConfig,
     load_xdg_providers,
 )
 from mage.providers.errors import MageProviderError
+from mage.settings import MageConfigurationError
 
 
 class TestProviderConfig:
@@ -33,22 +34,26 @@ class TestProviderConfig:
         assert cfg.options == {"region": "us"}
 
     def test_rejects_unknown_field(self):
-        with pytest.raises(Exception):  # pydantic ValidationError
-            ProviderConfig(
-                default_model="x", api_key_env="MINIMAX_API_KEY", unknown_field=1
+        with pytest.raises(ValidationError):
+            ProviderConfig.model_validate(
+                {
+                    "default_model": "x",
+                    "api_key_env": "MINIMAX_API_KEY",
+                    "unknown_field": 1,
+                }
             )
 
     def test_requires_default_model(self):
-        with pytest.raises(Exception):
-            ProviderConfig(api_key_env="MINIMAX_API_KEY")
+        with pytest.raises(ValidationError):
+            ProviderConfig.model_validate({"api_key_env": "MINIMAX_API_KEY"})
 
     def test_requires_api_key_env(self):
-        with pytest.raises(Exception):
-            ProviderConfig(default_model="MiniMax-M3")
+        with pytest.raises(ValidationError):
+            ProviderConfig.model_validate({"default_model": "MiniMax-M3"})
 
 
 class TestLoadXdgProviders:
-    def test_loads_full_config(self, tmp_path, monkeypatch):
+    def test_loads_full_config(self, tmp_path):
         cfg_file = tmp_path / "config.toml"
         cfg_file.write_text(
             textwrap.dedent(
@@ -92,7 +97,7 @@ class TestLoadXdgProviders:
                 """
             )
         )
-        with pytest.raises(Exception):
+        with pytest.raises(MageConfigurationError):
             load_xdg_providers(path=cfg_file)
 
     def test_default_provider_not_in_table_fails(self, tmp_path):
