@@ -44,9 +44,6 @@ class HostConfig(BaseModel):
         default_factory=lambda: ["uv", "run", "pytest", "-v"]
     )
     base_branch: str = "main"
-    model: str | None = (
-        None  # Plan 6: agent model identifier; None = pydantic-ai default
-    )
     max_concurrent_llm_calls: int = 7  # Plan 8: asyncio.Semaphore cap for LLM fan-out
 
     # Plan 6 follow-up: host-configurable journal windows consumed by RealizeStage.

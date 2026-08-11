@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Provider registry: MiniMax and Anthropic supported via `mage.toml` per-agent model pins and XDG `[providers]` config block (`mage host_project_config` + `mage providers`). Precedence chain: env > `mage.toml` per-agent > `mage.toml` default > XDG default.
+- New `EventType` members: `PROVIDER_RESOLVED`, `PROVIDER_RESOLVED_FAILED`.
+- `mage config init` now writes `[providers.anthropic]` and `[providers.minimax]` blocks plus `default_provider = "anthropic"` alongside `log_level`, so a fresh user is one env-var (`ANTHROPIC_API_KEY` or `MINIMAX_API_KEY`) away from a working run.
+- `mage config show` now prints a `[providers]` table (dotted keys: `<name>.default_model`, `<name>.base_url`, `<name>.api_key_env`) and a `[mage.toml]` section (path, `default_model`, `agents.<name>` entries). New `project_root` keyword argument locates `mage.toml`; defaults to the current working directory.
+- `mage.host_project_config.resolve_model_logged()` — async wrapper that resolves a model and flushes any `PROVIDER_RESOLVED` event into an async `EventsLog`. `model_for` appends synchronously while `EventsLog.append` is a coroutine function, so passing the log directly would build a coroutine nobody awaits and silently drop the event.
+- `mage.verification.reviewers.registry.feature_reviewer_registry_async()` — async variant of `feature_reviewer_registry` for the `mage_toml=` path. Routes the default-tier resolution through `resolve_model_logged` so `PROVIDER_RESOLVED` (and `PROVIDER_RESOLVED_FAILED` on error) are flushed into the real `EventsLog` before the reviewers are constructed. Sync `feature_reviewer_registry` retains its existing `model=` / `model_factory=` paths unchanged; only the `mage_toml=` path gained the async sibling.
+- `EtchStage.flush_pending_events()` — async hook that awaits any `PROVIDER_RESOLVED` event collected synchronously by `_build_agent` against the real `EventsLog`. `FeatureRunner.run` invokes the hook before the first scenario loop iteration so the audit trail records the etch resolution before any scenario-level events.
+
+### Changed
+
+- `MageSettings` gained `default_provider` and `providers` fields so the new init format round-trips through `load_settings()`. Per-provider field validation (extra=forbid on `ProviderConfig`) is still owned by `mage.providers.config.load_xdg_providers` on the read path.
+- `cmd_config_show` no longer calls `mage.settings.load_settings()`; it parses the XDG config file directly so the strict `MageSettings` schema does not block the providers table that `load_xdg_providers` owns.
+- Stage call sites resolve their agent model through `MageTomlConfig.model_for()` / `default_model_instance()` instead of reading the removed `HostConfig.model`: `mage cosmetic show` + `apply_for_feature` (`cosmetic_refiner`), `EtchStage` (`etch`), and `feature_reviewer_registry` (default tier). `EtchStage` gained `mage_toml` / `providers` / `default_provider` kwargs; `feature_reviewer_registry` gained a `mage_toml=` construction mode alongside the existing `model=` / `model_factory=`.
+- Agent test-mode detection now also recognizes a Pydantic-AI `TestModel` instance, not just `None` / the `"test"` string. Tier 5 of the resolver returns a `TestModel` instance when no provider is configured, so `CosmeticRefiner` and `PydanticEtchAgent` keep their deterministic no-LLM passthrough. Shared predicate: `mage.providers.resolver.is_test_mode`.
+
+### Fixed
+
+- `mage.providers.resolver.resolve_model` — tier 4 (XDG default provider's `default_model`) no longer silently falls through to `TestModel` when the provider's `api_key_env` is unset. The tier now routes through `_resolve` so a missing API key raises `MageMissingApiKeyError` alongside every other tier, instead of swallowing the failure and returning the test-mode passthrough. New `test_tier4_missing_key_raises` unit test pins the behavior.
+- `mage.providers.resolver._resolve` — unknown-provider, missing-API-key, and `build_model` failures now emit a `PROVIDER_RESOLVED_FAILED` event with `reason` (`unknown_provider` / `missing_api_key` / `build_model_failed`), `source`, `provider`, `model_name`, and (where applicable) `env_var` / `error_type` / `error` payload fields before the typed exception is raised. The event flows through the same sync-sink pattern `PROVIDER_RESOLVED` already uses; `mage.host_project_config.resolve_model_logged` flushes both success and failure events against the real async `EventsLog`. `tests/features/test_e2e_provider_missing_key.py` now asserts both the exception and the failure event.
+- `tests/features/test_e2e_mage_run_no_dry_run.py` — skipif gate switched from `MAGE_HOST_MODEL_API_KEY` (removed in Task 7) to `ANTHROPIC_API_KEY`, the v0.8.0 credential env-var. The skip reason matches the new gate.
+
+### Removed
+
+- **BREAKING:** the `--model` CLI flag is gone from both `mage run` and `mage cosmetic apply`; argparse now rejects it with exit code 2. Model selection flows through `mage.toml` (`default_model` / `[agents]`), the `MAGE_MODEL_<AGENT>` env override, and the XDG provider registry. `apply_for_feature()` lost its `model=` keyword argument.
+- **BREAKING:** `MageSettings.host_model_api_key` field removed, along with the `MAGE_HOST_MODEL_API_KEY` env-var read and the `host_model_api_key` kwarg on `load_settings()`. Provider configuration now flows through the new P31 provider registry (`mage/providers/`) + `mage/host_project_config.py`. `SecretStr` is no longer imported in `mage.settings`. The hard-cutover removes the legacy path; this is a breaking change for any caller that constructed `MageSettings(host_model_api_key=...)` or exported `MAGE_HOST_MODEL_API_KEY`.
+- **BREAKING:** `HostConfig.model` field removed (legacy single-model surface). Per-agent model selection now flows through `<project>/mage.toml` (`[agents]` / `default_model`) and the `MAGE_MODEL_<AGENT>` env override, resolved by `mage.host_project_config.MageTomlConfig.model_for()` / `default_model_instance()`. Stage call sites in `mage.orchestration.cosmetic_apply.apply_for_feature`, `EtchStage.run_scenario`, and `feature_reviewer_registry` were re-routed through the resolver.
+
 ## [0.7.2] - 2026-08-08
 
 ### Added

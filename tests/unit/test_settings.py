@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from pydantic import SecretStr
 from pytest_mock import MockerFixture
 
 from mage.settings import (
@@ -28,7 +27,6 @@ def isolated_config_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 class TestSchema:
     def test_defaults(self) -> None:
         s = MageSettings()
-        assert s.host_model_api_key is None
         assert s.log_level == "info"
 
     def test_log_level_accepts_each_literal(self) -> None:
@@ -46,11 +44,6 @@ class TestSchema:
 
         with pytest.raises(ValidationError):
             MageSettings.model_validate({"unknown_field": "x"})
-
-    def test_host_model_api_key_uses_secretstr(self) -> None:
-        s = MageSettings(host_model_api_key="secret-token")
-        assert isinstance(s.host_model_api_key, SecretStr)
-        assert s.host_model_api_key.get_secret_value() == "secret-token"
 
 
 class TestPrecedence:
@@ -171,7 +164,10 @@ class TestInitializeConfig:
 class TestSerializeConfig:
     def test_basic_string_round_trip(self) -> None:
         body = serialize_config("info")
-        assert body == 'log_level = "info"\n'
+        assert body.startswith('log_level = "info"\n')
+        assert "[providers.anthropic]" in body
+        assert "[providers.minimax]" in body
+        assert "MINIMAX_API_KEY" in body
 
     def test_preserves_unicode(self) -> None:
         body = serialize_config("info-🪄")

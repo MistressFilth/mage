@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 
 from mage.agents.etch import EtchAgent, RedTestSpec
+from mage.host_project_config import MageTomlConfig
 from mage.orchestration.etch import EtchStage
-from mage.orchestration.events import EventsLog
+from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.runner import ScenarioTarget
+from mage.providers.config import ProviderConfig
 
 
 class _StubAgent(EtchAgent):
@@ -87,35 +89,66 @@ async def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_etch_stage_uses_pydantic_agent_when_model_set(tmp_path):
-    """When HostConfig.model is set, EtchStage.__init__ swaps stub for PydanticEtchAgent."""
-    from mage.agents.etch import PydanticEtchAgent
-    from mage.verification.host_overrides import HostConfig
+async def test_etch_stage_with_mage_toml_emits_provider_resolved(tmp_path, monkeypatch):
+    """EtchStage constructed with mage_toml must emit PROVIDER_RESOLVED via
+    ``flush_pending_events`` so the audit trail records the resolution.
 
+    Finding 2 (P31 final review): when ``__init__`` collects events
+    synchronously into ``_pending_provider_events``, the caller (typically
+    FeatureRunner) awaits ``flush_pending_events`` before any other event
+    emission. The real ``EventsLog.append`` is async, so without the flush
+    hook the collected PROVIDER_RESOLVED would be lost.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    providers = {
+        "anthropic": ProviderConfig(
+            default_model="claude-sonnet-5-20251001",
+            api_key_env="ANTHROPIC_API_KEY",
+        ),
+    }
+    mage_toml = MageTomlConfig(default_model="claude-sonnet-5-20251001")
     ctx = _context(tmp_path)
-    host_config = HostConfig(model="test")
     stage = EtchStage(
         ctx.events_log,
         agent=_StubAgent(),
-        host_config=host_config,
+        mage_toml=mage_toml,
+        providers=providers,
+        default_provider="anthropic",
     )
-    assert isinstance(stage.agent, PydanticEtchAgent), (
-        "EtchStage should swap the stub for PydanticEtchAgent when model is set"
-    )
+    # Nothing on disk yet — the constructor collected events into the
+    # pending buffer, not onto the async EventsLog.
+    assert ctx.events_log.read_all() == []
+    # Flushing awaits each collected event against the real log.
+    await stage.flush_pending_events()
+    events = ctx.events_log.read_all()
+    resolved = [e for e in events if e.event_type == EventType.PROVIDER_RESOLVED]
+    assert len(resolved) == 1
+    assert resolved[0].payload["agent_name"] == "etch"
+    assert resolved[0].payload["provider"] == "anthropic"
+    assert resolved[0].payload["model_name"] == "claude-sonnet-5-20251001"
 
 
 @pytest.mark.asyncio
-async def test_etch_stage_keeps_stub_when_no_model_set(tmp_path):
-    """When HostConfig.model is unset, EtchStage preserves the injected stub."""
-    from mage.verification.host_overrides import HostConfig
-
+async def test_etch_stage_flush_is_idempotent(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    providers = {
+        "anthropic": ProviderConfig(
+            default_model="claude-sonnet-5-20251001",
+            api_key_env="ANTHROPIC_API_KEY",
+        ),
+    }
+    mage_toml = MageTomlConfig(default_model="claude-sonnet-5-20251001")
     ctx = _context(tmp_path)
-    host_config = HostConfig()
     stage = EtchStage(
         ctx.events_log,
         agent=_StubAgent(),
-        host_config=host_config,
+        mage_toml=mage_toml,
+        providers=providers,
+        default_provider="anthropic",
     )
-    assert isinstance(stage.agent, _StubAgent), (
-        "EtchStage must not swap when no model is set"
-    )
+    await stage.flush_pending_events()
+    first_count = len(ctx.events_log.read_all())
+    # Second flush should not re-emit.
+    await stage.flush_pending_events()
+    second_count = len(ctx.events_log.read_all())
+    assert first_count == second_count

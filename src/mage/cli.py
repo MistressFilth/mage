@@ -23,8 +23,10 @@ from mage.cosmetic_pid import (
     read_pid,
     remove_pid,
 )
+from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
+from mage.providers.config import load_xdg_providers
 from mage.verification.host_overrides import default_check_set, load_host_config
 from mage.verification.mechanical import (
     MechanicalVerifier,
@@ -105,7 +107,6 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run the pipeline")
     run_parser.add_argument("--project-dir", type=Path, default=Path.cwd())
     run_parser.add_argument("--dry-run", action="store_true", help="Use stub agents")
-    run_parser.add_argument("--model", help="Override the LLM model identifier")
     run_parser.add_argument(
         "--feature-id",
         default=None,
@@ -225,13 +226,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cosmetic_apply_parser.add_argument(
         "--dry-run", action="store_true", help="Skip file writes + commits"
-    )
-    cosmetic_apply_parser.add_argument(
-        "--model",
-        help=(
-            "Override the LLM model identifier (use 'test' for the "
-            "Pydantic-AI TestModel stub)"
-        ),
     )
     cosmetic_apply_parser.add_argument(
         "--filter",
@@ -562,15 +556,13 @@ async def cmd_run(args):
         )
 
     host_config = load_host_config(project_dir)
-    if getattr(args, "model", None):
-        host_config = host_config.model_copy(update={"model": args.model})
     initial_context.host_config = host_config
 
     # Plan 9: stages are the same wiring for both --dry-run and real mode.
-    # The agent substitution (stub vs Pydantic-AI) is driven by whether
-    # host_config.model is set. `--dry-run` on `mage run` is a no-op kept
-    # for backward compatibility; the same flag still controls whether
-    # `mage cosmetic apply` writes files / commits.
+    # P31: the agent substitution (stub vs Pydantic-AI) is driven by the model
+    # the mage.toml/provider resolver hands each stage. `--dry-run` on
+    # `mage run` is a no-op kept for backward compatibility; the same flag
+    # still controls whether `mage cosmetic apply` writes files / commits.
     stages = _make_dry_run_stages(
         log, host_config, feature_id=initial_context.feature_id
     )
@@ -836,7 +828,17 @@ async def cmd_cosmetic_show(args) -> int:
     from mage.agents.cosmetic_refiner import CosmeticRefiner
 
     host_config = load_host_config(project_dir)
-    refiner = CosmeticRefiner(model=host_config.model)
+    mage_toml = load_mage_toml(project_dir)
+    providers, default_provider = load_xdg_providers()
+    model, _, _ = await resolve_model_logged(
+        mage_toml,
+        "cosmetic_refiner",
+        providers=providers,
+        default_provider=default_provider,
+        env=dict(os.environ),
+        events_log=EventsLog(project_dir / "events.jsonl"),
+    )
+    refiner = CosmeticRefiner(model=model)
     semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     refined = await asyncio.gather(
         *[refiner.refine(q, semaphore=semaphore) for q in queue]
@@ -934,7 +936,6 @@ async def cmd_cosmetic_apply(args) -> int:
         project_dir,
         sub_bids,
         dry_run=getattr(args, "dry_run", False),
-        model=getattr(args, "model", None),
         feature_id=args.feature_id,
     )
 

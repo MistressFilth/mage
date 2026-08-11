@@ -12,7 +12,8 @@ Plan 10, Task 5. Three black-box E2E tests against the real CLI:
    emitted; ``rc == 0`` (partial success).
 
 All three run against ``main([...])`` — no ``cli.main`` monkeypatching.
-The LLM is the real Pydantic-AI ``TestModel`` selected by ``--model test``.
+The LLM is the real Pydantic-AI ``TestModel`` the provider resolver falls
+through to when no provider is configured.
 Git is the real ``subprocess.run``.
 """
 
@@ -90,8 +91,6 @@ def test_e2e_cosmetic_apply_writes_files_and_commits(tmp_path: Path) -> None:
             "feat-1",
             "--project-dir",
             str(project),
-            "--model",
-            "test",
         ]
     )
     assert rc == 0
@@ -144,8 +143,6 @@ def test_e2e_cosmetic_apply_idempotent(tmp_path: Path) -> None:
             "feat-1",
             "--project-dir",
             str(project),
-            "--model",
-            "test",
         ]
     )
     first_count = subprocess.run(
@@ -163,8 +160,6 @@ def test_e2e_cosmetic_apply_idempotent(tmp_path: Path) -> None:
             "feat-1",
             "--project-dir",
             str(project),
-            "--model",
-            "test",
         ]
     )
     second_count = subprocess.run(
@@ -205,8 +200,6 @@ def test_e2e_cosmetic_apply_failed_event_on_missing_file(tmp_path: Path) -> None
             "feat-1",
             "--project-dir",
             str(project),
-            "--model",
-            "test",
         ]
     )
     assert rc == 0  # partial success

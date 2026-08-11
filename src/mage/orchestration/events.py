@@ -130,6 +130,10 @@ class EventType(str, Enum):
     APPROVAL_REQUESTED = "approval_requested"
     APPROVAL_GRANTED = "approval_granted"
 
+    # Plan 31 — Provider registry
+    PROVIDER_RESOLVED = "provider_resolved"
+    PROVIDER_RESOLVED_FAILED = "provider_resolved_failed"
+
 
 class Event(BaseModel):
     """One event in the log."""

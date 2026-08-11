@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from mage.providers.resolver import is_test_mode
+
 
 class RedTestSpec(BaseModel):
     """The next red test Etch produces for the inner TDD loop."""
@@ -51,16 +53,16 @@ Test must fail before any production code is written.
 class PydanticEtchAgent(EtchAgent):
     """Concrete EtchAgent backed by Pydantic-AI.
 
-    Test mode (model is None or the string ``"test"``): bypasses the LLM
-    entirely. The agent synthesizes a RedTestSpec directly from the
-    ``step`` and ``scenario_context`` arguments. This makes E2E flows
-    deterministic under ``model="test"`` without per-call TestModel
-    configuration. Mirrors the CosmeticRefiner passthrough (Task 5).
+    Test mode (model is None, the string ``"test"``, or a Pydantic-AI
+    ``TestModel`` instance): bypasses the LLM entirely. The agent synthesizes
+    a RedTestSpec directly from the ``step`` and ``scenario_context``
+    arguments, keeping E2E flows deterministic when no provider is configured.
+    Mirrors the CosmeticRefiner passthrough (Task 5).
     """
 
     def __init__(self, *, model: Any = None) -> None:
         super().__init__(model=model)
-        self._is_test_mode = model is None or model == "test"
+        self._is_test_mode = is_test_mode(model)
         if self._is_test_mode:
             # Skip Agent construction; run() builds RedTestSpec directly.
             self._agent: Agent[None, dict[str, Any]] | None = None

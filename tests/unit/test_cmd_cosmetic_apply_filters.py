@@ -30,13 +30,11 @@ class _Args:
         feature_id: str,
         project_dir: Path,
         dry_run: bool = False,
-        model: str | None = None,
         filter: list[str] | None = None,
     ) -> None:
         self.feature_id = feature_id
         self.project_dir = project_dir
         self.dry_run = dry_run
-        self.model = model
         self.filter = filter
 
 
@@ -95,12 +93,11 @@ async def test_apply_filter_narrows_calls_apply_for_feature(
     seen: dict = {}
 
     async def _fake_apply_for_feature(
-        project_dir, sub_bids, *, dry_run, model, feature_id=None
+        project_dir, sub_bids, *, dry_run, feature_id=None
     ):
         seen["project_dir"] = project_dir
         seen["sub_bids"] = sorted(sub_bids)
         seen["dry_run"] = dry_run
-        seen["model"] = model
         return 0
 
     monkeypatch.setattr(
@@ -112,14 +109,12 @@ async def test_apply_filter_narrows_calls_apply_for_feature(
             feature_id="feat",
             project_dir=tmp_path,
             dry_run=True,
-            model="test",
             filter=["sub_bid=01JF", "sub_bid=01JF"],  # dedup
         )
     )
     assert rc == 0
     assert seen["sub_bids"] == ["01JF"]
     assert seen["dry_run"] is True
-    assert seen["model"] == "test"
 
 
 @pytest.mark.asyncio
@@ -148,7 +143,7 @@ async def test_apply_without_filter_calls_apply_with_all_sub_bids(
     )
     seen: dict = {}
 
-    async def _fake(project_dir, sub_bids, *, dry_run, model, feature_id=None):
+    async def _fake(project_dir, sub_bids, *, dry_run, feature_id=None):
         seen["sub_bids"] = sorted(sub_bids)
         return 0
 
@@ -192,7 +187,7 @@ async def test_apply_does_not_crash_on_null_sub_bid(
     )
     seen: dict = {}
 
-    async def _fake(project_dir, sub_bids, *, dry_run, model, feature_id=None):
+    async def _fake(project_dir, sub_bids, *, dry_run, feature_id=None):
         seen["sub_bids"] = list(sub_bids)
         return 0
 
@@ -237,7 +232,6 @@ async def test_apply_passes_feature_id_through(
         sub_bids,
         *,
         dry_run,
-        model,
         feature_id=None,
     ):
         seen["feature_id"] = feature_id

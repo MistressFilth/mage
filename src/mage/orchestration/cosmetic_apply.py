@@ -8,6 +8,7 @@ implementation.
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -15,7 +16,9 @@ from pathlib import Path
 
 import yaml
 
+from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.providers.config import load_xdg_providers
 from mage.verification.host_overrides import load_host_config
 
 
@@ -24,7 +27,6 @@ async def apply_for_feature(
     sub_bids: list[str],
     *,
     dry_run: bool = False,
-    model: str | None = None,
     feature_id: str | None = None,
 ) -> int:
     """Apply cosmetic queue items for the given sub_bids.
@@ -57,9 +59,17 @@ async def apply_for_feature(
         return 1
     mapping = MappingArtifact.load(mapping_path)
     host_config = load_host_config(project_dir)
-    if model is not None:
-        host_config = host_config.model_copy(update={"model": model})
-    refiner = CosmeticRefiner(model=host_config.model)
+    mage_toml = load_mage_toml(project_dir)
+    providers, default_provider = load_xdg_providers()
+    model, _, _ = await resolve_model_logged(
+        mage_toml,
+        "cosmetic_refiner",
+        providers=providers,
+        default_provider=default_provider,
+        env=dict(os.environ),
+        events_log=log,
+    )
+    refiner = CosmeticRefiner(model=model)
     semaphore = asyncio.Semaphore(host_config.max_concurrent_llm_calls)
     wanted = set(sub_bids)
     queue = [

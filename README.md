@@ -68,19 +68,51 @@ Settings load in this order (highest priority first):
 3. The TOML config file.
 4. Baked-in defaults.
 
-Available settings today: `log_level`, `host_model_api_key`. Provider model selection and per-subagent overrides arrive in a future release.
+Available settings today: `log_level`, `default_provider`. Provider-specific settings (`default_model`, `base_url`, `api_key_env`, `options`) live in the `[providers.<name>]` block of the XDG config file; see `mage.toml` for per-project overrides.
 
 ### Environment variables
 
 | Variable | Effect |
 |----------|--------|
 | `MAGE_LOG_LEVEL` | One of `debug`, `info`, `warning`, `error`. |
-| `MAGE_HOST_MODEL_API_KEY` | API key for the host model provider. Treated as a secret. Wired to provider credential resolution in a future release — currently surfaces via `mage config show` only. |
 | `MAGE_XDG_DATA_HOME` | Override the user-data root. |
 | `MAGE_XDG_CONFIG_HOME` | Override the user-config root. |
 | `MAGE_XDG_CACHE_HOME` | Override the user-cache root. |
 | `MAGE_XDG_STATE_HOME` | Override the user-state root. |
 | `MAGE_XDG_RUNTIME_DIR` | Override the user-runtime root. |
+
+## Providers
+
+mage supports multiple model providers (Anthropic and MiniMax today). Configure providers in `~/.config/mage/config.toml`:
+
+```toml
+default_provider = "anthropic"
+
+[providers.anthropic]
+default_model = "claude-sonnet-5-20251001"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[providers.minimax]
+base_url = "https://api.minimax.io/anthropic"
+default_model = "MiniMax-M3"
+api_key_env = "MINIMAX_API_KEY"
+```
+
+Pin a per-agent model in `<project>/mage.toml`:
+
+```toml
+default_model = "claude-sonnet-5-20251001"
+
+[agents]
+inscribe = "minimax:MiniMax-M3"
+realize = "minimax:MiniMax-M3"
+```
+
+Resolution precedence: env (`MAGE_MODEL_INSCRIBE`) > `mage.toml [agents]` > `mage.toml default_model` > XDG `default_provider.default_model`.
+
+## mage.toml
+
+Per-project config at `<project>/mage.toml`. See the design spec for the full schema.
 
 ## Running the pipeline
 
@@ -88,11 +120,16 @@ Available settings today: `log_level`, `host_model_api_key`. Provider model sele
 
 - `--project-dir PATH` — project directory (default: current directory).
 - `--dry-run` — use stub agents (no LLM calls).
-- `--model <id>` — override the LLM model identifier.
 - `--feature-id <id>` — tag the run with a feature identifier. Useful for
   correlating inspect journal entries and cosmetic queue items with a
   specific feature. Empty string is rejected; omitting the flag preserves
   the default (`feature_id=""`).
+
+There is no `--model` flag. Model selection resolves through, in precedence
+order: the `MAGE_MODEL_<AGENT>` env override, the project's `mage.toml`
+(`[agents]` per-agent entry, then `default_model`), the XDG default provider's
+`default_model`, and finally a Pydantic-AI `TestModel` when nothing is
+configured — which keeps the CLI deterministic with no credentials present.
 
 ## Cosmetic queue
 

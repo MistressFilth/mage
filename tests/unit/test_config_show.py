@@ -73,10 +73,8 @@ class TestConfigInit:
 class TestConfigShow:
     """Every case asserts the emitted document is parseable TOML.
 
-    A substring match alone cannot catch an unquoted value: the
-    redacted secret used to render as a bare ``***``, which reads fine
-    to a human and to ``"***" in out`` but makes the whole document
-    fail to parse. The round-trip is the assertion that matters.
+    A substring match alone cannot catch an unquoted value; the
+    round-trip is the assertion that matters.
     """
 
     def test_prints_log_level(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -86,32 +84,6 @@ class TestConfigShow:
         captured = capsys.readouterr()
         assert 'log_level = "info"' in captured.out
         assert tomllib.loads(captured.out)["log_level"] == "info"
-
-    def test_redacts_secret(
-        self,
-        capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("MAGE_HOST_MODEL_API_KEY", "supersecret")
-        rc = cli_config.cmd_config_show()
-        assert rc == 0
-        captured = capsys.readouterr()
-        assert "supersecret" not in captured.out
-        parsed = tomllib.loads(captured.out)
-        assert parsed["host_model_api_key"] == "***"
-
-    def test_output_parses_without_secret_set(
-        self,
-        capsys: pytest.CaptureFixture[str],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.delenv("MAGE_HOST_MODEL_API_KEY", raising=False)
-        initialize_config()
-        rc = cli_config.cmd_config_show()
-        assert rc == 0
-        captured = capsys.readouterr()
-        parsed = tomllib.loads(captured.out)
-        assert parsed["host_model_api_key"] == ""
 
     def test_invalid_config_exits_2(
         self,

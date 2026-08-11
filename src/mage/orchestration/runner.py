@@ -117,6 +117,12 @@ class FeatureRunner:
     ) -> list[ScenarioOutcome]:
         context.feature_id = self.feature_id
         outcomes: list[ScenarioOutcome] = []
+        # Flush any PROVIDER_RESOLVED[_FAILED] events EtchStage collected
+        # synchronously during __init__ so the audit trail is in place
+        # before the first scenario emits its own events.
+        flush = getattr(self.etch, "flush_pending_events", None)
+        if flush is not None:
+            await flush()
         # Skip scenarios preceding the cursor.
         if cursor is not None:
             targets = [t for t in targets if t.sub_bid >= cursor.sub_bid]

@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic_ai import Agent
 
+from mage.providers.resolver import is_test_mode
+
 _SYSTEM_PROMPT = """You refine a cosmetic suggestion into a concrete file edit.
 
 Given a raw queue entry with `sub_bid`, `text`, `location` (file + line),
@@ -28,16 +30,17 @@ class CosmeticRefiner:
     caller can decide how to surface the failure (see COSMETIC_REFINER_FALLBACK
     event).
 
-    Test mode (model is None or the string ``"test"``): bypasses the LLM
-    entirely. The refiner synthesizes a CosmeticPatch directly from the raw
-    queue entry's ``location`` field (``file_path``, ``line_range``) and
-    ``text`` (``replacement_text``, ``rationale``). This makes the CLI
-    deterministic in ``--model test`` E2E flows without needing per-call
-    TestModel configuration.
+    Test mode (model is None, the string ``"test"``, or a Pydantic-AI
+    ``TestModel`` instance): bypasses the LLM entirely. The refiner
+    synthesizes a CosmeticPatch directly from the raw queue entry's
+    ``location`` field (``file_path``, ``line_range``) and ``text``
+    (``replacement_text``, ``rationale``). This keeps the CLI deterministic
+    when no provider is configured and the resolver falls through to its
+    ``TestModel`` tier, without needing per-call TestModel configuration.
     """
 
     def __init__(self, *, model: Any = None) -> None:
-        self._is_test_mode = model is None or model == "test"
+        self._is_test_mode = is_test_mode(model)
         if self._is_test_mode:
             # Skip Agent construction; refine() builds CosmeticPatch directly.
             self._agent: Agent[None, dict[str, Any]] | None = None
