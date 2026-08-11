@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.8.0] - 2026-08-08
 
 ### Added
 
@@ -35,7 +35,9 @@ All notable changes to this project are documented here. The format follows
 - **BREAKING:** `MageSettings.host_model_api_key` field removed, along with the `MAGE_HOST_MODEL_API_KEY` env-var read and the `host_model_api_key` kwarg on `load_settings()`. Provider configuration now flows through the new P31 provider registry (`mage/providers/`) + `mage/host_project_config.py`. `SecretStr` is no longer imported in `mage.settings`. The hard-cutover removes the legacy path; this is a breaking change for any caller that constructed `MageSettings(host_model_api_key=...)` or exported `MAGE_HOST_MODEL_API_KEY`.
 - **BREAKING:** `HostConfig.model` field removed (legacy single-model surface). Per-agent model selection now flows through `<project>/mage.toml` (`[agents]` / `default_model`) and the `MAGE_MODEL_<AGENT>` env override, resolved by `mage.host_project_config.MageTomlConfig.model_for()` / `default_model_instance()`. Stage call sites in `mage.orchestration.cosmetic_apply.apply_for_feature`, `EtchStage.run_scenario`, and `feature_reviewer_registry` were re-routed through the resolver.
 
-## [0.7.2] - 2026-08-08
+## [Unreleased]
+
+## [0.8.0] - 2026-08-08
 
 ### Added
 
