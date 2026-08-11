@@ -68,7 +68,7 @@ Settings load in this order (highest priority first):
 3. The TOML config file.
 4. Baked-in defaults.
 
-Available settings today: `log_level`, `host_model_api_key`. Provider model selection and per-subagent overrides arrive in a future release.
+Available settings today: `log_level`. Provider selection (default + per-agent) and API credentials live in the `[providers]` block of the XDG config file; see `mage.toml` for per-project overrides.
 
 ### Environment variables
 
