@@ -164,7 +164,10 @@ class TestInitializeConfig:
 class TestSerializeConfig:
     def test_basic_string_round_trip(self) -> None:
         body = serialize_config("info")
-        assert body == 'log_level = "info"\n'
+        assert body.startswith('log_level = "info"\n')
+        assert "[providers.anthropic]" in body
+        assert "[providers.minimax]" in body
+        assert "MINIMAX_API_KEY" in body
 
     def test_preserves_unicode(self) -> None:
         body = serialize_config("info-🪄")

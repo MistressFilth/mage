@@ -6,14 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- Stage call sites resolve their agent model through `MageTomlConfig.model_for()` / `default_model_instance()` instead of reading the removed `HostConfig.model`: `mage cosmetic show` + `apply_for_feature` (`cosmetic_refiner`), `EtchStage` (`etch`), and `feature_reviewer_registry` (default tier). `EtchStage` gained `mage_toml` / `providers` / `default_provider` kwargs; `feature_reviewer_registry` gained a `mage_toml=` construction mode alongside the existing `model=` / `model_factory=`.
-- Agent test-mode detection now also recognizes a Pydantic-AI `TestModel` instance, not just `None` / the `"test"` string. Tier 5 of the resolver returns a `TestModel` instance when no provider is configured, so `CosmeticRefiner` and `PydanticEtchAgent` keep their deterministic no-LLM passthrough. Shared predicate: `mage.providers.resolver.is_test_mode`.
-
 ### Added
 
+- `mage config init` now writes `[providers.anthropic]` and `[providers.minimax]` blocks plus `default_provider = "anthropic"` alongside `log_level`, so a fresh user is one env-var (`ANTHROPIC_API_KEY` or `MINIMAX_API_KEY`) away from a working run.
+- `mage config show` now prints a `[providers]` table (dotted keys: `<name>.default_model`, `<name>.base_url`, `<name>.api_key_env`) and a `[mage.toml]` section (path, `default_model`, `agents.<name>` entries). New `project_root` keyword argument locates `mage.toml`; defaults to the current working directory.
 - `mage.host_project_config.resolve_model_logged()` — async wrapper that resolves a model and flushes any `PROVIDER_RESOLVED` event into an async `EventsLog`. `model_for` appends synchronously while `EventsLog.append` is a coroutine function, so passing the log directly would build a coroutine nobody awaits and silently drop the event.
+
+### Changed
+
+- `MageSettings` gained `default_provider` and `providers` fields so the new init format round-trips through `load_settings()`. Per-provider field validation (extra=forbid on `ProviderConfig`) is still owned by `mage.providers.config.load_xdg_providers` on the read path.
+- `cmd_config_show` no longer calls `mage.settings.load_settings()`; it parses the XDG config file directly so the strict `MageSettings` schema does not block the providers table that `load_xdg_providers` owns.
+- Stage call sites resolve their agent model through `MageTomlConfig.model_for()` / `default_model_instance()` instead of reading the removed `HostConfig.model`: `mage cosmetic show` + `apply_for_feature` (`cosmetic_refiner`), `EtchStage` (`etch`), and `feature_reviewer_registry` (default tier). `EtchStage` gained `mage_toml` / `providers` / `default_provider` kwargs; `feature_reviewer_registry` gained a `mage_toml=` construction mode alongside the existing `model=` / `model_factory=`.
+- Agent test-mode detection now also recognizes a Pydantic-AI `TestModel` instance, not just `None` / the `"test"` string. Tier 5 of the resolver returns a `TestModel` instance when no provider is configured, so `CosmeticRefiner` and `PydanticEtchAgent` keep their deterministic no-LLM passthrough. Shared predicate: `mage.providers.resolver.is_test_mode`.
 
 ### Removed
 

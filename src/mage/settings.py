@@ -72,6 +72,13 @@ class MageSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="forbid")
 
     log_level: LogLevel = DEFAULT_LOG_LEVEL
+    default_provider: str = "anthropic"
+    # Provider blocks are accepted as a free-form nested mapping here; per-field
+    # validation (extra=forbid on ProviderConfig) is enforced by
+    # :func:`mage.providers.config.load_xdg_providers` on the read path. The
+    # type avoids importing ProviderConfig to break a settings -> providers
+    # import cycle.
+    providers: dict[str, dict[str, object]] = {}
 
     @field_validator("log_level", mode="before")
     @classmethod
@@ -203,7 +210,13 @@ def load_settings(
 
 
 def serialize_config(log_level: str) -> str:
-    """Render the configuration file body for ``log_level``.
+    """Render the configuration file body for the built-in defaults.
+
+    Includes the ``[providers.anthropic]`` and ``[providers.minimax]``
+    blocks matched by :func:`mage.providers.config.load_xdg_providers`,
+    plus the ``default_provider`` key it consults. Two providers ship
+    enabled so a fresh user is one env-var (``ANTHROPIC_API_KEY`` or
+    ``MINIMAX_API_KEY``) away from a working run.
 
     ``json.dumps(..., ensure_ascii=False)`` produces a TOML basic
     string literal that is also a valid JSON string literal — escapes
@@ -211,7 +224,19 @@ def serialize_config(log_level: str) -> str:
     double-quote, with the actual UTF-8 bytes preserved for non-ASCII
     content.
     """
-    return f"log_level = {json.dumps(log_level, ensure_ascii=False)}\n"
+    return (
+        f"log_level = {json.dumps(log_level, ensure_ascii=False)}\n"
+        'default_provider = "anthropic"\n'
+        "\n"
+        "[providers.anthropic]\n"
+        'default_model = "claude-sonnet-5-20251001"\n'
+        'api_key_env = "ANTHROPIC_API_KEY"\n'
+        "\n"
+        "[providers.minimax]\n"
+        'base_url = "https://api.minimax.io/anthropic"\n'
+        'default_model = "MiniMax-M3"\n'
+        'api_key_env = "MINIMAX_API_KEY"\n'
+    )
 
 
 def initialize_config() -> Path:
