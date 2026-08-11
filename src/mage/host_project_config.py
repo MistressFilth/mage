@@ -50,11 +50,18 @@ class MageTomlConfig(BaseModel):
 
         Returns ``(model, provider_name, model_name)``. Caches the result.
         Emits ``PROVIDER_RESOLVED`` when ``events_log`` provided.
+        ``PROVIDER_RESOLVED_FAILED`` is appended to ``events_log`` (sync) before
+        any resolution failure is raised.
         """
         if agent_name in self._resolved:
             return self._resolved[agent_name]
         model, pname, mname, source = resolve_model(
-            agent_name, providers, default_provider, self, env
+            agent_name,
+            providers,
+            default_provider,
+            self,
+            env,
+            events_log=events_log,
         )
         if events_log is not None and source != "test_model":
             from mage.orchestration.events import Event, EventType
@@ -89,11 +96,18 @@ class MageTomlConfig(BaseModel):
 
         Used by the reviewer registry where no per-reviewer override
         exists. ``agent_name=None`` in the emitted event.
+        ``PROVIDER_RESOLVED_FAILED`` is appended to ``events_log`` (sync) before
+        any resolution failure is raised.
         """
         if "__default__" in self._resolved:
             return self._resolved["__default__"]
         model, pname, mname, source = resolve_model(
-            None, providers, default_provider, self, env
+            None,
+            providers,
+            default_provider,
+            self,
+            env,
+            events_log=events_log,
         )
         if events_log is not None and pname:
             from mage.orchestration.events import Event, EventType
@@ -124,13 +138,19 @@ async def resolve_model_logged(
     env: dict[str, str],
     events_log: Any | None = None,
 ) -> tuple[Model, str, str]:
-    """Resolve a model, flushing ``PROVIDER_RESOLVED`` into an async events log.
+    """Resolve a model, flushing ``PROVIDER_RESOLVED`` + ``PROVIDER_RESOLVED_FAILED``
+    into an async events log.
 
     ``model_for`` / ``default_model_instance`` call ``events_log.append``
     synchronously, but :meth:`mage.orchestration.events.EventsLog.append` is a
     coroutine function. Handing the log straight to them would build a
     coroutine nobody awaits and silently drop the event, so collect into a sync
     sink first and await each collected event here.
+
+    When resolution fails, ``PROVIDER_RESOLVED_FAILED`` is appended to the
+    sync sink before the typed exception is raised; we still flush collected
+    events (the failure record included) so the audit trail survives the
+    re-raise.
 
     ``agent_name=None`` resolves the default tier (reviewer registry).
     """
@@ -140,20 +160,32 @@ async def resolve_model_logged(
     else:
         sink = SimpleNamespace(append=collected.append)
     if agent_name is None:
-        result = mage_toml.default_model_instance(
-            providers=providers,
-            default_provider=default_provider,
-            env=env,
-            events_log=sink,
-        )
+        try:
+            result = mage_toml.default_model_instance(
+                providers=providers,
+                default_provider=default_provider,
+                env=env,
+                events_log=sink,
+            )
+        except Exception:
+            if events_log is not None:
+                for event in collected:
+                    await events_log.append(event)
+            raise
     else:
-        result = mage_toml.model_for(
-            agent_name,
-            providers=providers,
-            default_provider=default_provider,
-            env=env,
-            events_log=sink,
-        )
+        try:
+            result = mage_toml.model_for(
+                agent_name,
+                providers=providers,
+                default_provider=default_provider,
+                env=env,
+                events_log=sink,
+            )
+        except Exception:
+            if events_log is not None:
+                for event in collected:
+                    await events_log.append(event)
+            raise
     if events_log is not None:
         for event in collected:
             await events_log.append(event)
