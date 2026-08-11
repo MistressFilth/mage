@@ -53,6 +53,13 @@ def feature_reviewer_registry(
     the P31 provider chain — reviewers have no per-agent override, so all eight
     share the one resolved instance. Reviewers are rebuilt on every call so
     host/model changes cannot be hidden by process-wide cached agents.
+
+    The ``mage_toml`` path passes ``events_log`` straight to
+    :meth:`mage.host_project_config.MageTomlConfig.default_model_instance`,
+    which appends events synchronously. Callers that pass the real async
+    :class:`mage.orchestration.events.EventsLog` will end up with an
+    unawaited coroutine — prefer :func:`feature_reviewer_registry_async`
+    in any path that has a running event loop.
     """
     supplied = [s for s in (model, model_factory, mage_toml) if s is not None]
     if len(supplied) != 1:
@@ -74,6 +81,48 @@ def feature_reviewer_registry(
 
         def next_model() -> Any:
             return model_factory() if model_factory is not None else model
+
+    return [
+        SpecComplianceReviewer(model=next_model()),
+        ScenarioClarityReviewer(model=next_model()),
+        StepGrammarReviewer(model=next_model()),
+        TestabilityReviewer(model=next_model()),
+        DeterminismReviewer(model=next_model()),
+        NamingIdiomReviewer(model=next_model()),
+        LifecycleTagsReviewer(model=next_model()),
+        CrossScenarioReviewer(model=next_model()),
+    ]
+
+
+async def feature_reviewer_registry_async(
+    *,
+    mage_toml: MageTomlConfig,
+    providers: dict[str, Any] | None = None,
+    default_provider: str = "anthropic",
+    events_log: Any | None = None,
+) -> list[ReviewerAgent]:
+    """Async variant of :func:`feature_reviewer_registry` for the ``mage_toml`` path.
+
+    Resolves the default-tier model through :func:`resolve_model_logged` so
+    ``PROVIDER_RESOLVED`` (and ``PROVIDER_RESOLVED_FAILED`` on error) are
+    flushed through the real async :class:`EventsLog` before the reviewers
+    are constructed. Prefer this over the sync ``feature_reviewer_registry``
+    in any path that has a running event loop.
+    """
+    from mage.host_project_config import resolve_model_logged
+    from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
+
+    resolved, _, _ = await resolve_model_logged(
+        mage_toml,
+        None,
+        providers=providers or {},
+        default_provider=default_provider,
+        env=dict(os.environ),
+        events_log=events_log,
+    )
+
+    def next_model() -> Any:
+        return resolved
 
     return [
         SpecComplianceReviewer(model=next_model()),

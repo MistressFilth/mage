@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 from mage.agents.etch import EtchAgent, PydanticEtchAgent
@@ -43,18 +44,25 @@ class EtchStage:
         self.mage_toml = mage_toml
         self.providers = providers or {}
         self.default_provider = default_provider
+        # ``_build_agent`` collects any PROVIDER_RESOLVED /
+        # PROVIDER_RESOLVED_FAILED events synchronously; they need to be
+        # awaited against the real async EventsLog before any audit-trail
+        # reader sees the run. ``FeatureRunner.run`` calls
+        # ``flush_pending_events`` before the first scenario loop iteration.
+        self._pending_provider_events: list[Event] = []
         self._build_agent()
 
     def _build_agent(self) -> None:
         """(Re)build self.agent from the resolved model when needed.
 
-        P31: when a `mage_toml` is supplied and no concrete agent was passed,
-        resolve the `etch` model through the provider chain and construct a
-        `PydanticEtchAgent`. Otherwise keep the stub that was injected (e.g.
-        `_StubEtchAgent` in --dry-run). No `events_log` is threaded here
-        because `__init__` is synchronous and `EventsLog.append` is a
-        coroutine; PROVIDER_RESOLVED for etch is emitted by the caller that
-        builds the stage.
+        P31: when a ``mage_toml`` is supplied and no concrete agent was
+        passed, resolve the ``etch`` model through the provider chain and
+        construct a ``PydanticEtchAgent``. ``model_for`` appends
+        ``PROVIDER_RESOLVED`` synchronously to ``self.events_log``, which
+        would build a coroutine nobody awaits and silently drop the event;
+        route the appends into a sync sink (collected on
+        ``self._pending_provider_events``) so the caller can flush them via
+        :meth:`flush_pending_events` once it has a running event loop.
         """
         if self.mage_toml is None:
             return
@@ -63,13 +71,27 @@ class EtchStage:
         if isinstance(self.agent, EtchAgent) and not isinstance(
             self.agent, PydanticEtchAgent
         ):
+            sink: Any = SimpleNamespace(append=self._pending_provider_events.append)
             model, _, _ = self.mage_toml.model_for(
                 "etch",
                 providers=self.providers,
                 default_provider=self.default_provider,
                 env=dict(os.environ),
+                events_log=sink,
             )
             self.agent = PydanticEtchAgent(model=model)
+
+    async def flush_pending_events(self) -> None:
+        """Await each collected PROVIDER_RESOLVED[_FAILED] event against
+        ``self.events_log``.
+
+        Idempotent: drained buffer is replaced with an empty list after the
+        flush so a second call is a no-op.
+        """
+        pending = self._pending_provider_events
+        self._pending_provider_events = []
+        for event in pending:
+            await self.events_log.append(event)
 
     async def run_scenario(
         self, context: PipelineContext, target: ScenarioTarget
