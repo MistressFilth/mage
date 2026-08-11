@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Provider registry: MiniMax and Anthropic supported via `mage.toml` per-agent model pins and XDG `[providers]` config block (`mage host_project_config` + `mage providers`). Precedence chain: env > `mage.toml` per-agent > `mage.toml` default > XDG default.
+- New `EventType` members: `PROVIDER_RESOLVED`, `PROVIDER_RESOLVED_FAILED`.
 - `mage config init` now writes `[providers.anthropic]` and `[providers.minimax]` blocks plus `default_provider = "anthropic"` alongside `log_level`, so a fresh user is one env-var (`ANTHROPIC_API_KEY` or `MINIMAX_API_KEY`) away from a working run.
 - `mage config show` now prints a `[providers]` table (dotted keys: `<name>.default_model`, `<name>.base_url`, `<name>.api_key_env`) and a `[mage.toml]` section (path, `default_model`, `agents.<name>` entries). New `project_root` keyword argument locates `mage.toml`; defaults to the current working directory.
 - `mage.host_project_config.resolve_model_logged()` — async wrapper that resolves a model and flushes any `PROVIDER_RESOLVED` event into an async `EventsLog`. `model_for` appends synchronously while `EventsLog.append` is a coroutine function, so passing the log directly would build a coroutine nobody awaits and silently drop the event.
@@ -23,6 +25,7 @@ All notable changes to this project are documented here. The format follows
 
 - **BREAKING:** the `--model` CLI flag is gone from both `mage run` and `mage cosmetic apply`; argparse now rejects it with exit code 2. Model selection flows through `mage.toml` (`default_model` / `[agents]`), the `MAGE_MODEL_<AGENT>` env override, and the XDG provider registry. `apply_for_feature()` lost its `model=` keyword argument.
 - **BREAKING:** `MageSettings.host_model_api_key` field removed, along with the `MAGE_HOST_MODEL_API_KEY` env-var read and the `host_model_api_key` kwarg on `load_settings()`. Provider configuration now flows through the new P31 provider registry (`mage/providers/`) + `mage/host_project_config.py`. `SecretStr` is no longer imported in `mage.settings`. The hard-cutover removes the legacy path; this is a breaking change for any caller that constructed `MageSettings(host_model_api_key=...)` or exported `MAGE_HOST_MODEL_API_KEY`.
+- **BREAKING:** `HostConfig.model` field removed (legacy single-model surface). Per-agent model selection now flows through `<project>/mage.toml` (`[agents]` / `default_model`) and the `MAGE_MODEL_<AGENT>` env override, resolved by `mage.host_project_config.MageTomlConfig.model_for()` / `default_model_instance()`. Stage call sites in `mage.orchestration.cosmetic_apply.apply_for_feature`, `EtchStage.run_scenario`, and `feature_reviewer_registry` were re-routed through the resolver.
 
 ## [0.7.2] - 2026-08-08
 

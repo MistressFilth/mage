@@ -40,6 +40,8 @@ escalate it. Do not label it out-of-scope.
 - `src/mage/paths.py` — App directory composition (`<root>/mage/<role>`).
 - `src/mage/settings.py` — pydantic-settings substrate with TOML config file and `MAGE_*` env chain.
 - `src/mage/cosmetic_pid.py` — PID-file lifecycle for the cosmetic watcher daemon (atomic write via raw fd ops; `_proc_start_time` via `psutil.Process.create_time()`).
+- `src/mage/providers/` — provider registry (`config.py`, `registry.py`, `resolver.py`, `errors.py`). MiniMax + Anthropic, both routed through pydantic-ai `AnthropicModel`.
+- `src/mage/host_project_config.py` — `MageTomlConfig` model + `load_mage_toml()` + `model_for()` resolver for `<project>/mage.toml`.
 - `src/mage/cli.py` — the `mage` entry point.
 - `tests/unit/` — unit tests. `tests/features/` — behavior tests (`test_e2e_*`
   plus the smoke test). `tests/conftest.py` holds fixtures shared by both.

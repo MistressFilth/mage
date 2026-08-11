@@ -81,6 +81,39 @@ Available settings today: `log_level`, `default_provider`. Provider-specific set
 | `MAGE_XDG_STATE_HOME` | Override the user-state root. |
 | `MAGE_XDG_RUNTIME_DIR` | Override the user-runtime root. |
 
+## Providers
+
+mage supports multiple model providers (Anthropic and MiniMax today). Configure providers in `~/.config/mage/config.toml`:
+
+```toml
+default_provider = "anthropic"
+
+[providers.anthropic]
+default_model = "claude-sonnet-5-20251001"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[providers.minimax]
+base_url = "https://api.minimax.io/anthropic"
+default_model = "MiniMax-M3"
+api_key_env = "MINIMAX_API_KEY"
+```
+
+Pin a per-agent model in `<project>/mage.toml`:
+
+```toml
+default_model = "claude-sonnet-5-20251001"
+
+[agents]
+inscribe = "minimax:MiniMax-M3"
+realize = "minimax:MiniMax-M3"
+```
+
+Resolution precedence: env (`MAGE_MODEL_INSCRIBE`) > `mage.toml [agents]` > `mage.toml default_model` > XDG `default_provider.default_model`.
+
+## mage.toml
+
+Per-project config at `<project>/mage.toml`. See the design spec for the full schema.
+
 ## Running the pipeline
 
 `mage run` executes the pipeline end-to-end against a project directory. Flags:
