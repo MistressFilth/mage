@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -11,6 +12,7 @@ from mage.artifacts.verdict import (
     ReviewerAggregate,
     ReviewerVerdict,
 )
+from mage.host_project_config import MageTomlConfig
 from mage.verification.reviewers.base import ReviewerAgent
 from mage.verification.reviewers.determinism import DeterminismReviewer
 from mage.verification.reviewers.lifecycle_tags import LifecycleTagsReviewer
@@ -38,21 +40,40 @@ def feature_reviewer_registry(
     *,
     model: Any | None = None,
     model_factory: Callable[[], Any] | None = None,
+    mage_toml: MageTomlConfig | None = None,
+    providers: dict[str, Any] | None = None,
+    default_provider: str = "anthropic",
+    events_log: Any | None = None,
 ) -> list[ReviewerAgent]:
     """Build the end-of-feature reviewer set with an injected model.
 
-    Exactly one of ``model`` or ``model_factory`` is required. A factory is useful
-    for providers that require an independent model instance per agent. Reviewers
-    are rebuilt on every call so host/model changes cannot be hidden by process-wide
-    cached agents.
+    Exactly one of ``model``, ``model_factory``, or ``mage_toml`` is required.
+    A factory is useful for providers that require an independent model
+    instance per agent. ``mage_toml`` resolves the default-tier model through
+    the P31 provider chain — reviewers have no per-agent override, so all eight
+    share the one resolved instance. Reviewers are rebuilt on every call so
+    host/model changes cannot be hidden by process-wide cached agents.
     """
-    if (model is None) == (model_factory is None):
-        raise ValueError("provide exactly one of model or model_factory")
+    supplied = [s for s in (model, model_factory, mage_toml) if s is not None]
+    if len(supplied) != 1:
+        raise ValueError("provide exactly one of model, model_factory, or mage_toml")
 
     from mage.verification.reviewers.cross_scenario import CrossScenarioReviewer
 
-    def next_model() -> Any:
-        return model_factory() if model_factory is not None else model
+    if mage_toml is not None:
+        resolved, _, _ = mage_toml.default_model_instance(
+            providers=providers or {},
+            default_provider=default_provider,
+            env=dict(os.environ),
+            events_log=events_log,
+        )
+
+        def next_model() -> Any:
+            return resolved
+    else:
+
+        def next_model() -> Any:
+            return model_factory() if model_factory is not None else model
 
     return [
         SpecComplianceReviewer(model=next_model()),

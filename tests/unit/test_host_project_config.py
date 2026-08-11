@@ -44,7 +44,8 @@ class TestLoadMageToml:
         assert load_mage_toml(tmp_path) == MageTomlConfig()
 
     def test_loads_full(self, tmp_path: Path):
-        (tmp_path / "mage.toml").write_text(textwrap.dedent('''\
+        (tmp_path / "mage.toml").write_text(
+            textwrap.dedent("""\
             default_model = "claude-sonnet-5-20251001"
 
             [agents]
@@ -53,7 +54,8 @@ class TestLoadMageToml:
             etch = "anthropic:claude-sonnet-5-20251001"
 
             orphan_branch = "feature-artifacts"
-            '''))
+            """)
+        )
         cfg = load_mage_toml(tmp_path)
         assert cfg.default_model == "claude-sonnet-5-20251001"
         assert cfg.agent_models["inscribe"] == "minimax:MiniMax-M3"

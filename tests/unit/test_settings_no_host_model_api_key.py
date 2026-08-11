@@ -17,9 +17,7 @@ class TestMageSettingsShape:
         sig = inspect.signature(load_settings)
         assert "host_model_api_key" not in sig.parameters
 
-    def test_load_settings_no_key_returns_instance(
-        self, monkeypatch, tmp_path
-    ) -> None:
+    def test_load_settings_no_key_returns_instance(self, monkeypatch, tmp_path) -> None:
         from mage.settings import load_settings
 
         # Point XDG_CONFIG_HOME at a clean tmp dir so this test never

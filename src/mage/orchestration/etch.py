@@ -8,9 +8,12 @@ emits the coarse STAGE_STARTED / STAGE_COMPLETED around it.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
+from typing import Any
 
 from mage.agents.etch import EtchAgent, PydanticEtchAgent
+from mage.host_project_config import MageTomlConfig
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.orchestration.runner import Increment, ScenarioTarget
@@ -30,28 +33,43 @@ class EtchStage:
         agent: EtchAgent,
         *,
         host_config: HostConfig | None = None,
+        mage_toml: MageTomlConfig | None = None,
+        providers: dict[str, Any] | None = None,
+        default_provider: str = "anthropic",
     ) -> None:
         self.events_log = events_log
         self.agent = agent
         self.host_config = host_config
+        self.mage_toml = mage_toml
+        self.providers = providers or {}
+        self.default_provider = default_provider
         self._build_agent()
 
     def _build_agent(self) -> None:
-        """(Re)build self.agent from host_config when needed.
+        """(Re)build self.agent from the resolved model when needed.
 
-        Plan 9: if `host_config.model` is set and no concrete agent was passed,
-        construct `PydanticEtchAgent(model=host_config.model)`. Otherwise
-        keep the stub that was injected (e.g. `_StubEtchAgent` in --dry-run).
+        P31: when a `mage_toml` is supplied and no concrete agent was passed,
+        resolve the `etch` model through the provider chain and construct a
+        `PydanticEtchAgent`. Otherwise keep the stub that was injected (e.g.
+        `_StubEtchAgent` in --dry-run). No `events_log` is threaded here
+        because `__init__` is synchronous and `EventsLog.append` is a
+        coroutine; PROVIDER_RESOLVED for etch is emitted by the caller that
+        builds the stage.
         """
-        if self.host_config is None or not self.host_config.model:
+        if self.mage_toml is None:
             return
         # Replace any stub with a real Pydantic-AI agent. Existing test setups
-        # that inject their own agent AND host_config are unaffected because
-        # the injection test sets `host_config.model=None`.
+        # that inject their own agent pass no mage_toml, so they are unaffected.
         if isinstance(self.agent, EtchAgent) and not isinstance(
             self.agent, PydanticEtchAgent
         ):
-            self.agent = PydanticEtchAgent(model=self.host_config.model)
+            model, _, _ = self.mage_toml.model_for(
+                "etch",
+                providers=self.providers,
+                default_provider=self.default_provider,
+                env=dict(os.environ),
+            )
+            self.agent = PydanticEtchAgent(model=model)
 
     async def run_scenario(
         self, context: PipelineContext, target: ScenarioTarget

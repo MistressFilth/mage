@@ -16,7 +16,17 @@ from mage.providers.errors import (
 )
 from mage.providers.registry import build_model
 
-__all__ = ["resolve_model"]
+__all__ = ["is_test_mode", "resolve_model"]
+
+
+def is_test_mode(model: Any) -> bool:
+    """True when ``model`` selects an agent's deterministic no-LLM passthrough.
+
+    Covers the three ways test mode is expressed: no model at all, the legacy
+    ``"test"`` sentinel, and the :class:`TestModel` instance that tier 5 of
+    :func:`resolve_model` returns when nothing is configured.
+    """
+    return model is None or model == "test" or isinstance(model, TestModel)
 
 
 def _parse_model_string(value: str) -> tuple[str | None, str]:

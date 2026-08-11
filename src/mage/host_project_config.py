@@ -5,6 +5,7 @@ from __future__ import annotations
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr, ValidationError
@@ -13,7 +14,12 @@ from pydantic_ai.models import Model
 from mage.providers.resolver import resolve_model
 from mage.settings import MageConfigurationError
 
-__all__ = ["AgentName", "MageTomlConfig", "load_mage_toml"]
+__all__ = [
+    "AgentName",
+    "MageTomlConfig",
+    "load_mage_toml",
+    "resolve_model_logged",
+]
 
 AgentName = Literal["inscribe", "realize", "etch", "cosmetic_refiner"]
 
@@ -107,6 +113,51 @@ class MageTomlConfig(BaseModel):
         result = (model, pname, mname)
         self._resolved["__default__"] = result
         return result
+
+
+async def resolve_model_logged(
+    mage_toml: MageTomlConfig,
+    agent_name: AgentName | None,
+    *,
+    providers: dict[str, Any],
+    default_provider: str,
+    env: dict[str, str],
+    events_log: Any | None = None,
+) -> tuple[Model, str, str]:
+    """Resolve a model, flushing ``PROVIDER_RESOLVED`` into an async events log.
+
+    ``model_for`` / ``default_model_instance`` call ``events_log.append``
+    synchronously, but :meth:`mage.orchestration.events.EventsLog.append` is a
+    coroutine function. Handing the log straight to them would build a
+    coroutine nobody awaits and silently drop the event, so collect into a sync
+    sink first and await each collected event here.
+
+    ``agent_name=None`` resolves the default tier (reviewer registry).
+    """
+    collected: list[Any] = []
+    if events_log is None:
+        sink = None
+    else:
+        sink = SimpleNamespace(append=collected.append)
+    if agent_name is None:
+        result = mage_toml.default_model_instance(
+            providers=providers,
+            default_provider=default_provider,
+            env=env,
+            events_log=sink,
+        )
+    else:
+        result = mage_toml.model_for(
+            agent_name,
+            providers=providers,
+            default_provider=default_provider,
+            env=env,
+            events_log=sink,
+        )
+    if events_log is not None:
+        for event in collected:
+            await events_log.append(event)
+    return result
 
 
 def load_mage_toml(project_root: Path) -> MageTomlConfig:

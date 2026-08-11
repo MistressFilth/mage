@@ -75,7 +75,6 @@ Available settings today: `log_level`, `host_model_api_key`. Provider model sele
 | Variable | Effect |
 |----------|--------|
 | `MAGE_LOG_LEVEL` | One of `debug`, `info`, `warning`, `error`. |
-| `MAGE_HOST_MODEL_API_KEY` | API key for the host model provider. Treated as a secret. Wired to provider credential resolution in a future release — currently surfaces via `mage config show` only. |
 | `MAGE_XDG_DATA_HOME` | Override the user-data root. |
 | `MAGE_XDG_CONFIG_HOME` | Override the user-config root. |
 | `MAGE_XDG_CACHE_HOME` | Override the user-cache root. |
@@ -88,11 +87,16 @@ Available settings today: `log_level`, `host_model_api_key`. Provider model sele
 
 - `--project-dir PATH` — project directory (default: current directory).
 - `--dry-run` — use stub agents (no LLM calls).
-- `--model <id>` — override the LLM model identifier.
 - `--feature-id <id>` — tag the run with a feature identifier. Useful for
   correlating inspect journal entries and cosmetic queue items with a
   specific feature. Empty string is rejected; omitting the flag preserves
   the default (`feature_id=""`).
+
+There is no `--model` flag. Model selection resolves through, in precedence
+order: the `MAGE_MODEL_<AGENT>` env override, the project's `mage.toml`
+(`[agents]` per-agent entry, then `default_model`), the XDG default provider's
+`default_model`, and finally a Pydantic-AI `TestModel` when nothing is
+configured — which keeps the CLI deterministic with no credentials present.
 
 ## Cosmetic queue
 
