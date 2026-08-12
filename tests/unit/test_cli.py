@@ -340,6 +340,8 @@ def test_mage_run_dry_run_does_not_raise_systemexit(tmp_path):
 
 @pytest.mark.asyncio
 async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
+    import asyncio
+    import subprocess
     import sys
     from datetime import UTC, datetime
 
@@ -349,9 +351,18 @@ async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
         VerdictArtifact,
     )
     from mage.orchestration.events import EventsLog
+    from mage.state_store import StateStore
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
+
+    def _run_git(args: list[str]) -> None:
+        subprocess.run(args, cwd=project_dir, check=True, capture_output=True)
+
+    await asyncio.to_thread(_run_git, ["git", "init"])
+    await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+    await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
     log = EventsLog(project_dir / "events.jsonl")
 
     agg = ReviewerAggregate(
@@ -368,8 +379,9 @@ async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
         decision="approved",
         reasoning="all passed",
     )
-    path = project_dir / "agg.yaml"
-    await VerdictArtifact.finalize(path, agg, log)
+    await VerdictArtifact.finalize_to_state_store(
+        state_store, "verdicts/x/aggregate.yaml", agg, log
+    )
 
     test_argv = ["mage", "--project-dir", str(project_dir), "review", "show"]
     with patch.object(sys, "argv", test_argv):
@@ -880,16 +892,25 @@ class TestCosmeticApply:
 class TestInspectShow:
     @pytest.mark.asyncio
     async def test_inspect_show_renders_artifact(self, tmp_path, capsys):
+        import asyncio
+        import subprocess
         from datetime import UTC, datetime
 
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.orchestration.events import EventsLog
+        from mage.state_store import StateStore
 
-        # Build a minimal project with an InspectArtifact
+        # Build a minimal project with an InspectArtifact on the orphan branch.
         project = tmp_path / "proj"
         project.mkdir()
-        inspect_dir = project / ".mage" / "inspect" / "feat-1"
-        inspect_dir.mkdir(parents=True)
+
+        def _run_git(args: list[str]) -> None:
+            subprocess.run(args, cwd=project, check=True, capture_output=True)
+
+        await asyncio.to_thread(_run_git, ["git", "init"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+        state_store = StateStore(project, "feature-artifacts", identity=("T", "t@e"))
         log = EventsLog(project / "events.jsonl")
         artifact = InspectArtifactContent(
             feature_id="feat-1",
@@ -905,7 +926,9 @@ class TestInspectShow:
             ready_to_merge=True,
             ledger_markdown="| step | result |\n|---|---|\n| mechanical | pass |",
         )
-        await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+        await InspectArtifact.finalize_to_state_store(
+            state_store, "inspect/feat-1/1.yaml", artifact, log
+        )
 
         rc = _run_cli(["inspect", "show", "feat-1", "--project-dir", str(project)])
         out = capsys.readouterr().out
@@ -945,6 +968,7 @@ class TestSettleRun:
     async def test_settle_run_non_interactive(self, tmp_path, capsys, monkeypatch):
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.orchestration.events import EventsLog
+        from mage.state_store import StateStore
 
         project = tmp_path / "proj"
         project.mkdir()
@@ -962,10 +986,9 @@ class TestSettleRun:
         await asyncio.to_thread(_run_git, ["git", "init"])
         await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
         await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+        state_store = StateStore(project, "feature-artifacts", identity=("T", "t@e"))
 
-        # Build a ready-to-merge InspectArtifact
-        inspect_dir = project / ".mage" / "inspect" / "feat-1"
-        inspect_dir.mkdir(parents=True)
+        # Build a ready-to-merge InspectArtifact on the orphan branch.
         artifact = InspectArtifactContent(
             feature_id="feat-1",
             inspected_at=datetime.now(UTC),
@@ -980,7 +1003,9 @@ class TestSettleRun:
             ready_to_merge=True,
             ledger_markdown="",
         )
-        await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+        await InspectArtifact.finalize_to_state_store(
+            state_store, "inspect/feat-1/1.yaml", artifact, log
+        )
 
         rc = _run_cli(
             [
@@ -1012,15 +1037,28 @@ class TestSettleRun:
         capsys,
         monkeypatch,
     ):
+        import asyncio
+        import subprocess
+
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.orchestration.events import EventsLog
+        from mage.state_store import StateStore
 
         project = tmp_path / "proj"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         self._install_runner(monkeypatch, project, test_returncode=1)
-        await InspectArtifact.finalize(
-            project / ".mage" / "inspect" / "feat-1" / "1.yaml",
+
+        def _run_git(args: list[str]) -> None:
+            subprocess.run(args, cwd=project, check=True, capture_output=True)
+
+        await asyncio.to_thread(_run_git, ["git", "init"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+        state_store = StateStore(project, "feature-artifacts", identity=("T", "t@e"))
+        await InspectArtifact.finalize_to_state_store(
+            state_store,
+            "inspect/feat-1/1.yaml",
             InspectArtifactContent(
                 feature_id="feat-1",
                 inspected_at=datetime.now(UTC),

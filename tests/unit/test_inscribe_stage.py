@@ -254,9 +254,11 @@ async def test_inscribe_stage_halts_when_budget_exhausted(
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
+            from pathlib import Path
+
             from mage.artifacts.verdict import VerdictArtifact
 
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
@@ -375,9 +377,11 @@ async def test_per_scenario_halt_sibling_continues(tmp_path, state_store) -> Non
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
+            from pathlib import Path
+
             from mage.artifacts.verdict import VerdictArtifact
 
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     host_config = HostConfig(max_iterations=1)

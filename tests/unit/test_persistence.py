@@ -51,11 +51,11 @@ class TestFileStatePersistence:
         assert loaded is not None
         assert loaded.iteration == 2
 
-    def test_recovers_from_corrupt_state_by_quarantining(
-        self, state_store: StateStore
-    ):
+    def test_recovers_from_corrupt_state_by_quarantining(self, state_store: StateStore):
         """Corrupt state file is quarantined and load returns None."""
-        state_store.write(FileStatePersistence.STATE_PATH, b"not: valid: yaml: at all: :::")
+        state_store.write(
+            FileStatePersistence.STATE_PATH, b"not: valid: yaml: at all: :::"
+        )
         persistence = FileStatePersistence(
             state_store=state_store, state_type=SampleState
         )

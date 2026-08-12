@@ -176,9 +176,9 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path, state_store) -> None:
     scenario_files = list((project_dir / "scenarios" / "00000").glob("*.feature"))
     assert len(scenario_files) >= 1
 
-    # Verify verdict files were written
-    verdicts_root = project_dir / ".mage" / "verdicts"
-    assert verdicts_root.exists()
+    # Verify verdict files were written (P32: on the orphan branch).
+    verdicts_entries = project_state_store.list_dir("verdicts")
+    assert verdicts_entries, "no verdicts/ entries on the orphan branch"
 
     # Verify events
     events = log.read_all()
@@ -290,6 +290,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(
 ) -> None:
     """When reviewers always fail and budget is small, Inscribe halts."""
     from datetime import UTC, datetime
+    from pathlib import Path
 
     from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
     from mage.orchestration.inscribe import InscribeStage, ReviewBudgetExhausted
@@ -371,7 +372,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
@@ -524,6 +525,8 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path, state_store) -> None
     - existing_scenarios on resume carries scenario-B's real name + body
     - scenario-A approves on resume; final mapping has both approved
     """
+    from pathlib import Path
+
     from mage.artifacts.mapping import ScenarioEntry
     from mage.artifacts.verdict import VerdictArtifact
     from mage.orchestration.inscribe import ReviewBudgetExhausted
@@ -619,7 +622,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path, state_store) -> None
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     def _canned_scenario_a() -> InscribeOutput:

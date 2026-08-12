@@ -29,15 +29,16 @@ TEST_COMMAND = ["uv", "run", "pytest", "-v"]
 
 
 async def finalize_inspect(
-    project: Path,
+    state_store,
     log: EventsLog,
     *,
     path_feature_id: str = "feat-1",
     content_feature_id: str = "feat-1",
     iteration: int = 1,
     ready: bool = True,
-) -> Path:
-    path = project / ".mage" / "inspect" / path_feature_id / f"{iteration}.yaml"
+) -> str:
+    """Write an InspectArtifact to the orphan branch and return its relative path."""
+    path = f"inspect/{path_feature_id}/{iteration}.yaml"
     content = InspectArtifactContent(
         feature_id=content_feature_id,
         inspected_at=datetime.now(UTC),
@@ -45,7 +46,7 @@ async def finalize_inspect(
         eof_max_iterations=3,
         ready_to_merge=ready,
     )
-    await InspectArtifact.finalize(path, content, log)
+    await InspectArtifact.finalize_to_state_store(state_store, path, content, log)
     return path
 
 
@@ -54,7 +55,7 @@ async def make_context(
 ) -> PipelineContext:
     project.mkdir(parents=True, exist_ok=True)
     log = EventsLog(project / "events.jsonl")
-    await finalize_inspect(project, log, ready=ready)
+    await finalize_inspect(state_store, log, ready=ready)
     return PipelineContext(
         state_store=state_store,
         project_dir=project,
@@ -183,7 +184,7 @@ class TestSettleReadiness:
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         await finalize_inspect(
-            project,
+            state_store,
             log,
             path_feature_id="feat-1",
             content_feature_id="other-feature",
@@ -204,8 +205,11 @@ class TestSettleReadiness:
     @pytest.mark.asyncio
     async def test_digest_mismatch_aborts_settle(self, tmp_path, state_store):
         context = await make_context(tmp_path / "project", state_store=state_store)
-        inspect_path = context.project_dir / ".mage" / "inspect" / "feat-1" / "1.yaml"
-        inspect_path.write_text(inspect_path.read_text() + "# tampered\n")
+        relative_path = "inspect/feat-1/1.yaml"
+        # Tamper with the bytes on the orphan branch — the digest check
+        # should reject the modified bytes.
+        original = state_store.read(relative_path)
+        state_store.write(relative_path, original + b"# tampered\n")
 
         with pytest.raises(InspectArtifactDigestMismatchError):
             await SettleFeatureStage(
@@ -220,8 +224,8 @@ class TestSettleReadiness:
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
-        await finalize_inspect(project, log, iteration=9, ready=False)
-        await finalize_inspect(project, log, iteration=10, ready=True)
+        await finalize_inspect(state_store, log, iteration=9, ready=False)
+        await finalize_inspect(state_store, log, iteration=10, ready=True)
         context = PipelineContext(
             state_store=state_store,
             project_dir=project,
@@ -290,11 +294,13 @@ class TestSettleFinalization:
             MappingArtifact.load_from_state_store(context.state_store)
             == context.mapping
         )
-        report = context.project_dir / ".mage" / "settle" / "feat-1.md"
-        cosmetic = context.project_dir / ".mage" / "settle" / "feat-1-cosmetic.md"
-        assert report.exists()
-        assert cosmetic.exists()
-        assert "kept" in report.read_text()
+        # P32: settle reports live on the orphan branch, not on the
+        # working tree.
+        report = state_store.read("settle/feat-1.md").decode("utf-8")
+        cosmetic = state_store.read("settle/feat-1-cosmetic.md").decode("utf-8")
+        assert report
+        assert cosmetic
+        assert "kept" in report
         event_types = [
             event.event_type.value for event in context.events_log.read_all()
         ]
@@ -633,18 +639,27 @@ class TestSettleFinalization:
     ):
         context = await make_context(tmp_path / "project", state_store=state_store)
         runner = RecordingRunner(context.project_dir)
-        report_path = context.project_dir / ".mage" / "settle" / "feat-1.md"
-        report_path.mkdir(parents=True)
 
-        # POSIX raises IsADirectoryError; Windows raises PermissionError
-        # ("[Errno 13] Permission denied") for the same operation. The
-        # common base OSError covers both.
-        with pytest.raises(OSError):
+        # P32: the report lives on the orphan branch — make the
+        # state-store write raise to simulate a failure. The mapping
+        # must remain unsettle.
+        original_write = state_store.write
+
+        def failing_write(relative_path, data):
+            if relative_path == "settle/feat-1.md":
+                raise OSError("simulated report write failure")
+            return original_write(relative_path, data)
+
+        state_store.write = failing_write  # type: ignore[method-assign]
+
+        with pytest.raises(OSError, match="simulated"):
             await SettleFeatureStage(
                 context.events_log,
                 command_runner=runner,
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
+        assert context.mapping.feature_status != "settled"
+        # The mapping.yaml must NOT exist on the working tree.
         assert not (context.project_dir / "mapping.yaml").exists()
 
     @pytest.mark.asyncio

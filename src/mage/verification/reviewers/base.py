@@ -7,7 +7,7 @@ import json
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic_ai import Agent
 
@@ -15,6 +15,9 @@ from mage.agents.inscribe import ScenarioSpec
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
 from mage.orchestration.events import EventsLog
+
+if TYPE_CHECKING:
+    from mage.state_store import StateStore
 
 
 def compute_draft_hash(draft: ScenarioSpec, spec_context: dict[str, Any]) -> str:
@@ -61,8 +64,20 @@ class ReviewerAgent(ABC):
         spec_context: dict[str, Any],
         mapping: MappingArtifact,
         events_log: EventsLog,
-        verdict_path: Path,
+        state_store: StateStore | None = None,
+        verdict_path: Path | str,
     ) -> ReviewerVerdict:
+        """Run the reviewer and persist the verdict.
+
+        P32: production callers pass a ``StateStore`` and a relative
+        ``verdict_path`` (e.g. ``verdicts/<hash>/<dimension>.yaml``); the
+        verdict is written to the orphan branch and the digest event uses
+        the relative path. Test-only callers may pass a ``Path`` with
+        ``state_store=None``; the legacy working-tree ``finalize`` is used
+        in that case so existing tests keep working.
+        """
+        from mage.state_store import StateStore
+
         draft_hash = self._compute_draft_hash(draft, spec_context)
         prompt = (
             f"Draft scenario:\n{draft.model_dump_json(indent=2)}\n\n"
@@ -78,5 +93,12 @@ class ReviewerAgent(ABC):
             reviewer_id=f"{self.dimension}@v1",
         )
         finalized = ReviewerVerdict.model_validate(result_dict)
-        await VerdictArtifact.finalize(verdict_path, finalized, events_log)
+
+        if state_store is not None and isinstance(state_store, StateStore):
+            relative_path = str(verdict_path)
+            await VerdictArtifact.finalize_to_state_store(
+                state_store, relative_path, finalized, events_log
+            )
+        else:
+            await VerdictArtifact.finalize(Path(verdict_path), finalized, events_log)
         return finalized

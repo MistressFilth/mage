@@ -102,11 +102,25 @@ class StateStore:
         return bool(_stdout_text(result).strip())
 
     def list_dir(self, relative_path: str) -> list[str]:
+        """List entries under ``relative_path`` (or the branch root when empty).
+
+        An empty ``relative_path`` lists the top-level entries on the branch.
+        A non-empty ``relative_path`` must be a directory path; the returned
+        names are the immediate children (file basenames or subdirectory
+        names — not full paths).
+
+        ``--full-tree`` is required: when ``project_root`` is a subdirectory
+        of a parent git repo, plain ``git ls-tree`` would treat the cwd as
+        the root of the tree and return whatever happens to exist at the
+        cwd's path inside the tree (typically empty), not the tree root.
+        """
         if relative_path:
             _validate_path(relative_path)
-        target = relative_path if relative_path else self.full_ref
+            target = f"{self.full_ref}:{relative_path}"
+        else:
+            target = self.full_ref
         result = self._runner.run(
-            ["git", "ls-tree", target],
+            ["git", "ls-tree", "--full-tree", target],
             cwd=self.project_root,
         )
         if result.returncode != 0:
@@ -190,7 +204,10 @@ class StateStore:
         self._bootstrapped = True
 
     def _read_tree(self) -> dict[str, str]:
-        result = self._run(["git", "ls-tree", "-r", self.full_ref])
+        # --full-tree: when project_root is a subdirectory of a parent git
+        # repo, plain ``ls-tree -r`` would treat cwd as the tree root and
+        # return nothing. See list_dir() for the same reasoning.
+        result = self._run(["git", "ls-tree", "--full-tree", "-r", self.full_ref])
         if result.returncode != 0:
             return {}
         tree: dict[str, str] = {}

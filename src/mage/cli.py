@@ -596,9 +596,12 @@ async def cmd_review_show(args):
     """Display the latest aggregate verdict for the project."""
     from mage.artifacts.verdict import ReviewerAggregate, VerdictArtifact
     from mage.orchestration.events import EventsLog
+    from mage.state_store import state_store_for
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
 
     events = log.read_all()
     aggregate_events = [
@@ -614,21 +617,23 @@ async def cmd_review_show(args):
     latest = max(aggregate_events, key=lambda e: e.timestamp)
     digest = latest.payload.get("verdict_sha256")
 
-    # C4: read the decision from the AGGREGATE file on disk (single source
-    # of truth) rather than relying on the event payload, which the
-    # VerdictArtifact schema doesn't include. The verdict_path in the
-    # payload points to the aggregate.yaml we wrote.
+    # C4: read the decision from the AGGREGATE file on the orphan branch
+    # (single source of truth) rather than relying on the event payload,
+    # which the VerdictArtifact schema doesn't include. The verdict_path
+    # in the payload points to the relative ``verdicts/.../aggregate.yaml``
+    # we wrote.
     aggregate_path_str = latest.payload.get("verdict_path")
     decision = None
     if aggregate_path_str:
-        aggregate_path = Path(aggregate_path_str)
         try:
-            aggregate = await VerdictArtifact.load(aggregate_path, log)
+            aggregate = await VerdictArtifact.load_from_state_store(
+                state_store, aggregate_path_str, log
+            )
             decision = ReviewerAggregate.model_validate(aggregate).decision
         except (VerdictError, OSError) as e:
             print(
                 f"mage review show: warning: failed to read aggregate at "
-                f"{aggregate_path}: {e}",
+                f"{aggregate_path_str}: {e}",
                 file=sys.stderr,
             )
 
@@ -644,22 +649,38 @@ async def cmd_inspect_show(args):
     """Display the latest Inspect artifact for a feature."""
     from mage.artifacts.inspect import InspectArtifact
     from mage.orchestration.events import EventsLog
+    from mage.state_store import state_store_for
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
-    inspect_dir = project_dir / ".mage" / "inspect" / args.feature_id
-    if not inspect_dir.exists():
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+
+    # P32: locate artifacts on the orphan branch; pick the highest
+    # iteration so callers see the most recent state.
+    parent_dir = f"inspect/{args.feature_id}"
+    entries = state_store.list_dir(parent_dir)
+    if not entries:
         print(f"No inspect directory for feature {args.feature_id!r}", file=sys.stderr)
         return 1
 
-    # Find the highest iteration
-    candidates = sorted(inspect_dir.glob("*.yaml"))
+    candidates: list[tuple[int, str]] = []
+    for entry in entries:
+        basename = entry.rsplit("/", 1)[-1]
+        if not basename.endswith(".yaml"):
+            continue
+        try:
+            iteration = int(basename[: -len(".yaml")])
+        except ValueError:
+            continue
+        candidates.append((iteration, f"{parent_dir}/{basename}"))
+
     if not candidates:
         print(f"No inspect artifacts for feature {args.feature_id!r}", file=sys.stderr)
         return 1
-    latest = candidates[-1]
+    latest_path = max(candidates, key=lambda item: item[0])[1]
 
-    content = await InspectArtifact.load(latest, log)
+    content = await InspectArtifact.load_from_state_store(state_store, latest_path, log)
     print(f"# Inspect Feature {content.feature_id}")
     print(f"iteration: {content.iteration}/{content.eof_max_iterations}")
     print(f"ready_to_merge: {content.ready_to_merge}")

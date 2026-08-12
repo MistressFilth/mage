@@ -103,8 +103,8 @@ class TestE2EInspectSettle:
         assert "settle_feature_finalized" in types
         assert "settle_cosmetic_queued" in types
 
-        # Verify report file
-        report = (tmp_path / ".mage" / "settle" / "feat-1.md").read_text()
+        # Verify report file (P32: on the orphan branch).
+        report = state_store.read("settle/feat-1.md").decode("utf-8")
         assert "feat-1" in report
         assert "kept" in report
 
