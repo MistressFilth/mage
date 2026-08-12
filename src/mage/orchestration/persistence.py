@@ -34,4 +34,5 @@ class FileStatePersistence[T: BaseModel]:
         except (yaml.YAMLError, ValidationError):
             timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
             self.state_store.write(f"{self.STATE_PATH}.corrupt.{timestamp}", data)
+            self.state_store.delete(self.STATE_PATH)
             return None
