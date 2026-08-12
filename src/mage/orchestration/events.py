@@ -134,6 +134,15 @@ class EventType(str, Enum):
     PROVIDER_RESOLVED = "provider_resolved"
     PROVIDER_RESOLVED_FAILED = "provider_resolved_failed"
 
+    # Plan 32 — Orphan-branch state I/O + migration
+    STATE_STORE_READ = "state_store_read"
+    STATE_STORE_WRITE = "state_store_write"
+    STATE_STORE_DELETE = "state_store_delete"
+    STATE_MIGRATED = "state_migrated"
+    STATE_MIGRATED_PARTIAL = "state_migrated_partial"
+    STATE_MIGRATION_RESTORED = "state_migration_restored"
+    STATE_BOOTSTRAPPED = "state_bootstrapped"
+
 
 class Event(BaseModel):
     """One event in the log."""
