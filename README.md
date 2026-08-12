@@ -114,6 +114,39 @@ Resolution precedence: env (`MAGE_MODEL_INSCRIBE`) > `mage.toml [agents]` > `mag
 
 Per-project config at `<project>/mage.toml`. See the design spec for the full schema.
 
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `default_model` | string | unset | Pinned default model for any agent that has no per-agent override. |
+| `agents.<name>` | string | unset | Per-agent model pin (`inscribe`, `realize`, `etch`, `cosmetic_refiner`). Format: `<provider>:<model>` (e.g. `minimax:MiniMax-M3`). |
+| `orphan_branch` | string | `feature-artifacts` | State-storage orphan-branch name. Validated: matches `^[a-zA-Z0-9._/-]+$`, length 1-200, no leading `.`, no trailing `.lock`, no `..` segments. Invalid values raise at `mage.toml` load time. |
+
+## State Storage
+
+mage keeps all per-project state — mapping artifacts, pipeline state, inspect journals, reviewer verdicts, settle reports, the approval-gate marker, the cosmetic-watcher PID, cosmetic-applied state, and the host-config override — on a project-local **orphan branch** rooted at `refs/mage/<orphan_branch>` (default: `refs/mage/feature-artifacts`). The orphan branch is never checked out and never appears in the working tree, so `git status` stays clean. Every read and write goes through `mage.state_store` and emits a `STATE_STORE_READ` / `STATE_STORE_WRITE` / `STATE_STORE_DELETE` event for the audit trail. Writes are atomic CASes against the ref; a single retry handles concurrent contention, and a second failure surfaces as `MageStateConflict`.
+
+### Auto-migration from `.mage/`
+
+Before v0.9.0, state lived under `<project_dir>/.mage/`. First-time users on v0.9.0+ see one transparent migration:
+
+1. The first state-touching `mage` invocation calls `mage.state_migration.maybe_migrate()`.
+2. Every file under `<project_dir>/.mage/` is read and written into the orphan branch; filename mapping is direct (`<project_dir>/.mage/inspect/<fid>/0.yaml` → `inspect/<fid>/0.yaml` on the orphan branch).
+3. The legacy directory is renamed atomically to `<project_dir>/.mage.bak.<ts>/` (timestamp `<ts>` in `YYYYMMDDTHHMMSS`).
+4. A `STATE_MIGRATED` event with `{from_path, to_ref, backup_path, file_count}` is appended to `events.jsonl`.
+5. The migration marker (`_meta/.migrated`) makes the migration idempotent: subsequent runs no-op.
+
+The `.mage.bak.<ts>/` directory is user-owned and never deleted by mage. Any code path that touches the legacy `.mage/` path after migration raises `MageStateMigrated`, with the backup timestamp in the message.
+
+### `mage state` subcommand
+
+| Command | Purpose |
+|---|---|
+| `mage state ls [<dir>]` | List entries under `<dir>` (default: branch root). One path per line. |
+| `mage state show <path>` | Materialize one file to stdout via `git show refs/mage/<branch>:<path>`. |
+| `mage state info` | Print branch name, current ref SHA, and file count. |
+| `mage state restore [--from=<ts>]` | Restore orphan-branch state from a `.mage.bak.<ts>/` snapshot. With no `--from`, the latest backup is used. The restore is a snapshot-revert: post-migration writes are dropped; the migration marker is also reset so re-running `mage` auto-migrates the backup back into `.mage/`. |
+
+`mage state` accepts the global `--project-dir PATH` (default: current directory), like every other `mage` subcommand.
+
 ## Running the pipeline
 
 `mage run` executes the pipeline end-to-end against a project directory. Flags:
