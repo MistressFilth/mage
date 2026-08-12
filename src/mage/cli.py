@@ -535,7 +535,6 @@ async def cmd_run(args):
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
-    state_dir = project_dir / ".mage" / "state"
 
     # Plan 22: feature_id tag-only threading.
     feature_id = _resolve_feature_id(args)
@@ -548,7 +547,9 @@ async def cmd_run(args):
     # a fresh empty artifact — same fallback as the legacy path check.
     mapping = MappingArtifact.load_from_state_store(state_store)
 
-    persistence = FileStatePersistence(state_store=state_store, state_type=PipelineContext)
+    persistence = FileStatePersistence(
+        state_store=state_store, state_type=PipelineContext
+    )
     saved = persistence.load_state()
     if saved is not None:
         # Tag-only: rebadge saved state if --feature-id was explicitly passed.

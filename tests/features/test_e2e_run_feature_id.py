@@ -213,10 +213,14 @@ async def test_e2e_run_with_feature_id_threads_to_events(
 
     assert exc_info.value.code == 0
 
-    state_path = project_dir / ".mage" / "state" / "pipeline-state.yaml"
-    assert state_path.exists(), "pipeline-state.yaml must be written on halt"
+    # P32: pipeline-state lives on the orphan branch, not on disk.
+    from mage.state_store import StateStore
 
-    state = yaml.safe_load(state_path.read_text())
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    state_bytes = state_store.read("state/pipeline-state.yaml")
+    assert state_bytes, "pipeline-state.yaml must be written on halt"
+
+    state = yaml.safe_load(state_bytes)
     assert state.get("feature_id") == "feat-X", (
         f"Persisted state must record feature_id='feat-X'; got {state.get('feature_id')!r}"
     )

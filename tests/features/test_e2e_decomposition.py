@@ -161,8 +161,8 @@ async def test_halt_and_resume_cycle(tmp_path, state_store):
     assert len(halt_events) == 1
 
     # State persisted
-    state_dir = project_dir / ".mage" / "state"
-    assert any(state_dir.iterdir()) if state_dir.exists() else False
+    # P32: pipeline-state lives on the orphan branch, not on disk.
+    assert state_store.read("state/pipeline-state.yaml") != b""
 
     # External edit of plan.md
     plan_path = project_dir / "plan.md"

@@ -75,8 +75,9 @@ class TestFoundationEndToEnd:
         assert loaded.next_base_bid().value == "00001"
 
         # 2. Persistence: save and load state.
-        state_dir = tmp_project_dir / "state"
-        persistence = FileStatePersistence(state_dir, PipelineContext)
+        persistence = FileStatePersistence(
+            state_store=state_store, state_type=PipelineContext
+        )
         ctx = PipelineContext(
             state_store=state_store,
             project_dir=tmp_project_dir,

@@ -337,8 +337,14 @@ async def test_mage_run_resumes_from_persisted_cursor(
     assert exc_info.value.code == 0
 
     # The cursor was persisted.
-    state_dir = project_dir / ".mage" / "state"
-    persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
+    # P32: mapping lives on the orphan branch; read via the state store.
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.state_store import StateStore
+
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    persistence = FileStatePersistence(
+        state_store=state_store, state_type=PipelineContext
+    )
     saved = persistence.load_state()
     assert saved is not None
     assert saved.automation_cursor is not None
@@ -347,11 +353,6 @@ async def test_mage_run_resumes_from_persisted_cursor(
     assert saved.automation_cursor.iteration == 1
 
     # The mapping was marked halted.
-    # P32: mapping lives on the orphan branch; read via the state store.
-    from mage.artifacts.mapping import MappingArtifact
-    from mage.state_store import StateStore
-
-    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
     halted_mapping = MappingArtifact.load_from_state_store(state_store)
     assert halted_mapping.feature_status == "halted"
 

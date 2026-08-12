@@ -20,7 +20,9 @@ class FileStatePersistence[T: BaseModel]:
         self.state_type = state_type
 
     def save_state(self, state: BaseModel) -> None:
-        data = yaml.safe_dump(state.model_dump(mode="json"), sort_keys=False).encode("utf-8")
+        data = yaml.safe_dump(state.model_dump(mode="json"), sort_keys=False).encode(
+            "utf-8"
+        )
         self.state_store.write(self.STATE_PATH, data)
 
     def load_state(self) -> T | None:

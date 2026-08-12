@@ -22,8 +22,6 @@ def _save_pipeline_state(project: Path, feature_id: str, state_store) -> None:
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
 
-    state_dir = project / ".mage" / "state"
-    state_dir.mkdir(parents=True)
     saved = PipelineContext(
         state_store=state_store,
         project_dir=project,
@@ -31,8 +29,9 @@ def _save_pipeline_state(project: Path, feature_id: str, state_store) -> None:
         events_log=EventsLog(project / "events.jsonl"),
         feature_id=feature_id,
     )
-    (state_dir / "pipeline-state.yaml").write_text(
-        yaml.safe_dump(saved.model_dump(mode="json"), sort_keys=False)
+    state_store.write(
+        "state/pipeline-state.yaml",
+        yaml.safe_dump(saved.model_dump(mode="json"), sort_keys=False).encode("utf-8"),
     )
 
 
