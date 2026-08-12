@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from mage.host_project_config import MageTomlConfig
-from mage.state_store import (  # noqa: F401 — MageStateConflict is public surface
+from mage.state_store import (
     MageStateConflict,
     StateStore,
     state_store_for,
@@ -242,3 +242,128 @@ def test_update_ref_passes_oldvalue_to_git(
         cwd=git_repo,
         check=False,
     )
+
+
+def test_write_retries_once_on_ref_contention(
+    git_repo: Path, fake_runner: MagicMock
+) -> None:
+    """First update-ref fails; second attempt succeeds."""
+    fake_runner.run.side_effect = [
+        # _ensure_bootstrapped: ref-sha missing
+        _make_run_result(stdout="", returncode=1),
+        # _ensure_bootstrapped: mktree (empty bootstrap tree)
+        _make_run_result(stdout="bootstrap_tree_sha\n"),
+        # _ensure_bootstrapped: commit-tree (bootstrap commit)
+        _make_run_result(stdout="bootstrap_commit_sha\n"),
+        # _ensure_bootstrapped: update-ref (bootstrap succeeds)
+        _make_run_result(stdout=""),
+        # attempt 1: read_tree
+        _make_run_result(stdout=""),
+        # attempt 1: hash-object
+        _make_run_result(stdout="blob_sha\n"),
+        # attempt 1: mktree
+        _make_run_result(stdout="new_tree_sha\n"),
+        # attempt 1: ref_sha for parent
+        _make_run_result(stdout="bootstrap_commit_sha\n"),
+        # attempt 1: commit-tree
+        _make_run_result(stdout="new_commit_sha\n"),
+        # attempt 1: update-ref FAILS (ref moved under us)
+        _make_run_result(stdout="", returncode=1),
+        # attempt 2: read_tree
+        _make_run_result(stdout=""),
+        # attempt 2: hash-object
+        _make_run_result(stdout="blob_sha\n"),
+        # attempt 2: mktree
+        _make_run_result(stdout="new_tree_sha\n"),
+        # attempt 2: ref_sha for parent
+        _make_run_result(stdout="bootstrap_commit_sha\n"),
+        # attempt 2: commit-tree
+        _make_run_result(stdout="new_commit_sha\n"),
+        # attempt 2: update-ref SUCCEEDS
+        _make_run_result(stdout=""),
+    ]
+    store = StateStore(
+        git_repo,
+        "feature-artifacts",
+        identity=("T", "t@e"),
+        command_runner=fake_runner,
+    )
+    sha = store.write("a.yaml", b"x")
+    assert sha == "new_commit_sha"
+
+
+def test_write_raises_conflict_after_two_failures(
+    git_repo: Path, fake_runner: MagicMock
+) -> None:
+    fake_runner.run.side_effect = [
+        # _ensure_bootstrapped: ref-sha missing
+        _make_run_result(stdout="", returncode=1),
+        # _ensure_bootstrapped: mktree
+        _make_run_result(stdout="bootstrap_tree_sha\n"),
+        # _ensure_bootstrapped: commit-tree
+        _make_run_result(stdout="bootstrap_commit_sha\n"),
+        # _ensure_bootstrapped: update-ref
+        _make_run_result(stdout=""),
+        # attempt 1: read_tree
+        _make_run_result(stdout=""),
+        # attempt 1: hash-object
+        _make_run_result(stdout="blob_sha\n"),
+        # attempt 1: mktree
+        _make_run_result(stdout="new_tree_sha\n"),
+        # attempt 1: ref_sha for parent
+        _make_run_result(stdout="bootstrap_commit_sha\n"),
+        # attempt 1: commit-tree
+        _make_run_result(stdout="new_commit_sha\n"),
+        # attempt 1: update-ref FAILS
+        _make_run_result(stdout="", returncode=1),
+        # attempt 2: read_tree
+        _make_run_result(stdout=""),
+        # attempt 2: hash-object
+        _make_run_result(stdout="blob_sha\n"),
+        # attempt 2: mktree
+        _make_run_result(stdout="new_tree_sha\n"),
+        # attempt 2: ref_sha for parent
+        _make_run_result(stdout="bootstrap_commit_sha\n"),
+        # attempt 2: commit-tree
+        _make_run_result(stdout="new_commit_sha\n"),
+        # attempt 2: update-ref FAILS
+        _make_run_result(stdout="", returncode=1),
+    ]
+    store = StateStore(
+        git_repo,
+        "feature-artifacts",
+        identity=("T", "t@e"),
+        command_runner=fake_runner,
+    )
+    with pytest.raises(MageStateConflict):
+        store.write("a.yaml", b"x")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "../escape",
+        "/absolute",
+        "",
+        "has space",
+        "has:colon",
+        "has~tilde",
+        "..",
+        "a/b/../c",
+    ],
+)
+def test_path_validation_rejects_invalid(git_repo: Path, path: str) -> None:
+    store = StateStore(
+        git_repo,
+        "feature-artifacts",
+        identity=("T", "t@e"),
+        command_runner=MagicMock(),
+    )
+    with pytest.raises(ValueError):
+        store.read(path)
+    with pytest.raises(ValueError):
+        store.write(path, b"x")
+    with pytest.raises(ValueError):
+        store.delete(path)
+    with pytest.raises(ValueError):
+        store.exists(path)
