@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Pre-commit chain now includes a `commit-msg` hook that rejects `Co-Authored-By:` trailers (canonical regex per repo standard). `git commit --no-verify` is forbidden locally; CI re-runs `pre-commit run --all-files` on every push and PR as the second line of defense. `AGENTS.md` documents both rules.
+
 ### Added
 
 - Provider registry: MiniMax and Anthropic supported via `mage.toml` per-agent model pins and XDG `[providers]` config block (`mage host_project_config` + `mage providers`). Precedence chain: env > `mage.toml` per-agent > `mage.toml` default > XDG default.
