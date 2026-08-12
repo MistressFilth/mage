@@ -346,15 +346,29 @@ def state_store_for(
     *,
     command_runner: CommandRunner | None = None,
 ) -> StateStore:
-    """Factory: build a StateStore for the given project."""
+    """Factory: build a StateStore for the given project.
+
+    Auto-runs :func:`mage.state_migration.maybe_migrate` so the first
+    state-touching invocation per project migrates any legacy
+    ``<project_dir>/.mage/`` to the orphan branch and renames the
+    legacy directory to ``<project_dir>/.mage.bak.<ts>/``. The migration
+    helper itself no-ops when there is nothing to migrate, so this is
+    free on every subsequent call.
+    """
+    # Lazy import: state_migration imports this module, so a top-level
+    # import would create a cycle on first load.
+    from mage.state_migration import maybe_migrate
+
     branch = mage_toml.orphan_branch if mage_toml else DEFAULT_ORPHAN_BRANCH
     identity = _resolve_identity(project_root)
-    return StateStore(
+    store = StateStore(
         project_root,
         branch,
         identity=identity,
         command_runner=command_runner,
     )
+    maybe_migrate(project_root, store)
+    return store
 
 
 def _resolve_identity(project_root: Path) -> tuple[str, str]:

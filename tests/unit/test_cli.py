@@ -48,11 +48,13 @@ class TestCli:
         feature_path.write_text(
             "Feature: Test\n\n  Scenario: Valid\n    Given x\n    When y\n    Then z\n"
         )
-        config_dir = tmp_project_dir / ".mage"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            "max_iterations: 3\ncheck_set: default\n"
-        )
+        # cmd_verify calls state_store_for, which (Fix 1) auto-migrates
+        # any legacy ``.mage/`` into the orphan branch. Init git so the
+        # orphan branch has somewhere to land; this test is not about
+        # the migration path.
+        from tests.conftest import init_git_repo
+
+        init_git_repo(tmp_project_dir)
 
         from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
 

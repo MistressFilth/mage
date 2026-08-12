@@ -7,8 +7,22 @@ from pathlib import Path
 
 from mage.host_project_config import MageTomlConfig
 from mage.state_migration import maybe_migrate
-from mage.state_store import state_store_for
+from mage.state_store import StateStore, state_store_for
 from tests.conftest import init_git_repo
+
+
+def _bare_store(project_root: Path) -> StateStore:
+    """A StateStore that does NOT auto-migrate.
+
+    ``state_store_for`` wires :func:`maybe_migrate` as a side effect;
+    the explicit-migration assertions below exercise the helper on its
+    own and need a side-effect-free harness.
+    """
+    return StateStore(
+        project_root,
+        "feature-artifacts",
+        identity=("T", "t@e"),
+    )
 
 
 def test_legacy_dot_mage_migrates(tmp_path: Path) -> None:
@@ -28,7 +42,7 @@ def test_legacy_dot_mage_migrates(tmp_path: Path) -> None:
     legacy.mkdir(parents=True)
     (legacy / "0.yaml").write_text("finding: yes\n")
 
-    store = state_store_for(tmp_path, MageTomlConfig())
+    store = _bare_store(tmp_path)
     assert maybe_migrate(tmp_path, store) is True
 
     # Orphan branch carries the migrated content.
@@ -59,9 +73,27 @@ def test_legacy_migration_is_idempotent(tmp_path: Path) -> None:
     legacy.mkdir()
     (legacy / "foo.yaml").write_text("bar\n")
 
-    store = state_store_for(tmp_path, MageTomlConfig())
+    store = _bare_store(tmp_path)
     assert maybe_migrate(tmp_path, store) is True
     assert maybe_migrate(tmp_path, store) is False
     # Still exactly one backup directory.
     backups = list(tmp_path.glob(".mage.bak.*"))
     assert len(backups) == 1
+
+
+def test_state_store_for_triggers_auto_migration(tmp_path: Path) -> None:
+    """Fix 1: ``state_store_for`` now wires ``maybe_migrate``.
+
+    Setting up a legacy ``.mage/`` tree then calling ``state_store_for``
+    once should rename it to ``.mage.bak.<ts>/`` without the caller
+    invoking ``maybe_migrate`` explicitly.
+    """
+    init_git_repo(tmp_path)
+    legacy = tmp_path / ".mage"
+    legacy.mkdir()
+    (legacy / "foo.yaml").write_text("bar\n")
+
+    state_store_for(tmp_path, MageTomlConfig())
+    backups = list(tmp_path.glob(".mage.bak.*"))
+    assert len(backups) == 1
+    assert not (tmp_path / ".mage").exists()

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mage.cli import main
 from mage.host_project_config import MageTomlConfig
-from mage.state_migration import maybe_migrate, restore_from_backup
+from mage.state_migration import restore_from_backup
 from mage.state_store import state_store_for
 from tests.conftest import init_git_repo
 
@@ -36,7 +36,6 @@ def test_state_restore_roundtrip(tmp_path: Path) -> None:
     (legacy_root / "state" / "pipeline-state.yaml").write_text("stage: inscribe\n")
 
     store = state_store_for(tmp_path, MageTomlConfig())
-    assert maybe_migrate(tmp_path, store) is True
     backups = list(tmp_path.glob(".mage.bak.*"))
     assert len(backups) == 1
     backup_ts = backups[0].name.removeprefix(".mage.bak.")
@@ -78,10 +77,8 @@ def test_state_restore_roundtrip_via_cli(tmp_path: Path) -> None:
     info_empty = main(["--project-dir", str(tmp_path), "state", "info"])
     assert info_empty == 0
 
-    # Drive migration by importing the helpers directly (the production
-    # CLI trigger for migration lives in the pipeline, not in `mage state`).
+    # Drive migration: Fix 1 wires state_store_for to auto-migrate.
     store = state_store_for(tmp_path, MageTomlConfig())
-    assert maybe_migrate(tmp_path, store) is True
     backups = list(tmp_path.glob(".mage.bak.*"))
     assert len(backups) == 1
     backup_ts = backups[0].name.removeprefix(".mage.bak.")
