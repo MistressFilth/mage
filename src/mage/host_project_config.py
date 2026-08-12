@@ -8,7 +8,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, PrivateAttr, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    PrivateAttr,
+    ValidationError,
+    field_validator,
+)
 from pydantic_ai.models import Model
 
 from mage.providers.resolver import resolve_model
@@ -32,6 +38,28 @@ class MageTomlConfig(BaseModel):
     default_model: str | None = None
     agent_models: dict[AgentName, str] = {}
     orphan_branch: str = "feature-artifacts"  # placeholder; P32 owns
+
+    @field_validator("orphan_branch")
+    @classmethod
+    def _validate_orphan_branch(cls, value: str) -> str:
+        import re
+
+        if not value:
+            raise ValueError("orphan_branch must not be empty")
+        if len(value) > 200:
+            raise ValueError(f"orphan_branch length {len(value)} exceeds 200")
+        if value.startswith("."):
+            raise ValueError(f"orphan_branch must not start with '.': {value!r}")
+        if value.endswith(".lock"):
+            raise ValueError(f"orphan_branch must not end with '.lock': {value!r}")
+        if not re.fullmatch(r"[a-zA-Z0-9._/-]+", value):
+            raise ValueError(
+                f"orphan_branch value {value!r} contains invalid characters; "
+                "must match [a-zA-Z0-9._/-]+"
+            )
+        if ".." in value:
+            raise ValueError(f"orphan_branch must not contain '..': {value!r}")
+        return value
 
     # Resolved-model cache, keyed by agent_name (or "__default__"). PrivateAttr
     # keeps it out of model_fields and works cleanly with frozen=True.
