@@ -21,7 +21,7 @@ __all__ = [
 _LEGACY_DIR = Path(".mage")
 _BACKUP_PREFIX = ".mage.bak."
 _TIMESTAMP_FMT = "%Y%m%dT%H%M%S"
-_ALLOWED_EXTENSIONS = {".yaml", ".json", ".txt", ".pid", ""}
+_ALLOWED_EXTENSIONS = {".yaml", ".json", ".txt", ".pid"}
 _MIGRATION_MARKER = "_meta/.migrated"
 
 
