@@ -2,32 +2,16 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from mage.host_project_config import MageTomlConfig
 from mage.state_store import state_store_for
-
-
-def _init_repo(tmp_path: Path) -> None:
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "t@e"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
+from tests.conftest import init_git_repo
 
 
 def test_state_store_roundtrip_via_real_git(tmp_path: Path) -> None:
     """StateStore reads/writes commit objects on a real git orphan ref."""
-    _init_repo(tmp_path)
+    init_git_repo(tmp_path)
     store = state_store_for(tmp_path, MageTomlConfig())
     sha = store.write("inspect/feature_a/0.yaml", b"finding: yes\n")
     assert sha and len(sha) >= 7  # git short SHA
@@ -36,7 +20,7 @@ def test_state_store_roundtrip_via_real_git(tmp_path: Path) -> None:
 
 
 def test_state_store_list_dir_via_real_git(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
+    init_git_repo(tmp_path)
     store = state_store_for(tmp_path, MageTomlConfig())
     store.write("inspect/fid/0.yaml", b"a\n")
     store.write("verdicts/hash/spec_compliance.yaml", b"b\n")
@@ -46,7 +30,7 @@ def test_state_store_list_dir_via_real_git(tmp_path: Path) -> None:
 
 
 def test_state_store_bootstrap_is_idempotent(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
+    init_git_repo(tmp_path)
     store = state_store_for(tmp_path, MageTomlConfig())
     assert store.ref_sha() is None
     sha = store.write("a.yaml", b"x\n")

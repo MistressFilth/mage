@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -130,6 +131,12 @@ def restore_from_backup(
     """Inverse of maybe_migrate. Reads `.mage.bak.<ts>/` and writes into a
     fresh orphan-branch commit, then atomically swaps the ref.
 
+    Snapshot-revert: the new commit contains ONLY the files from the
+    backup — any files written to the orphan branch between migration
+    and restore are dropped. ``_meta/.migrated`` is also absent (it is
+    not part of the backup) so re-running ``maybe_migrate`` will
+    re-rename `.mage.bak.<ts>/` back to `.mage/`.
+
     Returns the new ref SHA.
     """
     if timestamp is None:
@@ -141,13 +148,93 @@ def restore_from_backup(
     backup = _legacy_backup_path(project_root, timestamp)
     if not backup.exists():
         raise MageStateMigrationError(f"backup {backup} does not exist")
-    files = []
+
+    # 1. Read backup files into an in-memory dict (path -> sha).
+    blob_shas: dict[str, str] = {}
     for path in backup.rglob("*"):
         if path.is_symlink() or not path.is_file():
             continue
-        files.append(path)
-    for path in files:
         rel = str(path.relative_to(backup)).replace(os.sep, "/")
         data = path.read_bytes()
-        state_store.write(rel, data)
-    return state_store.ref_sha() or ""
+        result = subprocess.run(
+            ["git", "hash-object", "-w", "--stdin"],
+            cwd=project_root,
+            input=data,
+            capture_output=True,
+            check=True,
+        )
+        blob_shas[rel] = result.stdout.decode("utf-8").strip()
+
+    # 2. Build a fresh tree containing only the backup files.
+    tree_sha = _mktree(project_root, blob_shas)
+
+    # 3. Commit that tree as a fresh root commit on a sibling branch.
+    commit_result = subprocess.run(
+        [
+            "git",
+            "commit-tree",
+            tree_sha,
+            "-m",
+            f"mage: restore from .mage.bak.{timestamp}",
+        ],
+        cwd=project_root,
+        capture_output=True,
+        check=True,
+    )
+    new_commit = commit_result.stdout.decode("utf-8").strip()
+
+    # 3b. Record the sibling ref so the restoration is discoverable.
+    sibling_ref = f"{state_store.full_ref}.restored.{timestamp}"
+    subprocess.run(
+        ["git", "update-ref", sibling_ref, new_commit],
+        cwd=project_root,
+        capture_output=True,
+        check=True,
+    )
+
+    # 4. Atomically swap the live ref to the restored commit.
+    #    Unconditional (no <oldvalue>): the sibling branch is freshly
+    #    created so we have a stable pointer independent of the live
+    #    ref's history.
+    subprocess.run(
+        ["git", "update-ref", state_store.full_ref, new_commit],
+        cwd=project_root,
+        capture_output=True,
+        check=True,
+    )
+    return new_commit
+
+
+def _mktree(project_root: Path, entries: dict[str, str]) -> str:
+    """Build a git tree object from a flat path->blob-sha mapping (recursive)."""
+    if not entries:
+        result = subprocess.run(
+            ["git", "mktree"],
+            cwd=project_root,
+            capture_output=True,
+            check=True,
+        )
+        return result.stdout.decode("utf-8").strip()
+    files_at_root: dict[str, str] = {}
+    subdirs: dict[str, dict[str, str]] = {}
+    for path, sha in entries.items():
+        if "/" in path:
+            top, rest = path.split("/", 1)
+            subdirs.setdefault(top, {})[rest] = sha
+        else:
+            files_at_root[path] = sha
+    subdir_shas: dict[str, str] = {
+        name: _mktree(project_root, entries) for name, entries in subdirs.items()
+    }
+    lines = [
+        f"100644 blob {sha}\t{name}" for name, sha in sorted(files_at_root.items())
+    ]
+    lines += [f"040000 tree {sha}\t{name}" for name, sha in sorted(subdir_shas.items())]
+    result = subprocess.run(
+        ["git", "mktree"],
+        cwd=project_root,
+        input="\n".join(lines).encode("utf-8"),
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout.decode("utf-8").strip()

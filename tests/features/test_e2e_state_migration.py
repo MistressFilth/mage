@@ -8,22 +8,7 @@ from pathlib import Path
 from mage.host_project_config import MageTomlConfig
 from mage.state_migration import maybe_migrate
 from mage.state_store import state_store_for
-
-
-def _init_repo(tmp_path: Path) -> None:
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "t@e"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
+from tests.conftest import init_git_repo
 
 
 def test_legacy_dot_mage_migrates(tmp_path: Path) -> None:
@@ -38,7 +23,7 @@ def test_legacy_dot_mage_migrates(tmp_path: Path) -> None:
     - A ``_meta/.migrated`` marker is written to the orphan branch to
       guard against re-running the migration.
     """
-    _init_repo(tmp_path)
+    init_git_repo(tmp_path)
     legacy = tmp_path / ".mage" / "inspect" / "fid"
     legacy.mkdir(parents=True)
     (legacy / "0.yaml").write_text("finding: yes\n")
@@ -69,7 +54,7 @@ def test_legacy_dot_mage_migrates(tmp_path: Path) -> None:
 
 def test_legacy_migration_is_idempotent(tmp_path: Path) -> None:
     """Re-running ``maybe_migrate`` after a successful migration is a no-op."""
-    _init_repo(tmp_path)
+    init_git_repo(tmp_path)
     legacy = tmp_path / ".mage"
     legacy.mkdir()
     (legacy / "foo.yaml").write_text("bar\n")
