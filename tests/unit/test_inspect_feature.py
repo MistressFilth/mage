@@ -125,7 +125,7 @@ class TestInspectFeatureStage:
         assert context.mapping.feature_status == "inspect_passed"
         assert context.mapping.feature_inspect is not None
         assert context.mapping.feature_inspect["inspect_sha256"]
-        assert MappingArtifact.load(tmp_path / "mapping.yaml") == context.mapping
+        assert MappingArtifact.load_from_state_store(state_store) == context.mapping
         event_types = [
             event.event_type.value for event in context.events_log.read_all()
         ]
@@ -395,7 +395,7 @@ class TestInspectFeatureStage:
                 "proposed_by": "cross_scenario",
             }
         ]
-        assert MappingArtifact.load(tmp_path / "mapping.yaml") == context.mapping
+        assert MappingArtifact.load_from_state_store(state_store) == context.mapping
 
     @pytest.mark.asyncio
     async def test_important_findings_dispatch_one_brief_and_retry_until_clean(

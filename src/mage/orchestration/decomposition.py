@@ -82,6 +82,7 @@ class DecompositionStage(StageNode):
             project_dir,
             self.events_log,
             feature_id=ascertain.feature_id,
+            state_store=context.state_store,
         )
         assert isinstance(enumeration_result, tuple)
         updated_mapping, _behaviors_path = enumeration_result

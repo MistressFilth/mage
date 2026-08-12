@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -273,12 +273,41 @@ class MappingArtifact(BaseModel):
             "cosmetic_queue_size": len(self.cosmetic_findings),
         }
 
+    async def _emit_mapping_saved(self, events_log: EventsLog) -> None:
+        """Emit ``MAPPING_SAVED`` with the canonical payload (P32 single emit site).
+
+        Centralizes the payload so both ``save`` and ``save_to_state_store``
+        share the same shape. The static guard
+        ``tests/unit/test_static_guards_event_payload_keys.py`` enforces
+        exactly one emit site in this file; this helper is the one.
+        """
+        from datetime import UTC, datetime
+
+        from mage.orchestration.events import Event, EventType
+
+        await events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.MAPPING_SAVED,
+                payload={
+                    "feature_cosmetic_queue_size": len(self.cosmetic_findings),
+                    "base_bids_count": len(self.base_bids),
+                },
+            )
+        )
+
     async def save(
         self,
         path: Path,
         *,
         events_log: EventsLog | None = None,
     ) -> None:
+        """Persist ``self`` to ``path`` on the working tree.
+
+        Deprecated: production code paths should use ``save_to_state_store``
+        so the artifact lives on the orphan branch. Retained for tests and
+        for callers that genuinely need a working-tree file.
+        """
         async with self._get_save_lock():
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp_path = path.with_suffix(path.suffix + ".tmp")
@@ -289,21 +318,67 @@ class MappingArtifact(BaseModel):
             )
             tmp_path.replace(path)
         if events_log is not None:
-            from datetime import UTC, datetime
-
-            from mage.orchestration.events import Event, EventType
-
-            await events_log.append(
-                Event(
-                    timestamp=datetime.now(UTC),
-                    event_type=EventType.MAPPING_SAVED,
-                    payload={
-                        "feature_cosmetic_queue_size": len(self.cosmetic_findings),
-                        "base_bids_count": len(self.base_bids),
-                    },
-                )
-            )
+            await self._emit_mapping_saved(events_log)
 
     @classmethod
     def load(cls, path: Path) -> MappingArtifact:
+        """Read mapping from the working tree.
+
+        Deprecated: production code paths should use ``load_from_state_store``
+        so the artifact is read from the orphan branch. Retained for tests
+        and for callers that genuinely need a working-tree file.
+        """
         return cls.model_validate(yaml.safe_load(path.read_text()))
+
+    @classmethod
+    def load_from_state_store(
+        cls,
+        state_store: Any,
+    ) -> MappingArtifact:
+        """Read mapping from the orphan branch via ``state_store``.
+
+        Returns a fresh empty ``MappingArtifact`` when the branch is empty
+        or the path is absent. Lookup matches the pre-migration fallback to
+        an empty mapping — first run of a fresh project has no mapping yet.
+        """
+        from mage.state_store import StateStore
+
+        if not isinstance(state_store, StateStore):
+            raise TypeError(
+                f"state_store must be a StateStore; got {type(state_store).__name__}"
+            )
+        data = state_store.read("mapping.yaml")
+        if not data:
+            return cls(
+                schema_version=2,
+                project_id=state_store.project_root.name,
+                base_bids=[],
+            )
+        return cls.model_validate(yaml.safe_load(data))
+
+    async def save_to_state_store(
+        self,
+        state_store: Any,
+        *,
+        events_log: EventsLog | None = None,
+    ) -> None:
+        """Persist ``self`` to the orphan branch via ``state_store``.
+
+        Emits ``MAPPING_SAVED`` when ``events_log`` is provided (caller-owned
+        log; this method does not own one). The ``base_bids_count`` payload
+        mirrors the legacy ``save(path)`` payload so downstream consumers
+        see the same shape regardless of which API was used.
+        """
+        from mage.state_store import StateStore
+
+        if not isinstance(state_store, StateStore):
+            raise TypeError(
+                f"state_store must be a StateStore; got {type(state_store).__name__}"
+            )
+        async with self._get_save_lock():
+            payload = yaml.safe_dump(
+                self.model_dump(mode="json", by_alias=True), sort_keys=False
+            )
+            state_store.write("mapping.yaml", payload.encode("utf-8"))
+        if events_log is not None:
+            await self._emit_mapping_saved(events_log)

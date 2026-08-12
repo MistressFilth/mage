@@ -540,18 +540,13 @@ async def cmd_run(args):
     # Plan 22: feature_id tag-only threading.
     feature_id = _resolve_feature_id(args)
 
-    mapping_path = project_dir / "mapping.yaml"
-    if mapping_path.exists():
-        # Brief had MappingArtifact.load(mapping_path, log) but the actual
-        # signature is load(path) — drop the spurious log kwarg.
-        mapping = MappingArtifact.load(mapping_path)
-    else:
-        mapping = MappingArtifact(
-            schema_version=2, project_id=project_dir.name, base_bids=[]
-        )
-
     mage_toml = load_mage_toml(project_dir)
     state_store = state_store_for(project_dir, mage_toml)
+
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # First run of a fresh project has no mapping yet, so the loader returns
+    # a fresh empty artifact — same fallback as the legacy path check.
+    mapping = MappingArtifact.load_from_state_store(state_store)
 
     persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
     saved = persistence.load_state()
@@ -688,19 +683,11 @@ async def cmd_settle_run(args):
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
 
-    # Load mapping (default to empty if missing — matches cmd_verify pattern).
-    mapping_path = project_dir / "mapping.yaml"
-    if mapping_path.exists():
-        mapping = MappingArtifact.load(mapping_path)
-    else:
-        mapping = MappingArtifact(
-            schema_version=2,
-            project_id=project_dir.name,
-            base_bids=[],
-        )
-
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — matches the legacy fallback.
     mage_toml = load_mage_toml(project_dir)
     state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
 
     ctx = PipelineContext(
         project_dir=project_dir,
@@ -780,13 +767,11 @@ async def cmd_cosmetic_show(args) -> int:
     from mage.cosmetic_filters import FilterParseError, parse_filters
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic show: no mapping found at {mapping_path}", file=sys.stderr
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — mirrors the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     raw_filter = getattr(args, "filter", None)
     try:
         filters = parse_filters(raw_filter, subcommand="cosmetic show")
@@ -920,14 +905,11 @@ async def cmd_cosmetic_apply(args) -> int:
     from mage.orchestration.cosmetic_apply import apply_for_feature
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic apply: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — mirrors the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     raw_filter = getattr(args, "filter", None)
     try:
         filters = parse_filters(raw_filter, subcommand="cosmetic apply")
@@ -968,14 +950,11 @@ async def cmd_cosmetic_list(args) -> int:
     from mage.cosmetic_filters import FilterParseError, parse_filters
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic list: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — mirrors the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     state = load_state(project_dir)
     raw_filter = getattr(args, "filter", None)
     try:
@@ -1046,8 +1025,11 @@ async def cmd_mapping_save(args) -> int:
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
     log = EventsLog(project_dir / "events.jsonl")
-    mapping = MappingArtifact.load(project_dir / "mapping.yaml")
-    await mapping.save(project_dir / "mapping.yaml", events_log=log)
+    # P32: mapping lives on the orphan branch; load+save via the state store.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
+    await mapping.save_to_state_store(state_store, events_log=log)
     return 0
 
 
@@ -1137,13 +1119,11 @@ async def cmd_cosmetic_unwatch(args) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
-    mapping = (
-        MappingArtifact.load(project_dir / "mapping.yaml")
-        if (project_dir / "mapping.yaml").exists()
-        else MappingArtifact(
-            schema_version=2, project_id=project_dir.name, base_bids=[]
-        )
-    )
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — matches the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     # For Plan 1, we run with empty registries (host project can configure later).
     checks = default_check_set(registered_tags=set(), step_patterns=[])
     verifier = MechanicalVerifier(checks=checks)

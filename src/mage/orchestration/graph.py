@@ -77,8 +77,10 @@ class PipelineGraph:
                 context.mapping = context.mapping.model_copy(
                     update={"feature_status": "halted"}
                 )
-                if context.project_dir is not None and context.project_dir.exists():
-                    await context.mapping.save(context.project_dir / "mapping.yaml")
+                # P32: persist via the orphan branch — the state store is the
+                # canonical writer; the working-tree mapping.yaml is no longer
+                # touched by mage.
+                await context.mapping.save_to_state_store(context.state_store)
                 await self._persist_halt(context, e)
                 last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
@@ -91,8 +93,8 @@ class PipelineGraph:
                 context.mapping = context.mapping.model_copy(
                     update={"feature_status": "halted"}
                 )
-                if context.project_dir is not None and context.project_dir.exists():
-                    await context.mapping.save(context.project_dir / "mapping.yaml")
+                # P32: persist via the orphan branch.
+                await context.mapping.save_to_state_store(context.state_store)
                 last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
@@ -124,13 +126,8 @@ class PipelineGraph:
                                 ]
                             }
                         )
-                        if (
-                            context.project_dir is not None
-                            and context.project_dir.exists()
-                        ):
-                            await context.mapping.save(
-                                context.project_dir / "mapping.yaml"
-                            )
+                        # P32: persist via the orphan branch.
+                        await context.mapping.save_to_state_store(context.state_store)
                 last_seen_count = await self._dispatch_new_events(
                     context, discipline, last_seen_count
                 )
@@ -148,8 +145,8 @@ class PipelineGraph:
                 context.mapping = context.mapping.model_copy(
                     update={"feature_status": "halted"}
                 )
-                if context.project_dir is not None and context.project_dir.exists():
-                    await context.mapping.save(context.project_dir / "mapping.yaml")
+                # P32: persist via the orphan branch.
+                await context.mapping.save_to_state_store(context.state_store)
                 halt_event = Event(
                     timestamp=datetime.now(UTC),
                     event_type=EventType.HALT_PERSISTED,

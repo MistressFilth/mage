@@ -396,8 +396,10 @@ class InscribeStage(StageNode):
                 )
             )
 
-        # Persist updated mapping
-        await mapping.save(project_dir / "mapping.yaml")
+        # P32: persist updated mapping via the orphan branch — the state
+        # store is the canonical writer; the working-tree mapping.yaml is
+        # no longer touched by mage.
+        await mapping.save_to_state_store(context.state_store)
 
         # Emit INSCRIBE_COMPLETED
         await self.events_log.append(

@@ -75,7 +75,9 @@ async def test_full_decomposition_flow_with_mock_agent(tmp_path, state_store):
     assert (project_dir / "decomposition.yaml").exists()
     assert (project_dir / "behaviors.yaml").exists()
     assert (project_dir / "plan.md").exists()
-    assert (project_dir / "mapping.yaml").exists()
+    # P32: mapping lives on the orphan branch; read via the state store.
+    saved = MappingArtifact.load_from_state_store(state_store)
+    assert len(saved.base_bids) == 2
 
     # Mapping updated
     assert len(result_ctx.mapping.base_bids) == 2

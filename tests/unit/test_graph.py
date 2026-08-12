@@ -211,7 +211,8 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(
     assert exc_info.value.code == 0
 
     # Plan 25: halted_sub_bids landed on BaseBIDEntry.behavior_halt.
-    saved_mapping = MappingArtifact.load(tmp_path / "mapping.yaml")
+    # P32: mapping is read via the state store.
+    saved_mapping = MappingArtifact.load_from_state_store(state_store)
     target = next(e for e in saved_mapping.base_bids if e.base_bid == "00000")
     assert target.behavior_halt == ["00000-0", "00000-1"]
 
@@ -249,7 +250,7 @@ class TestPlan4HaltCatching:
         with pytest.raises(SystemExit):
             await graph.run(ctx)
 
-        saved_mapping = MappingArtifact.load(tmp_path / "mapping.yaml")
+        saved_mapping = MappingArtifact.load_from_state_store(state_store)
         assert saved_mapping.feature_status == "halted"
 
     @pytest.mark.asyncio
@@ -564,7 +565,8 @@ class TestPlan5HaltCatching:
         assert later_stage_ran == []
         assert context.mapping.feature_status == "halted"
         assert (
-            MappingArtifact.load(tmp_path / "mapping.yaml").feature_status == "halted"
+            MappingArtifact.load_from_state_store(state_store).feature_status
+            == "halted"
         )
         halt_events = [
             event
@@ -614,7 +616,8 @@ async def test_graph_stops_on_scenario_inspect_halted(tmp_path, state_store):
     with pytest.raises(SystemExit):
         await graph.run(ctx)
     # Mapping was persisted as halted.
-    saved = MappingArtifact.load(tmp_path / "mapping.yaml")
+    # P32: mapping lives on the orphan branch; read via the state store.
+    saved = MappingArtifact.load_from_state_store(state_store)
     assert saved.feature_status == "halted"
     # State was persisted.
     state = FileStatePersistence(

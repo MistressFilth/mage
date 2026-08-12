@@ -103,7 +103,8 @@ async def test_automation_stage_writes_back_scenario_outcomes(tmp_path, state_st
     stage = AutomationStage(ctx.events_log, runner=_Runner())  # type: ignore[arg-type, ty:invalid-argument-type]
     await stage.run(ctx)
 
-    saved = MappingArtifact.load(tmp_path / "mapping.yaml")
+    # P32: mapping lives on the orphan branch; read back via the state store.
+    saved = MappingArtifact.load_from_state_store(state_store)
     entry = saved.base_bids[0].scenarios[0]
     assert entry.lifecycle_status == LifecycleStatus.LIVE
     assert entry.tests == ["t1.py", "t2.py"]

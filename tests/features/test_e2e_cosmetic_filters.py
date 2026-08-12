@@ -26,6 +26,38 @@ def _write_mapping(path: Path, artifact: MappingArtifact) -> None:
         yaml.safe_dump(artifact.model_dump(mode="json", by_alias=True), sort_keys=False)
     )
 
+    # P32: also seed the mapping onto the orphan branch at the project root
+    # so the CLI (which reads via state_store) can find the queue.
+    import asyncio
+
+    from mage.state_store import StateStore
+
+    project_dir = path.parent
+    # Initialize git if not already; the mage CLI needs a real git repo
+    # to host the orphan branch.
+    rev = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=project_dir,
+        capture_output=True,
+        check=False,
+    )
+    if rev.returncode != 0:
+        subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "e2e@mage"],
+            cwd=project_dir,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "e2e"],
+            cwd=project_dir,
+            check=True,
+        )
+    state_store = StateStore(
+        project_dir, "feature-artifacts", identity=("e2e", "e2e@mage")
+    )
+    asyncio.run(artifact.save_to_state_store(state_store))
+
 
 def test_list_with_filter(tmp_path: Path) -> None:
     artifact = MappingArtifact(

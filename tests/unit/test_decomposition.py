@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.events import EventsLog
 
 ASCERTAIN_FULL = """---
@@ -40,7 +41,6 @@ def project_dir(tmp_path):
 async def test_decomposition_stage_runs_end_to_end(project_dir, state_store):
     from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
     from mage.artifacts.enumeration import BehaviorSpec
-    from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.decomposition import DecompositionStage
     from mage.orchestration.nodes import PipelineContext
 
@@ -81,7 +81,9 @@ async def test_decomposition_stage_runs_end_to_end(project_dir, state_store):
     assert (project_dir / "decomposition.yaml").exists()
     assert (project_dir / "behaviors.yaml").exists()
     assert (project_dir / "plan.md").exists()
-    assert (project_dir / "mapping.yaml").exists()
+    # P32: mapping lives on the orphan branch; read back via the state store.
+    saved_mapping = MappingArtifact.load_from_state_store(state_store)
+    assert len(saved_mapping.base_bids) == 2
     assert len(result_ctx.mapping.base_bids) == 2
 
 

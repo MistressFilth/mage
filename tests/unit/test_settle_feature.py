@@ -287,7 +287,7 @@ class TestSettleFinalization:
         assert runner.calls[0] == (TEST_COMMAND, context.project_dir)
         assert context.mapping.feature_status == "settled"
         assert (
-            MappingArtifact.load(context.project_dir / "mapping.yaml")
+            MappingArtifact.load_from_state_store(context.state_store)
             == context.mapping
         )
         report = context.project_dir / ".mage" / "settle" / "feat-1.md"

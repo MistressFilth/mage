@@ -558,13 +558,16 @@ class InspectFeatureStage:
                 )
             }
         )
-        await context.mapping.save(context.project_dir / "mapping.yaml")
+        # P32: persist via the orphan branch — the state store is the
+        # canonical writer; the working-tree mapping.yaml is no longer
+        # touched by mage.
+        await context.mapping.save_to_state_store(context.state_store)
 
         if iteration >= self.host_config.eof_max_iterations and not ready_to_merge:
             context.mapping = context.mapping.model_copy(
                 update={"feature_status": "halted"}
             )
-            await context.mapping.save(context.project_dir / "mapping.yaml")
+            await context.mapping.save_to_state_store(context.state_store)
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

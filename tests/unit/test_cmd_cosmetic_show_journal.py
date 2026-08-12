@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +12,43 @@ import yaml
 
 from mage import cli
 from mage.artifacts.mapping import MappingArtifact
+
+
+def _seed_state_store(project_dir: Path, artifact: MappingArtifact) -> None:
+    """Seed ``artifact`` onto the orphan branch at ``project_dir`` (P32).
+
+    The CLI reads through the state store, so the canonical seed must
+    land on the orphan branch. The working-tree file is also kept for
+    parity with the pre-migration layout.
+    """
+    if (
+        subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=project_dir,
+            capture_output=True,
+            check=False,
+        ).returncode
+        != 0
+    ):
+        subprocess.run(
+            ["git", "init"], cwd=project_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "t@e"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+    from mage.state_store import StateStore
+
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    asyncio.run(artifact.save_to_state_store(state_store))
 
 
 def _mapping_with_journal(
@@ -29,6 +67,7 @@ def _mapping_with_journal(
     path.write_text(
         yaml.safe_dump(artifact.model_dump(mode="json", by_alias=True), sort_keys=False)
     )
+    _seed_state_store(project_dir, artifact)
     return path
 
 

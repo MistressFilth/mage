@@ -165,8 +165,20 @@ async def test_e2e_revision_full_loop(tmp_path: Path, state_store) -> None:
     )
     await mapping.save(project_dir / "mapping.yaml")
 
+    # P32: also seed the mapping on the orphan branch at project_dir so
+    # the InscribeStage (which reads via context.state_store) sees the
+    # initial base_bid.
+    from mage.state_store import StateStore
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    project_state_store = StateStore(
+        project_dir, "feature-artifacts", identity=("T", "t@e")
+    )
+    await mapping.save_to_state_store(project_state_store)
+
     context = PipelineContext(
-        state_store=state_store,
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -189,7 +201,8 @@ async def test_e2e_revision_full_loop(tmp_path: Path, state_store) -> None:
     # Step 1: Run Inscribe to APPROVED.
     new_context = await stage.run(context)
 
-    updated = MappingArtifact.load(project_dir / "mapping.yaml")
+    # P32: mapping lives on the orphan branch; read via the state store.
+    updated = MappingArtifact.load_from_state_store(project_state_store)
     target_entry = next(e for e in updated.base_bids if e.base_bid == "00000")
     assert len(target_entry.scenarios) == 1
     first_scenario = target_entry.scenarios[0]
@@ -240,7 +253,7 @@ async def test_e2e_revision_full_loop(tmp_path: Path, state_store) -> None:
     await stage.run(new_context)
 
     # Step 6: Verify scenario reaches APPROVED again.
-    final = MappingArtifact.load(project_dir / "mapping.yaml")
+    final = MappingArtifact.load_from_state_store(project_state_store)
     target_entry = next(e for e in final.base_bids if e.base_bid == "00000")
     assert len(target_entry.scenarios) == 1
     assert target_entry.scenarios[0].lifecycle_status == LifecycleStatus.APPROVED
