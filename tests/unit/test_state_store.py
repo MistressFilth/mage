@@ -350,6 +350,7 @@ def test_write_raises_conflict_after_two_failures(
         "has~tilde",
         "..",
         "a/b/../c",
+        "a" * 4097,
     ],
 )
 def test_path_validation_rejects_invalid(git_repo: Path, path: str) -> None:
