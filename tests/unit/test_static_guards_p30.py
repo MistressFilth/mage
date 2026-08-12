@@ -28,6 +28,7 @@ ALLOWED_FILES = frozenset(
         SRC / "settings.py",
         SRC / "cli.py",
         SRC / "cli_config.py",
+        SRC / "state_store.py",
     }
 )
 
