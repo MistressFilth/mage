@@ -70,7 +70,7 @@ escalate it. Do not label it out-of-scope.
   `.worktrees` path component; HEAD is re-read immediately before a delete.
 - **The string `haileris_v2` is forbidden** anywhere in the tree.
 - Configuration flows through `mage.settings.load_settings()`. Direct `os.environ` reads outside `xdg.py` / `settings.py` / `cli.py` / `cli_config.py` are forbidden (enforced by `tests/unit/test_static_guards_p30.py`).
-- Commits run the local pre-commit hooks (lint, typecheck, format, test). `git commit --no-verify` is allowed but CI re-runs `pre-commit run --all-files` against every push and PR to catch bypassed commits.
+- Commits run the local pre-commit hooks (lint, typecheck, format, test) plus the `commit-msg` `no-co-authored-by` check. `git commit --no-verify` is forbidden; CI re-runs `pre-commit run --all-files` against every push and PR as the second line of defense.
 - Commits follow Conventional Commits. No `Co-Authored-By` trailers.
 
 ## Common tasks

@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Pre-commit chain now includes a `commit-msg` hook that rejects `Co-Authored-By:` trailers (canonical regex per repo standard). `git commit --no-verify` is forbidden locally; CI re-runs `pre-commit run --all-files` on every push and PR as the second line of defense. `AGENTS.md` documents both rules.
+
 ### Added
 
 - Provider registry: MiniMax and Anthropic supported via `mage.toml` per-agent model pins and XDG `[providers]` config block (`mage host_project_config` + `mage providers`). Precedence chain: env > `mage.toml` per-agent > `mage.toml` default > XDG default.
@@ -28,6 +32,7 @@ All notable changes to this project are documented here. The format follows
 - `mage.providers.resolver.resolve_model` — tier 4 (XDG default provider's `default_model`) no longer silently falls through to `TestModel` when the provider's `api_key_env` is unset. The tier now routes through `_resolve` so a missing API key raises `MageMissingApiKeyError` alongside every other tier, instead of swallowing the failure and returning the test-mode passthrough. New `test_tier4_missing_key_raises` unit test pins the behavior.
 - `mage.providers.resolver._resolve` — unknown-provider, missing-API-key, and `build_model` failures now emit a `PROVIDER_RESOLVED_FAILED` event with `reason` (`unknown_provider` / `missing_api_key` / `build_model_failed`), `source`, `provider`, `model_name`, and (where applicable) `env_var` / `error_type` / `error` payload fields before the typed exception is raised. The event flows through the same sync-sink pattern `PROVIDER_RESOLVED` already uses; `mage.host_project_config.resolve_model_logged` flushes both success and failure events against the real async `EventsLog`. `tests/features/test_e2e_provider_missing_key.py` now asserts both the exception and the failure event.
 - `tests/features/test_e2e_mage_run_no_dry_run.py` — skipif gate switched from `MAGE_HOST_MODEL_API_KEY` (removed in Task 7) to `ANTHROPIC_API_KEY`, the v0.8.0 credential env-var. The skip reason matches the new gate.
+- `tests/unit/test_cmd_cosmetic_unwatch.py::test_unwatch_sigterm_timeout_event_records_elapsed` — upper bound on recorded `duration_ms` relaxed from `<= 5000` to `<= 6000` to absorb macOS scheduler jitter (observed 5001 ms against the 5 s SIGTERM deadline). The assertion still proves `duration_ms` reflects real elapsed wall time, not the literal timeout.
 
 ### Removed
 
