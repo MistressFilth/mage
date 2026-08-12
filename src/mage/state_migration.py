@@ -129,5 +129,25 @@ def restore_from_backup(
 ) -> str:
     """Inverse of maybe_migrate. Reads `.mage.bak.<ts>/` and writes into a
     fresh orphan-branch commit, then atomically swaps the ref.
+
+    Returns the new ref SHA.
     """
-    raise NotImplementedError("Task 6 implements restore_from_backup")
+    if timestamp is None:
+        # Auto-discover the latest backup.
+        backups = sorted(project_root.glob(f"{_BACKUP_PREFIX}*"))
+        if not backups:
+            raise MageStateMigrationError(f"no backup found under {project_root}")
+        timestamp = backups[-1].name.removeprefix(_BACKUP_PREFIX)
+    backup = _legacy_backup_path(project_root, timestamp)
+    if not backup.exists():
+        raise MageStateMigrationError(f"backup {backup} does not exist")
+    files = []
+    for path in backup.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        files.append(path)
+    for path in files:
+        rel = str(path.relative_to(backup)).replace(os.sep, "/")
+        data = path.read_bytes()
+        state_store.write(rel, data)
+    return state_store.ref_sha() or ""

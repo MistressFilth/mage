@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from mage.host_project_config import MageTomlConfig
-from mage.state_migration import MageStateMigrationUnsupported, maybe_migrate
+from mage.state_migration import (
+    MageStateMigrationError,
+    MageStateMigrationUnsupported,
+    maybe_migrate,
+    restore_from_backup,
+)
 from mage.state_store import state_store_for
 
 
@@ -88,3 +93,23 @@ def test_maybe_migrate_rejects_symlink(git_repo: Path) -> None:
     store = state_store_for(git_repo, MageTomlConfig())
     with pytest.raises(MageStateMigrationUnsupported):
         maybe_migrate(git_repo, store)
+
+
+def test_restore_from_backup_roundtrip(git_repo: Path) -> None:
+    _populate_legacy_state(git_repo, {"a.yaml": "1\n", "b.yaml": "2\n"})
+    store = state_store_for(git_repo, MageTomlConfig())
+    maybe_migrate(git_repo, store)
+    backups = list(git_repo.glob(".mage.bak.*"))
+    assert len(backups) == 1
+    ts = backups[0].name.removeprefix(".mage.bak.")
+    new_sha = restore_from_backup(git_repo, store, timestamp=ts)
+    assert isinstance(new_sha, str) and len(new_sha) > 0
+    # Verify content survived restore round-trip.
+    assert store.read("a.yaml") == b"1\n"
+    assert store.read("b.yaml") == b"2\n"
+
+
+def test_restore_missing_backup_raises(git_repo: Path) -> None:
+    store = state_store_for(git_repo, MageTomlConfig())
+    with pytest.raises((FileNotFoundError, MageStateMigrationError)):
+        restore_from_backup(git_repo, store, timestamp="99999999T999999")
