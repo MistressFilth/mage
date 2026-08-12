@@ -88,11 +88,10 @@ class StateStore:
         )
         if result.returncode != 0:
             return b""
-        return (
-            result.stdout.encode("utf-8")
-            if isinstance(result.stdout, str)
-            else result.stdout
-        )
+        stdout = result.stdout
+        if isinstance(stdout, bytes):
+            return stdout
+        return stdout.encode("utf-8")
 
     def exists(self, relative_path: str) -> bool:
         _validate_path(relative_path)
@@ -100,7 +99,7 @@ class StateStore:
             ["git", "ls-tree", self.full_ref, "--", relative_path],
             cwd=self.project_root,
         )
-        return bool(result.stdout.strip())
+        return bool(_stdout_text(result).strip())
 
     def list_dir(self, relative_path: str) -> list[str]:
         if relative_path:
@@ -113,7 +112,7 @@ class StateStore:
         if result.returncode != 0:
             return []
         entries = []
-        for line in result.stdout.splitlines():
+        for line in _stdout_text(result).splitlines():
             parts = line.split("\t", 1)
             if len(parts) == 2:
                 entries.append(parts[1])
@@ -126,7 +125,7 @@ class StateStore:
         )
         if result.returncode != 0:
             return None
-        return result.stdout.strip()
+        return _stdout_text(result).strip()
 
     # -- Write API --
 
@@ -174,17 +173,19 @@ class StateStore:
         if self.ref_sha() is not None:
             self._bootstrapped = True
             return
-        empty_tree_sha = self._run(["git", "mktree"], check=True).stdout.strip()
-        bootstrap_sha = self._run(
-            [
-                "git",
-                "commit-tree",
-                empty_tree_sha,
-                "-m",
-                "mage: bootstrap state branch",
-            ],
-            check=True,
-        ).stdout.strip()
+        empty_tree_sha = _stdout_text(self._run(["git", "mktree"], check=True)).strip()
+        bootstrap_sha = _stdout_text(
+            self._run(
+                [
+                    "git",
+                    "commit-tree",
+                    empty_tree_sha,
+                    "-m",
+                    "mage: bootstrap state branch",
+                ],
+                check=True,
+            )
+        ).strip()
         self._update_ref(bootstrap_sha, "")
         self._bootstrapped = True
 
@@ -193,7 +194,7 @@ class StateStore:
         if result.returncode != 0:
             return {}
         tree: dict[str, str] = {}
-        for line in result.stdout.splitlines():
+        for line in _stdout_text(result).splitlines():
             parts = line.split("\t", 1)
             if len(parts) == 2:
                 meta, path = parts
@@ -208,23 +209,40 @@ class StateStore:
             check=True,
             input_data=data,
         )
-        return proc.stdout.strip()
+        return _stdout_text(proc).strip()
 
     def _mktree(self, tree: dict[str, str]) -> str:
         if not tree:
-            return self._run(["git", "mktree"], check=True).stdout.strip()
-        # Build --read-tree-style input: "<mode> <type> <sha>\t<path>" per line.
-        input_str = "\n".join(
-            f"100644 blob {sha}\t{path}" for path, sha in sorted(tree.items())
-        )
+            return _stdout_text(self._run(["git", "mktree"], check=True)).strip()
+        # Split entries into root-level blobs and nested subtrees.
+        files_at_root: dict[str, str] = {}
+        subdirs: dict[str, dict[str, str]] = {}
+        for path, sha in tree.items():
+            if "/" in path:
+                top, rest = path.split("/", 1)
+                subdirs.setdefault(top, {})[rest] = sha
+            else:
+                files_at_root[path] = sha
+        # Build each subdirectory's tree recursively.
+        subdir_shas: dict[str, str] = {
+            name: self._mktree(entries) for name, entries in subdirs.items()
+        }
+        # Build the root tree input: blobs first, then subtrees (sorted).
+        lines = [
+            f"100644 blob {sha}\t{name}" for name, sha in sorted(files_at_root.items())
+        ]
+        lines += [
+            f"040000 tree {sha}\t{name}" for name, sha in sorted(subdir_shas.items())
+        ]
+        input_str = "\n".join(lines)
         proc = self._run(["git", "mktree"], check=True, input_str=input_str)
-        return proc.stdout.strip()
+        return _stdout_text(proc).strip()
 
     def _commit_tree(self, tree_sha: str, parent: str) -> str:
         args = ["git", "commit-tree", tree_sha, "-m", "mage: state update"]
         if parent:
             args += ["-p", parent]
-        return self._run(args, check=True).stdout.strip()
+        return _stdout_text(self._run(args, check=True)).strip()
 
     def _update_ref(self, new_sha: str, expected_old_sha: str | None = None) -> None:
         old_sha = "" if expected_old_sha is None else expected_old_sha
@@ -257,6 +275,12 @@ class StateStore:
 
 class _RefMoved(RuntimeError):
     """Internal signal that update-ref failed (ref moved under us)."""
+
+
+def _stdout_text(result: Any) -> str:
+    """Return a command result's stdout as text, decoding bytes when needed."""
+    stdout = result.stdout
+    return stdout.decode("utf-8") if isinstance(stdout, bytes) else stdout
 
 
 def _validate_path(relative_path: str) -> None:
