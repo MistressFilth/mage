@@ -17,6 +17,15 @@ from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
 from mage.artifacts.verdict import VerdictError
+from mage.cli_state import (
+    cmd_state_info,
+    cmd_state_ls,
+    cmd_state_restore,
+    cmd_state_show,
+)
+from mage.cli_state import (
+    register as register_state,
+)
 from mage.cosmetic_pid import (
     is_alive_with_start,
     pid_file_path,
@@ -285,6 +294,9 @@ def build_parser() -> argparse.ArgumentParser:
         "init", help="Initialize the config file with defaults"
     )
     config_subparsers.add_parser("show", help="Print the effective settings as TOML")
+
+    # mage state <subcommand>
+    register_state(subparsers)
 
     return parser
 
@@ -1182,6 +1194,14 @@ async def _main(argv: list[str] | None = None) -> int:
         return cli_config.cmd_config_init()
     if args.command == "config" and args.config_command == "show":
         return cli_config.cmd_config_show()
+    if args.command == "state" and args.state_action == "ls":
+        return cmd_state_ls(args)
+    if args.command == "state" and args.state_action == "show":
+        return cmd_state_show(args)
+    if args.command == "state" and args.state_action == "info":
+        return cmd_state_info(args)
+    if args.command == "state" and args.state_action == "restore":
+        return cmd_state_restore(args)
     parser.print_help()
     raise SystemExit(1)
 
