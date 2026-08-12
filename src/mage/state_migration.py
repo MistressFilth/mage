@@ -8,7 +8,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from mage.state_store import StateStore
+from mage.orchestration.events import Event, EventsLog, EventType
+from mage.state_store import (
+    MIGRATION_MARKER as _MARKER,
+)
+from mage.state_store import (
+    StateStore,
+)
+from mage.state_store import (
+    set_events_log as _set_state_store_events_log,
+)
 
 __all__ = [
     "MageStateMigrationContention",
@@ -17,13 +26,45 @@ __all__ = [
     "MageStateMigrationUnsupported",
     "maybe_migrate",
     "restore_from_backup",
+    "set_events_log",
 ]
 
 _LEGACY_DIR = Path(".mage")
 _BACKUP_PREFIX = ".mage.bak."
 _TIMESTAMP_FMT = "%Y%m%dT%H%M%S"
 _ALLOWED_EXTENSIONS = {".yaml", ".json", ".txt", ".pid"}
-_MIGRATION_MARKER = "_meta/.migrated"
+# Re-export of the canonical marker path from mage.state_store keeps the
+# single source of truth; the previous duplicate literal here drifted.
+_MIGRATION_MARKER = _MARKER
+
+# Module-level sink for state-migration events. Mirrors the sink in
+# mage.state_store — setters in either module propagate to the same log
+# so the audit trail of reads, writes, bootstraps, and migrations lives
+# in one JSONL file.
+_STATE_EVENTS_LOG: EventsLog | None = None
+
+
+def set_events_log(events_log: EventsLog | None) -> None:
+    """Set the module-level sink for state-migration events.
+
+    Routes through :func:`mage.state_store.set_events_log` so both
+    modules share one sink; callers can use either module's setter.
+    """
+    global _STATE_EVENTS_LOG
+    _STATE_EVENTS_LOG = events_log
+    _set_state_store_events_log(events_log)
+
+
+def _emit(event_type: EventType, payload: dict[str, Any]) -> None:
+    """Emit a state-migration event if a sink is configured; no-op otherwise."""
+    if _STATE_EVENTS_LOG is None:
+        return
+    event = Event(
+        timestamp=datetime.now(UTC),
+        event_type=event_type,
+        payload=payload,
+    )
+    _STATE_EVENTS_LOG.append_sync(event)
 
 
 class MageStateMigrationError(RuntimeError):
@@ -95,6 +136,13 @@ def maybe_migrate(
     """One-shot migration. Returns True if migration ran, False if no-op.
 
     Pre-conditions: project_root contains a git repo.
+
+    Emits ``STATE_MIGRATED`` with ``{from_path, to_ref, backup_path,
+    file_count}`` on success and ``STATE_MIGRATED_PARTIAL`` (with the
+    raised error class and message) when any file fails to read or the
+    rename collides; the partial event lets operators see in the audit
+    trail which file blocked migration even though the exception aborts
+    the call.
     """
     del command_runner  # Reserved for the restore implementation in Task 6.
     legacy = project_root / _LEGACY_DIR
@@ -102,23 +150,54 @@ def maybe_migrate(
         return False
     if _is_migrated_marker_present(state_store):
         return False
-    files = _walk_legacy_files(project_root)
-    for path in files:
-        rel = str(path.relative_to(legacy)).replace(os.sep, "/")
-        try:
-            data = path.read_bytes()
-        except OSError as exc:
-            raise MageStateMigrationReadFailed(f"failed to read {path}: {exc}") from exc
-        state_store.write(rel, data)
-    state_store.write(_MIGRATION_MARKER, b"")
+    try:
+        files = _walk_legacy_files(project_root)
+        for path in files:
+            rel = str(path.relative_to(legacy)).replace(os.sep, "/")
+            try:
+                data = path.read_bytes()
+            except OSError as exc:
+                raise MageStateMigrationReadFailed(
+                    f"failed to read {path}: {exc}"
+                ) from exc
+            state_store.write(rel, data)
+        state_store.write(_MIGRATION_MARKER, b"")
+    except MageStateMigrationError as exc:
+        _emit(
+            EventType.STATE_MIGRATED_PARTIAL,
+            {
+                "from_path": str(legacy),
+                "to_ref": state_store.full_ref,
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        raise
     ts = _now_timestamp(now)
     backup = _legacy_backup_path(project_root, ts)
     try:
         os.rename(legacy, backup)
     except FileExistsError as exc:
-        raise MageStateMigrationContention(
+        partial = MageStateMigrationContention(
             f"backup path {backup} already exists; another migration ran in the same second"
-        ) from exc
+        )
+        _emit(
+            EventType.STATE_MIGRATED_PARTIAL,
+            {
+                "from_path": str(legacy),
+                "to_ref": state_store.full_ref,
+                "error": f"{type(partial).__name__}: {partial}",
+            },
+        )
+        raise partial from exc
+    _emit(
+        EventType.STATE_MIGRATED,
+        {
+            "from_path": str(legacy),
+            "to_ref": state_store.full_ref,
+            "backup_path": str(backup),
+            "file_count": len(files),
+        },
+    )
     return True
 
 
@@ -201,6 +280,14 @@ def restore_from_backup(
         cwd=project_root,
         capture_output=True,
         check=True,
+    )
+    _emit(
+        EventType.STATE_MIGRATION_RESTORED,
+        {
+            "from_ts": timestamp,
+            "to_ref": new_commit,
+            "file_count": len(blob_shas),
+        },
     )
     return new_commit
 

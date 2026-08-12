@@ -187,6 +187,19 @@ class EventsLog:
             with self.log_path.open("a") as f:
                 f.write(line + "\n")
 
+    def append_sync(self, event: Event) -> None:
+        """Append one event synchronously.
+
+        Mirrors :meth:`append` for callers outside an asyncio event loop
+        (the state_store/state_migration modules are sync; their emits
+        must not require ``await``). Writes a single line atomically —
+        sufficient because each call is one ``write()`` of a small
+        payload on POSIX/Win32.
+        """
+        line = event.model_dump_json()
+        with self.log_path.open("a") as f:
+            f.write(line + "\n")
+
     def read_all(self) -> list[Event]:
         """Read all events from the log in order."""
         return [Event.model_validate_json(line) for line in self._read_lines()]

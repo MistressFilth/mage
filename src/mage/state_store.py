@@ -4,22 +4,59 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 from mage.host_project_config import MageTomlConfig
+from mage.orchestration.events import Event, EventsLog, EventType
 
 __all__ = [
     "DEFAULT_ORPHAN_BRANCH",
+    "MIGRATION_MARKER",
     "MageStateConflict",
     "MageStateMigrated",
     "StateStore",
+    "is_state_migrated",
+    "set_events_log",
     "state_store_for",
 ]
 
 DEFAULT_ORPHAN_BRANCH = "feature-artifacts"
 _BRANCH_PREFIX = "refs/mage/"
 _PATH_PATTERN = re.compile(r"^[a-zA-Z0-9._/-]+$")
+MIGRATION_MARKER = "_meta/.migrated"
+
+# Module-level sink for state-store / state-migration events. CLI handlers
+# call :func:`set_events_log` once per invocation so the audit trail lands
+# in the project's events.jsonl. Sync writes; see EventsLog.append_sync.
+_STATE_EVENTS_LOG: EventsLog | None = None
+
+
+def set_events_log(events_log: EventsLog | None) -> None:
+    """Set the module-level sink for state-store/state-migration events.
+
+    Pass ``None`` to detach. The sink is process-global, matching how
+    the rest of mage handles shared per-invocation state.
+    """
+    global _STATE_EVENTS_LOG
+    _STATE_EVENTS_LOG = events_log
+
+
+def _emit(event_type: EventType, payload: dict[str, Any]) -> None:
+    """Emit a state event if a sink is configured; no-op otherwise.
+
+    Sync write via :meth:`EventsLog.append_sync` because
+    :class:`StateStore` and :mod:`mage.state_migration` are sync modules.
+    """
+    if _STATE_EVENTS_LOG is None:
+        return
+    event = Event(
+        timestamp=datetime.now(UTC),
+        event_type=event_type,
+        payload=payload,
+    )
+    _STATE_EVENTS_LOG.append_sync(event)
 
 
 class MageStateMigrated(RuntimeError):
@@ -87,11 +124,17 @@ class StateStore:
             cwd=self.project_root,
         )
         if result.returncode != 0:
+            # Missing path is a normal state; only emit the audit event
+            # on successful reads so the audit trail doesn't drown in
+            # "" returns from existence probes.
             return b""
         stdout = result.stdout
         if isinstance(stdout, bytes):
-            return stdout
-        return stdout.encode("utf-8")
+            data = stdout
+        else:
+            data = stdout.encode("utf-8")
+        _emit(EventType.STATE_STORE_READ, {"relative_path": relative_path})
+        return data
 
     def exists(self, relative_path: str) -> bool:
         _validate_path(relative_path)
@@ -145,13 +188,32 @@ class StateStore:
 
     def write(self, relative_path: str, data: bytes) -> str:
         _validate_path(relative_path)
-        return self._mutate(relative_path, data, delete=False)
+        new_commit_sha = self._mutate(relative_path, data, delete=False)
+        _emit(
+            EventType.STATE_STORE_WRITE,
+            {
+                "relative_path": relative_path,
+                "blob_sha": self._last_blob_sha,
+                "ref_sha": new_commit_sha,
+            },
+        )
+        return new_commit_sha
 
     def delete(self, relative_path: str) -> str:
         _validate_path(relative_path)
-        return self._mutate(relative_path, None, delete=True)
+        new_commit_sha = self._mutate(relative_path, None, delete=True)
+        _emit(
+            EventType.STATE_STORE_DELETE,
+            {"relative_path": relative_path, "ref_sha": new_commit_sha},
+        )
+        return new_commit_sha
 
     # -- Internals --
+
+    # Per-instance blob SHA from the most recent :meth:`write` call.
+    # Surfaced through the audit event so the event log carries the
+    # blob-level hash without forcing _mutate to thread a tuple return.
+    _last_blob_sha: str = ""
 
     def _mutate(self, relative_path: str, data: bytes | None, *, delete: bool) -> str:
         """Apply write or delete with read-modify-write + retry-on-CAS."""
@@ -162,12 +224,13 @@ class StateStore:
             current_tree = self._read_tree()
             if delete:
                 current_tree.pop(relative_path, None)
+                self._last_blob_sha = ""
             else:
                 # data is guaranteed non-None in the write branch (write() passes
                 # bytes, delete() passes None and takes the branch above).
                 assert data is not None
-                blob_sha = self._hash_blob(data)
-                current_tree[relative_path] = blob_sha
+                self._last_blob_sha = self._hash_blob(data)
+                current_tree[relative_path] = self._last_blob_sha
             new_tree_sha = self._mktree(current_tree)
             parent = self.ref_sha() or ""
             new_commit_sha = self._commit_tree(new_tree_sha, parent)
@@ -202,6 +265,10 @@ class StateStore:
         ).strip()
         self._update_ref(bootstrap_sha, "")
         self._bootstrapped = True
+        _emit(
+            EventType.STATE_BOOTSTRAPPED,
+            {"ref_sha": bootstrap_sha, "branch_name": self.branch_name},
+        )
 
     def _read_tree(self) -> dict[str, str]:
         # --full-tree: when project_root is a subdirectory of a parent git
@@ -369,6 +436,26 @@ def state_store_for(
     )
     maybe_migrate(project_root, store)
     return store
+
+
+def is_state_migrated(project_root: Path) -> bool:
+    """True iff the migration marker exists on the orphan branch.
+
+    Used by legacy Path-based helpers (Fix 3) to decide whether to raise
+    :class:`MageStateMigrated` after auto-migration has run. Errors
+    (no git repo, no orphan branch yet, subprocess failure) are
+    swallowed and treated as "not migrated" so the legacy fallback can
+    run; that fallback itself will fail gracefully when its input
+    files don't exist.
+    """
+    try:
+        store = state_store_for(project_root)
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return False
+    try:
+        return store.exists(MIGRATION_MARKER)
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return False
 
 
 def _resolve_identity(project_root: Path) -> tuple[str, str]:
