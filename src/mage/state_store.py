@@ -159,7 +159,7 @@ class StateStore:
             parent = self.ref_sha() or ""
             new_commit_sha = self._commit_tree(new_tree_sha, parent)
             try:
-                self._update_ref(new_commit_sha)
+                self._update_ref(new_commit_sha, parent)
                 return new_commit_sha
             except _RefMoved:
                 if attempts >= 2:
@@ -185,7 +185,7 @@ class StateStore:
             ],
             check=True,
         ).stdout.strip()
-        self._update_ref(bootstrap_sha)
+        self._update_ref(bootstrap_sha, "")
         self._bootstrapped = True
 
     def _read_tree(self) -> dict[str, str]:
@@ -226,8 +226,9 @@ class StateStore:
             args += ["-p", parent]
         return self._run(args, check=True).stdout.strip()
 
-    def _update_ref(self, new_sha: str) -> None:
-        result = self._run(["git", "update-ref", self.full_ref, new_sha])
+    def _update_ref(self, new_sha: str, expected_old_sha: str | None = None) -> None:
+        old_sha = "" if expected_old_sha is None else expected_old_sha
+        result = self._run(["git", "update-ref", self.full_ref, new_sha, old_sha])
         if result.returncode != 0:
             raise _RefMoved(f"ref {self.full_ref} update failed")
 

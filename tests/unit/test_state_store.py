@@ -218,14 +218,27 @@ def test_ref_sha_returns_none_when_missing(
     assert store.ref_sha() is None
 
 
-def test_ref_sha_returns_value_when_present(
+def test_update_ref_passes_oldvalue_to_git(
     git_repo: Path, fake_runner: MagicMock
 ) -> None:
-    fake_runner.run.return_value = _make_run_result(stdout="abc123\n")
     store = StateStore(
         git_repo,
         "feature-artifacts",
         identity=("Test", "test@example.com"),
         command_runner=fake_runner,
     )
-    assert store.ref_sha() == "abc123"
+    fake_runner.run.return_value = _make_run_result()
+
+    store._update_ref("new_sha", "expected_old")
+
+    fake_runner.run.assert_called_once_with(
+        [
+            "git",
+            "update-ref",
+            store.full_ref,
+            "new_sha",
+            "expected_old",
+        ],
+        cwd=git_repo,
+        check=False,
+    )
