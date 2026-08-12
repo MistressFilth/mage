@@ -13,7 +13,10 @@ from mage.agents.decomposition import (
 )
 from mage.artifacts.enumeration import BehaviorSpec
 from mage.artifacts.mapping import MappingArtifact
-from mage.orchestration.decomposition import DecompositionStage
+from mage.orchestration.decomposition import (
+    APPROVAL_PENDING_PATH,
+    DecompositionStage,
+)
 from mage.orchestration.events import EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
@@ -234,8 +237,8 @@ async def test_approval_gate_required_halts_on_first_run(tmp_path, state_store):
     types = [e.event_type for e in log.read_all()]
     assert EventType.APPROVAL_REQUESTED in types
     assert EventType.APPROVAL_GRANTED not in types
-    marker = project_dir / ".mage" / "approval_pending.json"
-    assert marker.exists()
+    # P32: marker lives on the orphan branch, not on the working tree.
+    assert state_store.read(APPROVAL_PENDING_PATH)
     assert not (project_dir / "plan.md").exists()
 
 
@@ -268,7 +271,8 @@ async def test_approval_gate_disabled_runs_silently(tmp_path, state_store):
     types = [e.event_type for e in log.read_all()]
     assert EventType.APPROVAL_REQUESTED not in types
     assert EventType.APPROVAL_GRANTED not in types
-    assert not (project_dir / ".mage" / "approval_pending.json").exists()
+    # P32: the orphan branch must not carry a marker after a no-op gate.
+    assert not state_store.read(APPROVAL_PENDING_PATH)
     assert (project_dir / "plan.md").exists()
 
 
@@ -296,15 +300,15 @@ async def test_e2e_approval_resume_after_marker_cleared(tmp_path, state_store):
         events_log=log,
     )
 
-    # First run: halts and writes marker.
+    # First run: halts and writes marker on the orphan branch.
     from mage.orchestration.exceptions import StageHalted
 
     with pytest.raises(StageHalted):
         await stage.run(ctx)
-    assert (project_dir / ".mage" / "approval_pending.json").exists()
+    assert state_store.read(APPROVAL_PENDING_PATH)
 
-    # Operator clears marker (no plan edit).
-    (project_dir / ".mage" / "approval_pending.json").unlink()
+    # Operator clears the marker (no plan edit). P32: delete via the store.
+    state_store.delete(APPROVAL_PENDING_PATH)
 
     # Second run: grants and finalizes.
     await stage.run(ctx)

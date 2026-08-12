@@ -19,7 +19,7 @@ from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.providers.config import load_xdg_providers
 from mage.state_store import StateStore, state_store_for
-from mage.verification.host_overrides import load_host_config
+from mage.verification.host_overrides import load_host_config_via_store
 
 
 async def apply_for_feature(
@@ -51,8 +51,8 @@ async def apply_for_feature(
     from mage.artifacts.cosmetic_state import (
         CosmeticApplied,
         is_already_applied,
-        load_state,
-        save_state,
+        load_state_via_store,
+        save_state_via_store,
     )
     from mage.artifacts.mapping import MappingArtifact
 
@@ -69,7 +69,7 @@ async def apply_for_feature(
     # "no mapping found" guard is gone — empty mapping IS the first-run
     # state on the orphan branch, same as `cmd_cosmetic_apply`.
     mapping = MappingArtifact.load_from_state_store(state_store)
-    host_config = load_host_config(project_dir)
+    host_config = load_host_config_via_store(state_store)
     mage_toml = load_mage_toml(project_dir)
     providers, default_provider = load_xdg_providers()
     model, _, _ = await resolve_model_logged(
@@ -96,7 +96,7 @@ async def apply_for_feature(
     )
 
     now = datetime.now(UTC)
-    state = load_state(project_dir)
+    state = load_state_via_store(state_store)
     for item in refined:
         if item.file_path is None:
             await log.append(
@@ -168,7 +168,7 @@ async def apply_for_feature(
                     rationale=item.rationale,
                 )
                 try:
-                    await save_state(project_dir, state)
+                    await save_state_via_store(state_store, state)
                 except (yaml.YAMLError, OSError) as exc:
                     await log.append(
                         Event(

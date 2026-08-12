@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from mage.artifacts.cosmetic_state import load_state
+from mage.artifacts.cosmetic_state import load_state_via_store
 
 
 def _write_minimal_project(project: Path) -> None:
@@ -50,6 +50,13 @@ def _seed_mapping(project: Path, feature_id: str, sub_bid: str) -> None:
     asyncio.run(mapping.save_to_state_store(state_store))
 
 
+def _store(project: Path):
+    """Build a StateStore anchored at ``project`` (P32 task 13)."""
+    from mage.state_store import StateStore
+
+    return StateStore(project, "feature-artifacts", identity=("T", "t@e"))
+
+
 def _spawn_watcher(project: Path, *, poll_ms: int = 50) -> subprocess.Popen:
     return subprocess.Popen(
         [
@@ -85,7 +92,7 @@ def test_e2e_cosmetic_watcher_applies_new_queue_entries(tmp_path: Path):
             check=False,
         )
         for _ in range(40):
-            state = load_state(project)
+            state = load_state_via_store(_store(project))
             if state.applied:
                 break
             time.sleep(0.1)
@@ -124,7 +131,7 @@ def test_e2e_cosmetic_watcher_idempotent_across_saves(tmp_path: Path):
     watcher = _spawn_watcher(project, poll_ms=50)
     try:
         for _ in range(40):
-            state = load_state(project)
+            state = load_state_via_store(_store(project))
             if state.applied:
                 break
             time.sleep(0.1)

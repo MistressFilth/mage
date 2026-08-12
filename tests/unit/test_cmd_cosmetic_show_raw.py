@@ -13,7 +13,7 @@ from mage import cli
 from mage.artifacts.cosmetic_state import (
     CosmeticApplied,
     CosmeticAppliedState,
-    save_state,
+    save_state_via_store,
 )
 from mage.artifacts.mapping import MappingArtifact
 
@@ -48,6 +48,13 @@ def _seed_state_store(project_dir: Path, artifact: MappingArtifact) -> None:
 
     state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
     asyncio.run(artifact.save_to_state_store(state_store))
+
+
+def _store_for(project_dir: Path):
+    """Return a StateStore anchored at ``project_dir`` (P32 task 13)."""
+    from mage.state_store import StateStore
+
+    return StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
 
 
 def _write_mapping(
@@ -160,8 +167,8 @@ def test_show_raw_reports_applied_status(
         ],
     )
     asyncio.run(
-        save_state(
-            tmp_path,
+        save_state_via_store(
+            _store_for(tmp_path),
             CosmeticAppliedState(
                 applied={
                     "01JF": CosmeticApplied(

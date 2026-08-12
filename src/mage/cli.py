@@ -28,16 +28,19 @@ from mage.cli_state import (
 )
 from mage.cosmetic_pid import (
     is_alive_with_start,
-    pid_file_path,
-    read_pid,
-    remove_pid,
+    pid_file_via_state_store,
+    read_pid_via_state_store,
+    remove_pid_via_state_store,
 )
 from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.providers.config import load_xdg_providers
 from mage.state_store import state_store_for
-from mage.verification.host_overrides import default_check_set, load_host_config
+from mage.verification.host_overrides import (
+    default_check_set,
+    load_host_config_via_store,
+)
 from mage.verification.mechanical import (
     MechanicalVerifier,
     ScenarioDraft,
@@ -568,7 +571,7 @@ async def cmd_run(args):
             feature_id=feature_id,
         )
 
-    host_config = load_host_config(project_dir)
+    host_config = load_host_config_via_store(state_store)
     initial_context.host_config = host_config
 
     # Plan 9: stages are the same wiring for both --dry-run and real mode.
@@ -755,7 +758,7 @@ async def cmd_settle_run(args):
 
     stage = SettleFeatureStage(
         log,
-        host_config=load_host_config(project_dir),
+        host_config=load_host_config_via_store(state_store),
     )
     try:
         await stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
@@ -784,7 +787,7 @@ async def cmd_cosmetic_show(args) -> int:
     and emits a stable text dump. `--journal` appends inspect journal
     entries for the same feature. `--filter sub_bid=...` narrows.
     """
-    from mage.artifacts.cosmetic_state import load_state
+    from mage.artifacts.cosmetic_state import load_state_via_store
     from mage.artifacts.mapping import MappingArtifact
     from mage.cosmetic_filters import FilterParseError, parse_filters
 
@@ -821,7 +824,7 @@ async def cmd_cosmetic_show(args) -> int:
             return 2
         queue = [q for q in queue if _queue_sub_bid(q) in allowed]
     queue.sort(key=lambda q: _queue_sub_bid(q))
-    state = load_state(project_dir)
+    state = load_state_via_store(state_store)
     if getattr(args, "raw", False):
         for q in queue:
             sub_bid = _queue_sub_bid(q)
@@ -855,7 +858,7 @@ async def cmd_cosmetic_show(args) -> int:
         return 0
     from mage.agents.cosmetic_refiner import CosmeticRefiner
 
-    host_config = load_host_config(project_dir)
+    host_config = load_host_config_via_store(state_store)
     mage_toml = load_mage_toml(project_dir)
     providers, default_provider = load_xdg_providers()
     model, _, _ = await resolve_model_logged(
@@ -967,7 +970,7 @@ async def cmd_cosmetic_apply(args) -> int:
 
 async def cmd_cosmetic_list(args) -> int:
     """List cosmetic queue entries for a feature. Text or JSON output."""
-    from mage.artifacts.cosmetic_state import load_state
+    from mage.artifacts.cosmetic_state import load_state_via_store
     from mage.artifacts.mapping import MappingArtifact
     from mage.cosmetic_filters import FilterParseError, parse_filters
 
@@ -977,7 +980,7 @@ async def cmd_cosmetic_list(args) -> int:
     mage_toml = load_mage_toml(project_dir)
     state_store = state_store_for(project_dir, mage_toml)
     mapping = MappingArtifact.load_from_state_store(state_store)
-    state = load_state(project_dir)
+    state = load_state_via_store(state_store)
     raw_filter = getattr(args, "filter", None)
     try:
         filters = parse_filters(raw_filter, subcommand="cosmetic list")
@@ -1083,7 +1086,13 @@ async def cmd_cosmetic_watch(args) -> int:
 
 
 async def cmd_cosmetic_unwatch(args) -> int:
-    """Stop the cosmetic watcher daemon by PID file, with SIGTERM/SIGKILL escalation."""
+    """Stop the cosmetic watcher daemon by PID file, with SIGTERM/SIGKILL escalation.
+
+    P32 task 13: the PID file lives on the mage orphan branch. The CLI
+    constructs the canonical ``StateStore`` for the project (honoring
+    ``mage.toml.orphan_branch``) and reads/writes the orphan-branch PID
+    file via the StateStore API rather than touching the working tree.
+    """
     from datetime import UTC, datetime
 
     from mage.orchestration.cosmetic_watcher import (
@@ -1093,17 +1102,26 @@ async def cmd_cosmetic_unwatch(args) -> int:
     from mage.orchestration.events import Event, EventType
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    path = pid_file_path(project_dir)
-    parsed = read_pid(project_dir)
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    pid_ref = pid_file_via_state_store(state_store)
+    parsed = read_pid_via_state_store(state_store)
     if parsed is None:
         print(
             f"mage cosmetic unwatch: no watcher running for {project_dir}",
             file=sys.stderr,
         )
         return 0
-    pid, start_time = parsed
+    pid, start_time_int = parsed
+    # State-store-backed PID files record start_time as int; the legacy
+    # Path-based PID files recorded it as a float. ``is_alive_with_start``
+    # accepts float | None, so coerce for backward compatibility with
+    # legacy daemon-write sites and historical state on the branch.
+    start_time: float | None = (
+        float(start_time_int) if start_time_int is not None else None
+    )
     if not is_alive_with_start(pid, start_time):
-        remove_pid(project_dir)
+        remove_pid_via_state_store(state_store)
         print(
             f"mage cosmetic unwatch: removed stale pid file for pid={pid}",
             file=sys.stderr,
@@ -1114,7 +1132,7 @@ async def cmd_cosmetic_unwatch(args) -> int:
                 timestamp=datetime.now(UTC),
                 event_type=EventType.COSMETIC_WATCHER_STALE_PID_REMOVED,
                 payload={
-                    "pid_file_path": str(path),
+                    "pid_file_path": pid_ref,
                     "recorded_pid": pid,
                 },
             )
@@ -1127,8 +1145,9 @@ async def cmd_cosmetic_unwatch(args) -> int:
         requester_pid=os.getpid(),
         timeout_s=5.0,
         force=getattr(args, "force", False),
+        state_store=state_store,
     )
-    if read_pid(project_dir) is None:
+    if read_pid_via_state_store(state_store) is None:
         return 0
     print(
         "mage cosmetic unwatch: watcher did not stop after 5000ms; "

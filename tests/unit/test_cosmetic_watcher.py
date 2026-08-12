@@ -17,6 +17,7 @@ from mage.orchestration.events import Event, EventsLog, EventType
 
 def _init_git_repo(project_dir: Path) -> None:
     """Initialize ``project_dir`` as a real git repo (P32 state-store needs one)."""
+    project_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init"], cwd=project_dir, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.name", "T"],
@@ -62,6 +63,7 @@ async def _write_mapping(
 
 @pytest.mark.asyncio
 async def test_watcher_emits_started_on_run(tmp_path: Path):
+    _init_git_repo(tmp_path)
     log = EventsLog(tmp_path / "events.jsonl")
     watcher = MappingArtifactWatcher(tmp_path, events_log=log, poll_interval_ms=10)
     watcher.stop()  # exit immediately
@@ -146,6 +148,7 @@ async def test_watcher_skips_unchanged_features(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_watcher_stop_emits_stopped_event(tmp_path: Path):
+    _init_git_repo(tmp_path)
     log = EventsLog(tmp_path / "events.jsonl")
     watcher = MappingArtifactWatcher(tmp_path, events_log=log, poll_interval_ms=10)
     watcher.stop()

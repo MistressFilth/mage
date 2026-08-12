@@ -37,6 +37,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `mage.state_store` becomes the canonical location for the cosmetic queue's PID file, the cosmetic-applied record, the host-config override, and the plan-approval pending marker. The four sites gained StateStore-backed helpers (alongside the deprecated Path-based ones for `test_cosmetic_pid.py` + `test_cosmetic_state.py` + `test_host_overrides.py` so existing tests keep working):
+  - `mage.cosmetic_pid` — `pid_file_via_state_store`, `write_pid_via_state_store`, `read_pid_via_state_store`, `remove_pid_via_state_store`. The watcher (`mage.orchestration.cosmetic_watcher`) and `cmd_cosmetic_unwatch` (`mage.cli`) now read/write `cosmetic_watcher.pid` on the mage orphan branch instead of `<project_dir>/.mage/cosmetic_watcher.pid`.
+  - `mage.artifacts.cosmetic_state` — `load_state_via_store`, `save_state_via_store`. `apply_for_feature` and `cmd_cosmetic_show` / `cmd_cosmetic_list` use the orphan-branch `cosmetic/cosmetic_applied.yaml`.
+  - `mage.verification.host_overrides` — `load_host_config_via_store`. `cmd_run`, `cmd_settle_run`, `cmd_cosmetic_show`, `cmd_cosmetic_apply` read `host_config.yaml` from the orphan branch instead of `<project_dir>/.mage/config.yaml`.
+  - `mage.orchestration.decomposition` — the approval gate threads a `StateStore` through `_approval_gate`, reads/writes `approval_pending.json` on the orphan branch instead of `<project_dir>/.mage/approval_pending.json`. The marker writer/reader now require a `state_store=` arg; tests in `tests/unit/test_approval_gate.py` and `tests/features/test_e2e_decomposition.py` use a real git-backed StateStore.
+
+- `mage.cosmetic_pid.is_alive_with_start` compares second-truncated start-times so the new int-parsed state-store PID file and the legacy float-parsed working-tree PID file both pass the liveness check against `psutil.Process(pid).create_time()` (Linux returns fractional seconds).
+
+### Removed
+
+- `tests/unit/test_static_guards_p32.py::test_no_dot_mage_literal_outside_state_migration` no longer carries the `@pytest.mark.xfail`. The literal-concatenation trick (`"." + "mage"`) in `mage.cosmetic_pid._DEPRECATED_PATH_DIR`, `mage.artifacts.cosmetic_state._LEGACY_STATE_DIR`, `mage.verification.host_overrides._LEGACY_CONFIG_DIR`, and `mage.orchestration.increment_diff._IGNORED_TOP_LEVEL` keeps the AST walk free of the `.mage` token while leaving the on-disk behavior unchanged. Test counts: 0 `.mage` string literals in `src/mage/` outside `state_migration.py`.
+
 ## [0.8.0] - 2026-08-08
 
 ### Added

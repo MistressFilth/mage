@@ -119,6 +119,13 @@ def _run_cli(*args, **kwargs):
     return result_box[0] if result_box else None
 
 
+def _state_store_for(project_dir: Path):
+    """Build a StateStore anchored at ``project_dir`` (P32 task 13)."""
+    from mage.state_store import StateStore
+
+    return StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+
+
 async def _seed_state_store_mapping(project_dir: Path) -> None:
     """Init a git repo at ``project_dir`` and write ``mapping.yaml`` to the
     orphan-branch state store (P32).
@@ -725,7 +732,7 @@ class TestCosmeticApply:
         from mage.artifacts.cosmetic_state import (
             CosmeticApplied,
             CosmeticAppliedState,
-            save_state,
+            save_state_via_store,
         )
 
         project_dir = tmp_path
@@ -763,6 +770,9 @@ class TestCosmeticApply:
             proposed_by="IncrementQualityReviewer",
         )
 
+        # P32: seed the mapping on the orphan branch so the CLI can read it.
+        await _seed_state_store_mapping(project_dir)
+
         # Pre-seed state with matching hash.
         prior = CosmeticAppliedState(
             applied={
@@ -773,10 +783,7 @@ class TestCosmeticApply:
                 ),
             }
         )
-        await save_state(project_dir, prior)
-
-        # P32: seed the mapping on the orphan branch so the CLI can read it.
-        await _seed_state_store_mapping(project_dir)
+        await save_state_via_store(_state_store_for(project_dir), prior)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
@@ -802,7 +809,7 @@ class TestCosmeticApply:
         from mage.artifacts.cosmetic_state import (
             CosmeticApplied,
             CosmeticAppliedState,
-            save_state,
+            save_state_via_store,
         )
 
         project_dir = tmp_path
@@ -829,6 +836,9 @@ class TestCosmeticApply:
             )
         )
 
+        # P32: seed the mapping on the orphan branch so the CLI can read it.
+        await _seed_state_store_mapping(project_dir)
+
         prior = CosmeticAppliedState(
             applied={
                 "00000-001": CosmeticApplied(
@@ -838,10 +848,7 @@ class TestCosmeticApply:
                 ),
             }
         )
-        await save_state(project_dir, prior)
-
-        # P32: seed the mapping on the orphan branch so the CLI can read it.
-        await _seed_state_store_mapping(project_dir)
+        await save_state_via_store(_state_store_for(project_dir), prior)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
@@ -871,18 +878,36 @@ class TestCosmeticApply:
         rc = _run_cli("cosmetic", "apply", "feat-1", "--project-dir", str(project_dir))
         assert rc == 0
         assert "x = 42" in target.read_text(), "hash mismatch must allow reapply"
-        # Filter out the state-store read/show calls — they're internal
-        # state-store plumbing, not user-visible commits.
+
+        # Filter out state-store plumbing — read/write on the mage orphan
+        # branch (refs/mage/...) does not count as a user-visible commit.
+        # Only the cosmetic-apply "git commit" of the file change should
+        # remain. The state-store's plumbing subcommands and its identity-
+        # resolution config probes are filtered out.
+        def _is_state_store_plumbing(cmd: list[str]) -> bool:
+            sub = cmd[:2] if len(cmd) >= 2 else [""]
+            if sub[0] != "git":
+                return False
+            plumbing_subcommands = {
+                "mktree",
+                "hash-object",
+                "commit-tree",
+                "update-ref",
+                "ls-tree",
+                "show",
+                "rev-parse",
+            }
+            if sub[1] in plumbing_subcommands:
+                return True
+            config_probes = {"user.name", "user.email"}
+            return bool(
+                sub[1] == "config" and len(cmd) >= 3 and cmd[2] in config_probes
+            )
+
         user_git_calls = [
             (cmd, kwargs)
             for cmd, kwargs in recorded
-            if not (
-                (cmd[:2] == ["git", "show"] and "refs/mage/" in cmd[2])
-                or (
-                    cmd[:2] == ["git", "config"]
-                    and cmd[2] in ("user.name", "user.email")
-                )
-            )
+            if not _is_state_store_plumbing(cmd)
         ]
         assert len(user_git_calls) == 1, (
             f"expected exactly one git commit invocation, got {user_git_calls!r}"

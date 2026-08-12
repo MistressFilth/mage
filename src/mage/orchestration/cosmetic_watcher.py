@@ -23,7 +23,12 @@ from pathlib import Path
 
 import yaml
 
-from mage.cosmetic_pid import is_alive_with_start, pid_file_path, remove_pid, write_pid
+from mage.cosmetic_pid import (
+    is_alive_with_start,
+    pid_file_via_state_store,
+    remove_pid_via_state_store,
+    write_pid_via_state_store,
+)
 from mage.host_project_config import load_mage_toml
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
@@ -35,12 +40,17 @@ logger = logging.getLogger(__name__)
 _FORCE_KILL_SIGNAL = signal.SIGKILL if sys.platform != "win32" else signal.SIGTERM
 
 
-def _safe_pid_path(project_dir: Path) -> str | None:
-    """Return the canonical PID file path string; None if write would fail."""
+def _pid_info_via_store(state_store: StateStore) -> str | None:
+    """Return the canonical PID-file ref path; None if write fails."""
     try:
-        return str(write_pid(project_dir, os.getpid()))
-    except OSError:
+        import psutil
+
+        start_time = psutil.Process(os.getpid()).create_time()
+        write_pid_via_state_store(state_store, os.getpid(), int(start_time))
+    except (OSError, psutil.Error) as exc:
+        logger.debug("pid write failed: %s", exc)
         return None
+    return pid_file_via_state_store(state_store)
 
 
 async def _request_remote_stop(
@@ -51,6 +61,7 @@ async def _request_remote_stop(
     requester_pid: int,
     timeout_s: float,
     force: bool,
+    state_store: StateStore | None = None,
 ) -> bool:
     """Signal a remote watcher to stop. Returns True on success, False on hard timeout.
 
@@ -60,6 +71,11 @@ async def _request_remote_stop(
     removed it as part of its shutdown or because the target died).
     Emits audit events into `<project_dir>/events.jsonl` (best-effort).
 
+    P32: the PID file lives on the mage orphan branch; ``state_store`` is
+    required for production. When omitted, the factory fallback resolves
+    one from ``mage.toml`` so a missed ``state_store=`` arg still hits
+    the right storage (matches the watcher's own fallback).
+
     Every audit event in this routine uses a single monotonic clock
     (``start`` at function entry) so the elapsed_ms in the audit log
     reflects actual wall time at the moment the terminal decision was
@@ -67,6 +83,12 @@ async def _request_remote_stop(
     is dispatched so the SIGKILL_TIMEOUT escalation reports the
     SIGKILL-window elapsed, not the cumulative SIGTERM+SIGKILL time.
     """
+    if state_store is None:
+        state_store = state_store_for(project_dir, load_mage_toml(project_dir))
+
+    def _pid_exists() -> bool:
+        return bool(state_store.read(pid_file_via_state_store(state_store)))
+
     log_path = project_dir / "events.jsonl"
     log: EventsLog | None = None
     if log_path.parent.exists():
@@ -96,18 +118,17 @@ async def _request_remote_stop(
             "project_dir": str(project_dir),
         },
     )
-    path = pid_file_path(project_dir)
 
     async def _wait_for_deadline(deadline: float) -> bool:
         while asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.05)
             if (
                 not is_alive_with_start(target_pid, target_start_time)
-                or not path.exists()
+                or not _pid_exists()
             ):
                 return True
         return (
-            not is_alive_with_start(target_pid, target_start_time) or not path.exists()
+            not is_alive_with_start(target_pid, target_start_time) or not _pid_exists()
         )
 
     try:
@@ -115,8 +136,8 @@ async def _request_remote_stop(
         try:
             os.kill(target_pid, signal.SIGTERM)
         except ProcessLookupError:
-            if path.exists():
-                remove_pid(project_dir)
+            if _pid_exists():
+                remove_pid_via_state_store(state_store)
             await _emit(
                 EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
                 {
@@ -127,8 +148,8 @@ async def _request_remote_stop(
             )
             return True
         if await _wait_for_deadline(sigterm_deadline):
-            if path.exists():
-                remove_pid(project_dir)
+            if _pid_exists():
+                remove_pid_via_state_store(state_store)
             await _emit(
                 EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
                 {
@@ -152,8 +173,8 @@ async def _request_remote_stop(
         try:
             os.kill(target_pid, _FORCE_KILL_SIGNAL)
         except ProcessLookupError:
-            if path.exists():
-                remove_pid(project_dir)
+            if _pid_exists():
+                remove_pid_via_state_store(state_store)
             await _emit(
                 EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
                 {
@@ -169,8 +190,8 @@ async def _request_remote_stop(
         sigkill_start = time.monotonic()
         sigkill_deadline = asyncio.get_event_loop().time() + timeout_s
         if await _wait_for_deadline(sigkill_deadline):
-            if path.exists():
-                remove_pid(project_dir)
+            if _pid_exists():
+                remove_pid_via_state_store(state_store)
             await _emit(
                 EventType.COSMETIC_WATCHER_REMOTE_STOP_SUCCEEDED,
                 {
@@ -271,7 +292,7 @@ class MappingArtifactWatcher:
                         "project_dir": str(self.project_dir),
                         "poll_interval_ms": self.poll_interval_ms,
                         "pid": os.getpid(),
-                        "pid_file_path": _safe_pid_path(self.project_dir),
+                        "pid_file_path": _pid_info_via_store(self.state_store),
                     },
                 )
             )
@@ -304,7 +325,13 @@ class MappingArtifactWatcher:
                         continue
                     await self._handle_mapping_saved()
         finally:
-            removed = remove_pid(self.project_dir)
+            # P32: best-effort remove from the orphan branch.
+            removed = False
+            try:
+                remove_pid_via_state_store(self.state_store)
+                removed = True
+            except Exception as exc:  # noqa: BLE001 — best-effort cleanup
+                logger.debug("orphan-branch pid remove failed: %s", exc)
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

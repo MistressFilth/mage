@@ -13,9 +13,10 @@ from mage import cli
 from mage.artifacts.cosmetic_state import (
     CosmeticApplied,
     CosmeticAppliedState,
-    save_state,
+    save_state_via_store,
 )
 from mage.artifacts.mapping import MappingArtifact
+from mage.state_store import StateStore
 
 
 async def _write_mapping(
@@ -183,8 +184,8 @@ async def test_list_applied_status_no_applied_at(
             }
         ],
     )
-    await save_state(
-        tmp_path,
+    await save_state_via_store(
+        StateStore(tmp_path, "feature-artifacts", identity=("T", "t@e")),
         CosmeticAppliedState(
             applied={
                 "01JF": CosmeticApplied(
