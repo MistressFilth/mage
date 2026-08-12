@@ -24,6 +24,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from mage.state_store import StateStore
 
 
@@ -67,3 +69,94 @@ def test_settle_report_path(tmp_path: Path) -> None:
     path = "settle/feature_a.md"
     store.write(path, b"# Settle\n")
     assert store.read(path) == b"# Settle\n"
+
+
+@pytest.mark.asyncio
+async def test_cross_scenario_receives_state_store(tmp_path: Path, state_store) -> None:
+    """InspectFeatureStage passes ``state_store`` to the ``cross_scenario`` reviewer (P32 task 12 fix).
+
+    The per-scenario reviewer call (lines 251-259) already passes
+    ``state_store=context.state_store``. The cross-scenario call (around
+    line 335) was missing it. Without it, ``ReviewerAgent.run`` falls
+    through to ``VerdictArtifact.finalize(Path(verdict_path), ...)``,
+    which resolves a relative ``verdict_path`` (e.g.
+    ``verdicts/<fid>/cross_scenario.yaml``) against the cwd and silently
+    writes the verdict to the working tree instead of the orphan branch.
+
+    This test pins the cross-scenario call site to also pass
+    ``state_store`` so a real ``CrossScenarioReviewer`` can persist its
+    verdict through the orphan branch (the migration's
+    source-of-truth).
+    """
+
+    from datetime import UTC, datetime
+
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.artifacts.verdict import ReviewerVerdict
+    from mage.orchestration.events import EventsLog
+    from mage.orchestration.inspect_feature import InspectFeatureStage
+    from mage.orchestration.nodes import PipelineContext
+    from mage.verification.host_overrides import HostConfig
+
+    class _CleanMechanicalVerifier:
+        def verify(self, draft, mapping):
+            return []
+
+    events_log = EventsLog(tmp_path / "events.jsonl")
+    context = PipelineContext(
+        state_store=state_store,
+        project_dir=tmp_path,
+        mapping=MappingArtifact(project_id="feat-1"),
+        events_log=events_log,
+        plan_path=tmp_path / "plan.md",
+        iteration=0,
+    )
+
+    captured_kwargs: list[dict] = []
+
+    class _CapturingReviewer:
+        dimension = "cross_scenario"
+
+        async def run(self, **kwargs) -> ReviewerVerdict:  # type: ignore[no-untyped-def]
+            captured_kwargs.append(kwargs)
+            return ReviewerVerdict(
+                dimension=self.dimension,
+                outcome="pass",
+                draft_hash="",
+                reviewed_at=datetime.now(UTC),
+                reviewer_id=f"{self.dimension}@v1",
+                findings=[],
+            )
+
+    stage = InspectFeatureStage(
+        context.events_log,
+        reviewers=[_CapturingReviewer()],
+        mechanical_verifier=_CleanMechanicalVerifier(),
+        host_config=HostConfig(),
+    )
+
+    scenario = {
+        "sub_bid": "000000",
+        "base_bid": "00000",
+        "scenario_name": "happy",
+        "gherkin_body": "Given a user\nWhen they act\nThen it succeeds",
+        "tags": ["@status-live"],
+    }
+
+    await stage.run_pass(
+        context,
+        feature_id="feat-cross",
+        scenarios=[scenario],
+    )
+
+    assert captured_kwargs, "cross_scenario reviewer was never invoked"
+    cross_call = captured_kwargs[-1]
+    assert "state_store" in cross_call, (
+        "cross_scenario reviewer call is missing state_store kwarg; "
+        "InspectFeatureStage must pass state_store=context.state_store "
+        "to mirror the per-scenario call site"
+    )
+    assert cross_call["state_store"] is state_store, (
+        "cross_scenario reviewer received a state_store that is not the "
+        "context's StateStore; would fall through to working-tree finalize"
+    )

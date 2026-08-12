@@ -337,6 +337,7 @@ class InspectFeatureStage:
                 spec_context={"feature_id": feature_id},
                 mapping=context.mapping,
                 events_log=self.events_log,
+                state_store=context.state_store,
                 verdict_path=(f"verdicts/{feature_id}/{reviewer.dimension}.yaml"),
                 feature_summary={"feature_id": feature_id},
                 scenarios=scenarios,
