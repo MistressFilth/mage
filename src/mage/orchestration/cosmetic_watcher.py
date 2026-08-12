@@ -24,8 +24,10 @@ from pathlib import Path
 import yaml
 
 from mage.cosmetic_pid import is_alive_with_start, pid_file_path, remove_pid, write_pid
+from mage.host_project_config import load_mage_toml
 from mage.orchestration.cosmetic_apply import apply_for_feature
 from mage.orchestration.events import Event, EventsLog, EventType
+from mage.state_store import StateStore, state_store_for
 
 logger = logging.getLogger(__name__)
 
@@ -224,10 +226,20 @@ class MappingArtifactWatcher:
         *,
         poll_interval_ms: int = 250,
         events_log: EventsLog | None = None,
+        state_store: StateStore | None = None,
     ) -> None:
         self.project_dir = Path(project_dir)
         self.poll_interval_ms = poll_interval_ms
         self.events_log = events_log or EventsLog(self.project_dir / "events.jsonl")
+        # P32: mapping lives on the orphan branch; the watcher must read
+        # via the state store, not the working-tree file. When callers do
+        # not pass one explicitly, fall back to the factory that honors
+        # mage.toml's `orphan_branch` override.
+        if state_store is None:
+            state_store = state_store_for(
+                self.project_dir, load_mage_toml(self.project_dir)
+            )
+        self.state_store = state_store
         self._stop = False
         self._last_seen: dict[str, frozenset[str]] = {}
 
@@ -309,7 +321,7 @@ class MappingArtifactWatcher:
         from mage.artifacts.mapping import MappingArtifact
 
         try:
-            mapping = MappingArtifact.load(self.project_dir / "mapping.yaml")
+            mapping = MappingArtifact.load_from_state_store(self.state_store)
         except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
             await self.events_log.append(
                 Event(
@@ -338,7 +350,10 @@ class MappingArtifactWatcher:
             # a sub_bid that exists in another feature would also be
             # picked up here.
             rc = await apply_for_feature(
-                self.project_dir, list(new_entries), feature_id=fid
+                self.project_dir,
+                list(new_entries),
+                feature_id=fid,
+                state_store=self.state_store,
             )
             await self.events_log.append(
                 Event(

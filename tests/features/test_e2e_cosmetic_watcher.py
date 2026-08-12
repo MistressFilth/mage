@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import time
 from pathlib import Path
@@ -12,9 +13,6 @@ from mage.artifacts.cosmetic_state import load_state
 
 
 def _write_minimal_project(project: Path) -> None:
-    (project / "mapping.yaml").write_text(
-        "schema_version: 2\nproject_id: e2e\nbase_bids: []\n"
-    )
     (project / ".mage").mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     subprocess.run(["git", "config", "user.email", "e2e@mage"], cwd=project, check=True)
@@ -24,23 +22,32 @@ def _write_minimal_project(project: Path) -> None:
 
 
 def _seed_mapping(project: Path, feature_id: str, sub_bid: str) -> None:
-    import yaml
+    """Seed the orphan-branch mapping the watcher reads from (P32 task 10 fix).
 
-    mapping = {
-        "schema_version": 2,
-        "project_id": "e2e",
-        "base_bids": [],
-        "feature_cosmetic_queue": [
+    P32: ``mapping.yaml`` lives on ``refs/mage/feature-artifacts``, not
+    the working tree. The watcher's catch-up call uses
+    ``MappingArtifact.load_from_state_store`` so a working-tree write
+    is invisible to it. Seed via ``save_to_state_store`` so the test
+    triggers the real path.
+    """
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.state_store import state_store_for
+
+    mapping = MappingArtifact(
+        project_id="e2e",
+        cosmetic_findings=[
             {
                 "feature_id": feature_id,
                 "sub_bid": sub_bid,
+                "scenario_name": "scenario",
                 "text": "extract constant",
-                "location": {"file": "src/module.py", "line": 2},
+                "location": "src/module.py",
                 "proposed_by": "e2e",
             }
         ],
-    }
-    (project / "mapping.yaml").write_text(yaml.safe_dump(mapping))
+    )
+    state_store = state_store_for(project, mage_toml=None)
+    asyncio.run(mapping.save_to_state_store(state_store))
 
 
 def _spawn_watcher(project: Path, *, poll_ms: int = 50) -> subprocess.Popen:

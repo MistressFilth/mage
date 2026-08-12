@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -14,26 +15,49 @@ from mage.orchestration.cosmetic_watcher import MappingArtifactWatcher
 from mage.orchestration.events import Event, EventsLog, EventType
 
 
-def _write_mapping(
+def _init_git_repo(project_dir: Path) -> None:
+    """Initialize ``project_dir`` as a real git repo (P32 state-store needs one)."""
+    subprocess.run(["git", "init"], cwd=project_dir, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.name", "T"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "t@e"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+
+
+async def _write_mapping(
     project_dir: Path, *, feature_id: str = "feat-1", sub_bid: str = "00000-001"
 ) -> None:
-    import yaml
+    """Seed the orphan-branch mapping the watcher now reads from (P32 task 10).
 
-    mapping = {
-        "schema_version": 2,
-        "project_id": "p",
-        "base_bids": [],
-        "feature_cosmetic_queue": [
+    Task 10's post-review fix makes the watcher use ``StateStore``; the
+    working-tree ``<project>/mapping.yaml`` is no longer authoritative.
+    """
+    from mage.state_store import state_store_for
+
+    _init_git_repo(project_dir)
+    mapping = MappingArtifact(
+        project_id="p",
+        cosmetic_findings=[
             {
                 "feature_id": feature_id,
                 "sub_bid": sub_bid,
+                "scenario_name": "scenario",
                 "text": "use a constant",
-                "location": {"file": "src/example.py", "line": 1},
+                "location": "src/example.py",
                 "proposed_by": "human",
             }
         ],
-    }
-    (project_dir / "mapping.yaml").write_text(yaml.safe_dump(mapping))
+    )
+    state_store = state_store_for(project_dir, mage_toml=None)
+    await mapping.save_to_state_store(state_store)
 
 
 @pytest.mark.asyncio
@@ -54,7 +78,7 @@ async def test_watcher_diffs_queue_and_calls_apply(tmp_path: Path):
     log = EventsLog(tmp_path / "events.jsonl")
     log.log_path.parent.mkdir(parents=True, exist_ok=True)
     log.log_path.write_text("")
-    _write_mapping(tmp_path)
+    await _write_mapping(tmp_path)
 
     watcher = MappingArtifactWatcher(tmp_path, events_log=log, poll_interval_ms=10)
     with patch(
@@ -88,7 +112,7 @@ async def test_watcher_skips_unchanged_features(tmp_path: Path):
     log = EventsLog(tmp_path / "events.jsonl")
     log.log_path.parent.mkdir(parents=True, exist_ok=True)
     log.log_path.write_text("")
-    _write_mapping(tmp_path)
+    await _write_mapping(tmp_path)
 
     watcher = MappingArtifactWatcher(tmp_path, events_log=log, poll_interval_ms=10)
     with patch(

@@ -304,36 +304,41 @@ async def test_apply_for_feature_narrows_by_feature_id(
 
     Important #3: when a sub_bid exists in two features, the
     feature-scoped apply must not pick up the other feature's entry.
+    P32: the mapping now lives on the orphan branch, so we seed it
+    via ``MappingArtifact.save_to_state_store`` and the function picks
+    it up via ``state_store_for(...)``.
     """
     from mage.orchestration.cosmetic_apply import apply_for_feature
+    from mage.state_store import state_store_for
 
     project_dir = tmp_path
-    (project_dir / "mapping.yaml").write_text(
-        yaml.safe_dump(
-            MappingArtifact(
-                project_id="demo",
-                cosmetic_findings=[
-                    {
-                        "sub_bid": "01JF",
-                        "scenario_name": "in-feat-a",
-                        "location": "src/a.py",
-                        "text": "x",
-                        "proposed_by": "increment_quality",
-                        "feature_id": "feat-a",
-                    },
-                    {
-                        "sub_bid": "01JF",
-                        "scenario_name": "in-feat-b",
-                        "location": "src/b.py",
-                        "text": "y",
-                        "proposed_by": "increment_quality",
-                        "feature_id": "feat-b",
-                    },
-                ],
-            ).model_dump(mode="json", by_alias=True),
-            sort_keys=False,
-        )
+    # P32: a real git repo so the orphan branch can be created.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    mapping = MappingArtifact(
+        project_id="demo",
+        cosmetic_findings=[
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "in-feat-a",
+                "location": "src/a.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+                "feature_id": "feat-a",
+            },
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "in-feat-b",
+                "location": "src/b.py",
+                "text": "y",
+                "proposed_by": "increment_quality",
+                "feature_id": "feat-b",
+            },
+        ],
     )
+    state_store = state_store_for(project_dir, mage_toml=None)
+    await mapping.save_to_state_store(state_store)
 
     captured: list[str] = []
 
