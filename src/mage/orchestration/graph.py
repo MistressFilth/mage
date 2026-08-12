@@ -205,9 +205,7 @@ class PipelineGraph:
         )
         await context.events_log.append(halt_event)
 
-        state_dir = context.project_dir / ".mage" / "state"
-        state_dir.mkdir(parents=True, exist_ok=True)
         persistence = FileStatePersistence(
-            state_dir=state_dir, state_type=PipelineContext
+            state_store=context.state_store, state_type=PipelineContext
         )
         persistence.save_state(context)
