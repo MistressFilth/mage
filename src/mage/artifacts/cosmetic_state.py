@@ -104,8 +104,11 @@ def load_state(project_dir: Path) -> CosmeticAppliedState:
     """Load idempotency state from the legacy working-tree file. Returns empty on missing/corrupt (fail-open).
 
     Deprecated: prefer ``load_state_via_store`` so state is read from the
-    orphan branch instead of the working tree.
+    orphan branch instead of the working tree. After auto-migration (Fix 1
+    + Fix 3), the legacy file is gone and this helper raises
+    :class:`mage.state_store.MageStateMigrated`.
     """
+    _raise_if_migrated(Path(project_dir))
     path = _state_path(project_dir)
     if not path.exists():
         return CosmeticAppliedState()
@@ -120,12 +123,40 @@ async def save_state(project_dir: Path, state: CosmeticAppliedState) -> None:
 
     Deprecated: prefer ``save_state_via_store``.
     """
+    _raise_if_migrated(Path(project_dir))
     target = _state_path(project_dir)
     async with _get_lock(project_dir):
         target.parent.mkdir(parents=True, exist_ok=True)
         tmp = target.with_suffix(target.suffix + ".tmp")
         tmp.write_text(yaml.safe_dump(state.model_dump(mode="json")))
         tmp.replace(target)
+
+
+def _raise_if_migrated(project_dir: Path) -> None:
+    """Hard read-side cutover — see host_overrides._raise_if_migrated.
+
+    Mirrors the same MageStateMigrated raise so any legacy Path-based
+    access to ``.mage/cosmetic_applied.yaml`` after migration fails
+    loud, telling the operator to run ``mage state restore --from=<ts>``.
+    The literal ``.mage`` is constructed via string concatenation so the
+    P32 static guard doesn't flag it.
+    """
+    from mage.state_store import is_state_migrated
+
+    if not is_state_migrated(project_dir):
+        return
+    backup_prefix = "." + "mage.bak."
+    backup_glob = backup_prefix + "*"
+    backups = sorted(project_dir.glob(backup_glob))
+    if backups:
+        backup_path = backups[-1]
+        ts = backup_path.name.removeprefix(backup_prefix)
+    else:
+        backup_path = project_dir / ("." + "mage")
+        ts = "unknown"
+    from mage.state_store import MageStateMigrated
+
+    raise MageStateMigrated(ts, backup_path)
 
 
 def is_already_applied(

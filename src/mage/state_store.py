@@ -445,17 +445,32 @@ def is_state_migrated(project_root: Path) -> bool:
     :class:`MageStateMigrated` after auto-migration has run. Errors
     (no git repo, no orphan branch yet, subprocess failure) are
     swallowed and treated as "not migrated" so the legacy fallback can
-    run; that fallback itself will fail gracefully when its input
-    files don't exist.
+    run.
+
+    The check is a single ``git ls-tree`` against the orphan ref — it
+    deliberately does NOT go through :func:`state_store_for` because
+    that factory auto-migrates as a side effect, and triggering
+    migration from inside a ``_raise_if_migrated`` guard would race
+    with the caller's own first-touch path.
     """
+    import subprocess as _sp
+
     try:
-        store = state_store_for(project_root)
-    except (OSError, RuntimeError, ValueError, TypeError):
+        result = _sp.run(
+            [
+                "git",
+                "ls-tree",
+                f"{_BRANCH_PREFIX}{DEFAULT_ORPHAN_BRANCH}",
+                "--",
+                MIGRATION_MARKER,
+            ],
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
         return False
-    try:
-        return store.exists(MIGRATION_MARKER)
-    except (OSError, RuntimeError, ValueError, TypeError):
-        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def _resolve_identity(project_root: Path) -> tuple[str, str]:

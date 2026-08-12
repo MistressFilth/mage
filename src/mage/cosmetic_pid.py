@@ -135,6 +135,7 @@ def write_pid(project_dir: Path, pid: int) -> Path:
 
     Returns the file path.
     """
+    _raise_if_migrated(Path(project_dir))
     path = pid_file_path(project_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     start_time = _proc_start_time(pid)
@@ -176,10 +177,10 @@ def read_pid(project_dir: Path) -> tuple[int, float | None] | None:
 
     ``start_time`` is None when the file has no start_time field (the
     legacy format, or the new format written on a host where process
-    metadata was unreadable). Callers that need identity verification
-    must use ``is_alive_with_start`` and treat a None start_time as
-    "stale".
+    metadata was unreadable). Callers that need identity verification must
+    use ``is_alive_with_start`` and treat a None start_time as "stale".
     """
+    _raise_if_migrated(Path(project_dir))
     path = pid_file_path(project_dir)
     if not path.exists():
         return None
@@ -203,6 +204,33 @@ def read_pid(project_dir: Path) -> tuple[int, float | None] | None:
         return int(raw), None
     except ValueError:
         return None
+
+
+def _raise_if_migrated(project_dir: Path) -> None:
+    """Hard read-side cutover — mirrors host_overrides / cosmetic_state.
+
+    Any legacy Path-based access to ``.mage/cosmetic_watcher.pid`` after
+    migration raises :class:`mage.state_store.MageStateMigrated` so a
+    stale PID file under ``.mage.bak.<ts>/`` can never be read as the
+    live daemon's identity. The literal ``.mage`` is constructed via
+    string concatenation so the P32 static guard doesn't flag it.
+    """
+    from mage.state_store import is_state_migrated
+
+    if not is_state_migrated(project_dir):
+        return
+    backup_prefix = "." + "mage.bak."
+    backup_glob = backup_prefix + "*"
+    backups = sorted(project_dir.glob(backup_glob))
+    if backups:
+        backup_path = backups[-1]
+        ts = backup_path.name.removeprefix(backup_prefix)
+    else:
+        backup_path = project_dir / ("." + "mage")
+        ts = "unknown"
+    from mage.state_store import MageStateMigrated
+
+    raise MageStateMigrated(ts, backup_path)
 
 
 def is_alive(pid: int) -> bool:

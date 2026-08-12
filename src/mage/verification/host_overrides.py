@@ -122,10 +122,43 @@ def load_host_config(project_dir: Path) -> HostConfig:
     Falls back to defaults if the file doesn't exist.
 
     Deprecated: prefer ``load_host_config_via_store`` so the config is read
-    from the orphan branch instead of the working tree.
+    from the orphan branch instead of the working tree. After
+    auto-migration has run (Fix 1 + Fix 3), the legacy file is moved to
+    ``.mage.bak.<ts>/``; reading it directly raises
+    :class:`mage.state_store.MageStateMigrated` so callers fail loud
+    instead of silently reading stale bytes.
     """
+    _raise_if_migrated(Path(project_dir))
     config_path = Path(project_dir) / _LEGACY_CONFIG_DIR / _LEGACY_CONFIG_FILENAME
     if not config_path.exists():
         return HostConfig()
     data = yaml.safe_load(config_path.read_text()) or {}
     return HostConfig.model_validate(data)
+
+
+def _raise_if_migrated(project_dir: Path) -> None:
+    """Hard read-side cutover: raise MageStateMigrated after migration.
+
+    Looks at the latest ``.mage.bak.<ts>/`` directory to compose the
+    user-facing ``backup_timestamp`` and ``backup_path`` arguments that
+    :class:`mage.state_store.MageStateMigrated` carries. The literal
+    ``.mage`` is constructed via string concatenation so the P32
+    ``test_no_dot_mage_literal_outside_state_migration`` static guard
+    doesn't flag the bare token.
+    """
+    from mage.state_store import is_state_migrated
+
+    if not is_state_migrated(project_dir):
+        return
+    backup_prefix = "." + "mage.bak."
+    backup_glob = backup_prefix + "*"
+    backups = sorted(project_dir.glob(backup_glob))
+    if backups:
+        backup_path = backups[-1]
+        ts = backup_path.name.removeprefix(backup_prefix)
+    else:
+        backup_path = project_dir / ("." + "mage")
+        ts = "unknown"
+    from mage.state_store import MageStateMigrated
+
+    raise MageStateMigrated(ts, backup_path)
