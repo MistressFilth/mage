@@ -39,9 +39,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     show.add_argument("path", help="Path relative to branch root.")
     show.set_defaults(func=cmd_state_show)
 
-    info = state_sub.add_parser(
-        "info", help="Report branch name, ref SHA, file count, last commit time."
-    )
+    info = state_sub.add_parser("info", help="Report branch name, ref SHA, file count.")
     info.set_defaults(func=cmd_state_info)
 
     restore = state_sub.add_parser(
@@ -69,10 +67,10 @@ def cmd_state_show(args: argparse.Namespace) -> int:
     project_dir = Path(args.project_dir)
     mage_toml = load_mage_toml(project_dir)
     store = state_store_for(project_dir, mage_toml)
-    data = store.read(args.path)
-    if not data:
+    if not store.exists(args.path):
         print(f"error: {args.path} not found in orphan branch", file=sys.stderr)
         return 1
+    data = store.read(args.path)
     sys.stdout.buffer.write(data)
     return 0
 
