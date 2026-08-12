@@ -38,8 +38,9 @@ def _make_mapping(tmp_path, scenarios: list[ScenarioEntry]) -> MappingArtifact:
     )
 
 
-def _ctx(tmp_path, mapping: MappingArtifact) -> PipelineContext:
+def _ctx(tmp_path, mapping: MappingArtifact, state_store) -> PipelineContext:
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=mapping,
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -60,14 +61,14 @@ def _scenario(sub_bid: str, status: LifecycleStatus) -> ScenarioEntry:
 
 
 @pytest.mark.asyncio
-async def test_automation_stage_excludes_non_approved_scenarios(tmp_path):
+async def test_automation_stage_excludes_non_approved_scenarios(tmp_path, state_store):
     scenarios = [
         _scenario("00001-0001", LifecycleStatus.APPROVED),
         _scenario("00001-0002", LifecycleStatus.LIVE),  # already done
         _scenario("00001-0003", LifecycleStatus.INSCRIBING),  # not ready
     ]
     mapping = _make_mapping(tmp_path, scenarios)
-    ctx = _ctx(tmp_path, mapping)
+    ctx = _ctx(tmp_path, mapping, state_store=state_store)
 
     captured_targets: list[list[ScenarioTarget]] = []
 
@@ -86,12 +87,12 @@ async def test_automation_stage_excludes_non_approved_scenarios(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
+async def test_automation_stage_writes_back_scenario_outcomes(tmp_path, state_store):
     mapping = _make_mapping(
         tmp_path,
         [_scenario("00001-0001", LifecycleStatus.APPROVED)],
     )
-    ctx = _ctx(tmp_path, mapping)
+    ctx = _ctx(tmp_path, mapping, state_store=state_store)
 
     class _Runner:
         async def run(self, context, targets, *, cursor=None):
@@ -109,12 +110,12 @@ async def test_automation_stage_writes_back_scenario_outcomes(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_automation_stage_emits_scenario_live(tmp_path):
+async def test_automation_stage_emits_scenario_live(tmp_path, state_store):
     mapping = _make_mapping(
         tmp_path,
         [_scenario("00001-0001", LifecycleStatus.APPROVED)],
     )
-    ctx = _ctx(tmp_path, mapping)
+    ctx = _ctx(tmp_path, mapping, state_store=state_store)
 
     class _Runner:
         async def run(self, context, targets, *, cursor=None):
@@ -130,7 +131,7 @@ async def test_automation_stage_emits_scenario_live(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
+async def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path, state_store):
     """P3 enforcement is explicit at target-build time, not just implicit in the filter."""
     from unittest.mock import patch
 
@@ -138,7 +139,7 @@ async def test_automation_stage_invokes_p3_guard_for_each_target(tmp_path):
         tmp_path,
         [_scenario("00001-0001", LifecycleStatus.APPROVED)],
     )
-    ctx = _ctx(tmp_path, mapping)
+    ctx = _ctx(tmp_path, mapping, state_store=state_store)
 
     class _Runner:
         async def run(self, context, targets, *, cursor=None):

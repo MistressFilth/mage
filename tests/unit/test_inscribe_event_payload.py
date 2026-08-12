@@ -61,7 +61,7 @@ def _make_inscribe_stage(events_log: EventsLog) -> InscribeStage:
 
 
 @pytest.mark.asyncio
-async def test_inscribe_started_event_carries_context_feature_id(tmp_path):
+async def test_inscribe_started_event_carries_context_feature_id(tmp_path, state_store):
     """INSCRIBE_STARTED payload's feature_id == context.feature_id (NOT 'unknown')."""
     project = _seed_project(tmp_path)
     events_log_path = project / "events.jsonl"
@@ -88,6 +88,7 @@ async def test_inscribe_started_event_carries_context_feature_id(tmp_path):
     await mapping.save(project / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=mapping,
         events_log=events_log,
@@ -116,7 +117,9 @@ async def test_inscribe_started_event_carries_context_feature_id(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_inscribe_started_event_empty_when_context_feature_id_empty(tmp_path):
+async def test_inscribe_started_event_empty_when_context_feature_id_empty(
+    tmp_path, state_store
+):
     """Default empty feature_id propagates as '' (not 'unknown')."""
     project = _seed_project(tmp_path)
     events_log_path = project / "events.jsonl"
@@ -143,6 +146,7 @@ async def test_inscribe_started_event_empty_when_context_feature_id_empty(tmp_pa
     await mapping.save(project / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=mapping,
         events_log=events_log,
@@ -170,7 +174,9 @@ async def test_inscribe_started_event_empty_when_context_feature_id_empty(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_inscribe_completed_event_carries_context_feature_id(tmp_path):
+async def test_inscribe_completed_event_carries_context_feature_id(
+    tmp_path, state_store
+):
     """INSCRIBE_COMPLETED payload's feature_id == context.feature_id (NOT 'unknown')."""
     project = _seed_project(tmp_path)
     events_log_path = project / "events.jsonl"
@@ -180,6 +186,7 @@ async def test_inscribe_completed_event_carries_context_feature_id(tmp_path):
     await mapping.save(project / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=mapping,
         events_log=events_log,
@@ -207,7 +214,9 @@ async def test_inscribe_completed_event_carries_context_feature_id(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_inscribe_completed_event_empty_when_context_feature_id_empty(tmp_path):
+async def test_inscribe_completed_event_empty_when_context_feature_id_empty(
+    tmp_path, state_store
+):
     """Default empty feature_id propagates as '' (not 'unknown')."""
     project = _seed_project(tmp_path)
     events_log_path = project / "events.jsonl"
@@ -217,6 +226,7 @@ async def test_inscribe_completed_event_empty_when_context_feature_id_empty(tmp_
     await mapping.save(project / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=mapping,
         events_log=events_log,

@@ -39,7 +39,7 @@ three_amigos:
 
 
 @pytest.mark.asyncio
-async def test_full_decomposition_flow_with_mock_agent(tmp_path):
+async def test_full_decomposition_flow_with_mock_agent(tmp_path, state_store):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -62,7 +62,12 @@ async def test_full_decomposition_flow_with_mock_agent(tmp_path):
 
     host_config = HostConfig(require_plan_approval=False, plan_template_path=None)
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     result_ctx = await stage.run(ctx)
 
@@ -94,7 +99,7 @@ async def test_full_decomposition_flow_with_mock_agent(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_halt_and_resume_cycle(tmp_path):
+async def test_halt_and_resume_cycle(tmp_path, state_store):
     """Verify: Decomposition halts -> mage plan revise -> mage run resumes."""
     import sys
     from unittest.mock import patch
@@ -136,7 +141,12 @@ async def test_halt_and_resume_cycle(tmp_path):
         stages=[decomp_stage, HaltAfterDecomp(log)],
         events_log=log,
     )
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     with pytest.raises(SystemExit) as exc_info:
         await graph.run(ctx)
@@ -191,7 +201,7 @@ async def test_halt_and_resume_cycle(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_approval_gate_required_halts_on_first_run(tmp_path):
+async def test_approval_gate_required_halts_on_first_run(tmp_path, state_store):
     from mage.orchestration.exceptions import StageHalted
 
     project_dir = tmp_path / "project"
@@ -209,7 +219,12 @@ async def test_approval_gate_required_halts_on_first_run(tmp_path):
 
     host_config = HostConfig(require_plan_approval=True)
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     with pytest.raises(StageHalted):
         await stage.run(ctx)
@@ -223,7 +238,7 @@ async def test_approval_gate_required_halts_on_first_run(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_approval_gate_disabled_runs_silently(tmp_path):
+async def test_approval_gate_disabled_runs_silently(tmp_path, state_store):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -239,7 +254,12 @@ async def test_approval_gate_disabled_runs_silently(tmp_path):
 
     host_config = HostConfig(require_plan_approval=False)
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     await stage.run(ctx)
 
@@ -251,7 +271,7 @@ async def test_approval_gate_disabled_runs_silently(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_e2e_approval_resume_after_marker_cleared(tmp_path):
+async def test_e2e_approval_resume_after_marker_cleared(tmp_path, state_store):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -267,7 +287,12 @@ async def test_e2e_approval_resume_after_marker_cleared(tmp_path):
 
     host_config = HostConfig(require_plan_approval=True)
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     # First run: halts and writes marker.
     from mage.orchestration.exceptions import StageHalted
@@ -287,7 +312,7 @@ async def test_e2e_approval_resume_after_marker_cleared(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_e2e_approval_rehalts_on_plan_edit_after_approval(tmp_path):
+async def test_e2e_approval_rehalts_on_plan_edit_after_approval(tmp_path, state_store):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     (project_dir / "ascertain.md").write_text(ASCERTAIN_FULL, encoding="utf-8")
@@ -303,7 +328,12 @@ async def test_e2e_approval_rehalts_on_plan_edit_after_approval(tmp_path):
 
     host_config = HostConfig(require_plan_approval=True)
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     from mage.orchestration.exceptions import StageHalted
 

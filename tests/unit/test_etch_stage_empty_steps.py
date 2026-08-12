@@ -31,11 +31,12 @@ class _NoOpAgent(EtchAgent):
         raise AssertionError("agent.run should not be called when steps is empty")
 
 
-def _context(tmp_path):
+def _context(tmp_path, state_store):
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.nodes import PipelineContext
 
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -45,8 +46,10 @@ def _context(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_scenario_with_empty_steps_emits_final_completion(tmp_path):
-    ctx = _context(tmp_path)
+async def test_run_scenario_with_empty_steps_emits_final_completion(
+    tmp_path, state_store
+):
+    ctx = _context(tmp_path, state_store=state_store)
     agent = _NoOpAgent()
     stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
     target = ScenarioTarget(

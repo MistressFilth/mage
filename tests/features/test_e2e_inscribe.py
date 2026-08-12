@@ -81,7 +81,7 @@ def _canned_inscribe_output() -> InscribeOutput:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
+async def test_e2e_inscribe_happy_path(tmp_path: Path, state_store) -> None:
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     events_path = project_dir / "events.jsonl"
@@ -130,6 +130,7 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -174,7 +175,9 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
+async def test_e2e_inscribe_with_subset_of_reviewers(
+    tmp_path: Path, state_store
+) -> None:
     """When HostConfig.enabled_reviewers is a subset, only those run."""
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
@@ -220,6 +223,7 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -254,7 +258,9 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
+async def test_e2e_inscribe_halts_on_budget_exhaustion(
+    tmp_path: Path, state_store
+) -> None:
     """When reviewers always fail and budget is small, Inscribe halts."""
     from datetime import UTC, datetime
 
@@ -306,6 +312,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -354,7 +361,9 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
+async def test_e2e_inscribe_emits_mechanical_precheck_passed(
+    tmp_path: Path, state_store
+) -> None:
     """With the default empty-check MechanicalVerifier, every scenario
     passes pre-check and emits MECHANICAL_PRECHECK_PASSED before the
     reviewer loop runs."""
@@ -402,6 +411,7 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -438,7 +448,7 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
+async def test_e2e_per_scenario_halt_resume(tmp_path: Path, state_store) -> None:
     """End-to-end halt + resume for Plan 25.
 
     Behavior: scenario-B is already APPROVED on disk (simulates a feature
@@ -524,6 +534,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -626,6 +637,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     # Second run: passing reviewers, scenario-A re-drafts.
     captured.clear()
     second_context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=reloaded,
         events_log=log,

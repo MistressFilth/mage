@@ -37,7 +37,7 @@ def project_dir(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_decomposition_stage_runs_end_to_end(project_dir):
+async def test_decomposition_stage_runs_end_to_end(project_dir, state_store):
     from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
     from mage.artifacts.enumeration import BehaviorSpec
     from mage.artifacts.mapping import MappingArtifact
@@ -70,7 +70,12 @@ async def test_decomposition_stage_runs_end_to_end(project_dir):
 
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
 
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
     result_ctx = await stage.run(ctx)
 
     assert (project_dir / "decomposition.yaml").exists()
@@ -81,7 +86,7 @@ async def test_decomposition_stage_runs_end_to_end(project_dir):
 
 
 @pytest.mark.asyncio
-async def test_decomposition_stage_writes_decomposition_yaml(project_dir):
+async def test_decomposition_stage_writes_decomposition_yaml(project_dir, state_store):
     from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
     from mage.artifacts.enumeration import BehaviorSpec
     from mage.artifacts.mapping import MappingArtifact
@@ -106,7 +111,12 @@ async def test_decomposition_stage_writes_decomposition_yaml(project_dir):
     host_config.plan_template_path = None
 
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
     await stage.run(ctx)
 
     import yaml

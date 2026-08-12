@@ -17,7 +17,9 @@ import pytest
 
 class TestE2EInnerTDDHappyPath:
     @pytest.mark.asyncio
-    async def test_two_senarios_three_increments_each_reach_live(self, tmp_path: Path):
+    async def test_two_senarios_three_increments_each_reach_live(
+        self, tmp_path: Path, state_store
+    ):
         from mage.agents.realize import RealizeAgent, RealizeOutput
         from mage.artifacts.mapping import (
             BaseBIDEntry,
@@ -58,6 +60,7 @@ class TestE2EInnerTDDHappyPath:
             ],
         )
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=mapping,
             events_log=log,
@@ -149,7 +152,7 @@ class TestE2EInnerTDDHappyPath:
 
 class TestE2EPerLoopHalt:
     @pytest.mark.asyncio
-    async def test_mechanical_overflow_halts_scenario(self, tmp_path):
+    async def test_mechanical_overflow_halts_scenario(self, tmp_path, state_store):
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
@@ -160,6 +163,7 @@ class TestE2EPerLoopHalt:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -228,7 +232,7 @@ class TestE2EPerLoopHalt:
 
 class TestE2ESpecRouteHalt:
     @pytest.mark.asyncio
-    async def test_spec_route_finding_halts_scenario(self, tmp_path):
+    async def test_spec_route_finding_halts_scenario(self, tmp_path, state_store):
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
         from mage.orchestration.inspect_loop import InspectLoopStage
@@ -238,6 +242,7 @@ class TestE2ESpecRouteHalt:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -318,7 +323,9 @@ class TestE2ESpecRouteHalt:
 
 class TestE2ECodeRouteCarryForward:
     @pytest.mark.asyncio
-    async def test_code_route_finding_injects_into_next_increment(self, tmp_path):
+    async def test_code_route_finding_injects_into_next_increment(
+        self, tmp_path, state_store
+    ):
         from mage.agents.realize import RealizeAgent, RealizeOutput
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
@@ -330,6 +337,7 @@ class TestE2ECodeRouteCarryForward:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,

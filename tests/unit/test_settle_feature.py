@@ -49,11 +49,14 @@ async def finalize_inspect(
     return path
 
 
-async def make_context(project: Path, *, ready: bool = True) -> PipelineContext:
+async def make_context(
+    project: Path, *, ready: bool = True, state_store
+) -> PipelineContext:
     project.mkdir(parents=True, exist_ok=True)
     log = EventsLog(project / "events.jsonl")
     await finalize_inspect(project, log, ready=ready)
     return PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=MappingArtifact(project_id="feat-1"),
         events_log=log,
@@ -138,11 +141,12 @@ class RecordingRunner:
 
 class TestSettleReadiness:
     @pytest.mark.asyncio
-    async def test_requires_an_inspect_artifact(self, tmp_path):
+    async def test_requires_an_inspect_artifact(self, tmp_path, state_store):
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         context = PipelineContext(
+            state_store=state_store,
             project_dir=project,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
@@ -159,8 +163,10 @@ class TestSettleReadiness:
         assert runner.calls == []
 
     @pytest.mark.asyncio
-    async def test_requires_latest_artifact_to_be_ready(self, tmp_path):
-        context = await make_context(tmp_path / "project", ready=False)
+    async def test_requires_latest_artifact_to_be_ready(self, tmp_path, state_store):
+        context = await make_context(
+            tmp_path / "project", ready=False, state_store=state_store
+        )
         runner = RecordingRunner(context.project_dir)
 
         with pytest.raises(SettleNotReadyError, match="not ready"):
@@ -172,7 +178,7 @@ class TestSettleReadiness:
         assert runner.calls == []
 
     @pytest.mark.asyncio
-    async def test_requires_artifact_feature_id_to_match(self, tmp_path):
+    async def test_requires_artifact_feature_id_to_match(self, tmp_path, state_store):
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
@@ -183,6 +189,7 @@ class TestSettleReadiness:
             content_feature_id="other-feature",
         )
         context = PipelineContext(
+            state_store=state_store,
             project_dir=project,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
@@ -195,8 +202,8 @@ class TestSettleReadiness:
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
     @pytest.mark.asyncio
-    async def test_digest_mismatch_aborts_settle(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_digest_mismatch_aborts_settle(self, tmp_path, state_store):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         inspect_path = context.project_dir / ".mage" / "inspect" / "feat-1" / "1.yaml"
         inspect_path.write_text(inspect_path.read_text() + "# tampered\n")
 
@@ -207,13 +214,16 @@ class TestSettleReadiness:
             ).run_settle(context, feature_id="feat-1", disposition="kept")
 
     @pytest.mark.asyncio
-    async def test_latest_iteration_is_selected_numerically(self, tmp_path):
+    async def test_latest_iteration_is_selected_numerically(
+        self, tmp_path, state_store
+    ):
         project = tmp_path / "project"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         await finalize_inspect(project, log, iteration=9, ready=False)
         await finalize_inspect(project, log, iteration=10, ready=True)
         context = PipelineContext(
+            state_store=state_store,
             project_dir=project,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
@@ -231,8 +241,10 @@ class TestSettleReadiness:
 
 class TestSettleFinalization:
     @pytest.mark.asyncio
-    async def test_failed_tests_emit_halt_without_finalizing(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_failed_tests_emit_halt_without_finalizing(
+        self, tmp_path, state_store
+    ):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         original_mapping = context.mapping
         runner = RecordingRunner(context.project_dir, test_returncodes=[1])
         stage = SettleFeatureStage(context.events_log, command_runner=runner)
@@ -253,8 +265,10 @@ class TestSettleFinalization:
         assert not (context.project_dir / "mapping.yaml").exists()
 
     @pytest.mark.asyncio
-    async def test_keep_writes_reports_and_atomically_settles_mapping(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_keep_writes_reports_and_atomically_settles_mapping(
+        self, tmp_path, state_store
+    ):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         context.mapping = context.mapping.append_cosmetic_finding(
             "feat-1",
             CosmeticFinding(
@@ -290,8 +304,8 @@ class TestSettleFinalization:
         ]
 
     @pytest.mark.asyncio
-    async def test_push_and_pr_executes_both_commands(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_push_and_pr_executes_both_commands(self, tmp_path, state_store):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         runner = RecordingRunner(context.project_dir)
 
         await SettleFeatureStage(
@@ -318,8 +332,10 @@ class TestSettleFinalization:
         ) in runner.calls
 
     @pytest.mark.asyncio
-    async def test_failed_branch_action_does_not_emit_finalized(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_failed_branch_action_does_not_emit_finalized(
+        self, tmp_path, state_store
+    ):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         failing = ["git", "push", "-u", "origin", "feature/inspect-settle"]
         runner = RecordingRunner(context.project_dir, fail_command=failing)
 
@@ -337,10 +353,12 @@ class TestSettleFinalization:
 
     @pytest.mark.asyncio
     async def test_merge_retests_deletes_branch_and_cleans_safe_worktree(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 0])
 
         await SettleFeatureStage(
@@ -368,10 +386,12 @@ class TestSettleFinalization:
 
     @pytest.mark.asyncio
     async def test_discard_force_deletes_branch_and_cleans_safe_worktree(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(project, worktree=True)
 
         await SettleFeatureStage(
@@ -394,9 +414,11 @@ class TestSettleFinalization:
         )
 
     @pytest.mark.asyncio
-    async def test_discard_refuses_harness_owned_worktree_cleanup(self, tmp_path):
+    async def test_discard_refuses_harness_owned_worktree_cleanup(
+        self, tmp_path, state_store
+    ):
         project = tmp_path / "repo" / ".claude" / "worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(project, worktree=True)
 
         with pytest.raises(SettleUnsafeCleanupError, match="provenance"):
@@ -411,9 +433,11 @@ class TestSettleFinalization:
         )
 
     @pytest.mark.asyncio
-    async def test_post_merge_test_failure_rolls_the_base_branch_back(self, tmp_path):
+    async def test_post_merge_test_failure_rolls_the_base_branch_back(
+        self, tmp_path, state_store
+    ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 1])
 
         with pytest.raises(SettleTestsFailed, match="post_merge"):
@@ -442,9 +466,11 @@ class TestSettleFinalization:
         )
 
     @pytest.mark.asyncio
-    async def test_merge_records_skipped_cleanup_for_harness_worktree(self, tmp_path):
+    async def test_merge_records_skipped_cleanup_for_harness_worktree(
+        self, tmp_path, state_store
+    ):
         project = tmp_path / "repo" / ".claude" / "worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(project, worktree=True, test_returncodes=[0, 0])
 
         await SettleFeatureStage(
@@ -471,10 +497,12 @@ class TestSettleFinalization:
 
     @pytest.mark.asyncio
     async def test_discard_aborts_when_head_moved_off_the_feature_branch(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(project, worktree=True, branch_after="main")
 
         with pytest.raises(SettleCommandFailed, match="moved"):
@@ -493,9 +521,11 @@ class TestSettleFinalization:
         )
 
     @pytest.mark.asyncio
-    async def test_conflicted_merge_rolls_the_base_branch_back(self, tmp_path):
+    async def test_conflicted_merge_rolls_the_base_branch_back(
+        self, tmp_path, state_store
+    ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(
             project,
             worktree=True,
@@ -521,9 +551,11 @@ class TestSettleFinalization:
         assert rolled_back.payload["rollback_succeeded"] is True
 
     @pytest.mark.asyncio
-    async def test_failed_rollback_preserves_the_triggering_failure(self, tmp_path):
+    async def test_failed_rollback_preserves_the_triggering_failure(
+        self, tmp_path, state_store
+    ):
         project = tmp_path / "repo" / ".worktrees" / "feature"
-        context = await make_context(project)
+        context = await make_context(project, state_store=state_store)
         runner = RecordingRunner(
             project,
             worktree=True,
@@ -547,8 +579,10 @@ class TestSettleFinalization:
         assert "post_merge" in rolled_back.payload["cause"]
 
     @pytest.mark.asyncio
-    async def test_discard_outside_a_worktree_aborts_when_head_moved(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_discard_outside_a_worktree_aborts_when_head_moved(
+        self, tmp_path, state_store
+    ):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         runner = RecordingRunner(context.project_dir, branch_after="main")
 
         with pytest.raises(SettleCommandFailed, match="moved"):
@@ -566,8 +600,10 @@ class TestSettleFinalization:
         )
 
     @pytest.mark.asyncio
-    async def test_failed_test_event_truncates_captured_output(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_failed_test_event_truncates_captured_output(
+        self, tmp_path, state_store
+    ):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         runner = RecordingRunner(
             context.project_dir,
             test_returncodes=[1],
@@ -591,9 +627,11 @@ class TestSettleFinalization:
 
     @pytest.mark.asyncio
     async def test_report_write_failure_leaves_mapping_unsettled_on_disk(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
-        context = await make_context(tmp_path / "project")
+        context = await make_context(tmp_path / "project", state_store=state_store)
         runner = RecordingRunner(context.project_dir)
         report_path = context.project_dir / ".mage" / "settle" / "feat-1.md"
         report_path.mkdir(parents=True)
@@ -610,8 +648,8 @@ class TestSettleFinalization:
         assert not (context.project_dir / "mapping.yaml").exists()
 
     @pytest.mark.asyncio
-    async def test_run_delegates_to_configured_settle(self, tmp_path):
-        context = await make_context(tmp_path / "project")
+    async def test_run_delegates_to_configured_settle(self, tmp_path, state_store):
+        context = await make_context(tmp_path / "project", state_store=state_store)
         runner = RecordingRunner(context.project_dir)
         stage = SettleFeatureStage(
             context.events_log,

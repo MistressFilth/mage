@@ -88,7 +88,9 @@ def _seed_project(tmp_path: Path) -> Path:
 
 
 @pytest.mark.asyncio
-async def test_inscribe_appends_scenarios_with_context_feature_id(tmp_path):
+async def test_inscribe_appends_scenarios_with_context_feature_id(
+    tmp_path, state_store
+):
     """When context.feature_id is set, every Inscribe-appended scenario carries it.
 
     Plan 14: InscribeStage must thread `context.feature_id` onto every
@@ -119,6 +121,7 @@ async def test_inscribe_appends_scenarios_with_context_feature_id(tmp_path):
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,

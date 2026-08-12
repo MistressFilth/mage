@@ -20,13 +20,14 @@ class CleanMechanicalVerifier:
         return []
 
 
-def make_context(tmp_path) -> PipelineContext:
+def make_context(tmp_path, state_store) -> PipelineContext:
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
 
     log = EventsLog(tmp_path / "events.jsonl")
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="feat-1"),
         events_log=log,
@@ -68,8 +69,8 @@ class RecordingReviewer:
 
 
 @pytest.mark.asyncio
-async def test_enabled_reviewers_none_runs_all_reviewers(tmp_path):
-    context = make_context(tmp_path)
+async def test_enabled_reviewers_none_runs_all_reviewers(tmp_path, state_store):
+    context = make_context(tmp_path, state_store=state_store)
     calls: list[str] = []
     reviewers = [
         RecordingReviewer("spec_compliance", calls),
@@ -98,8 +99,8 @@ async def test_enabled_reviewers_none_runs_all_reviewers(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_enabled_reviewers_subset_runs_only_listed(tmp_path):
-    context = make_context(tmp_path)
+async def test_enabled_reviewers_subset_runs_only_listed(tmp_path, state_store):
+    context = make_context(tmp_path, state_store=state_store)
     calls: list[str] = []
     reviewers = [
         RecordingReviewer("spec_compliance", calls),
@@ -127,8 +128,8 @@ async def test_enabled_reviewers_subset_runs_only_listed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_enabled_reviewers_cross_only_skips_scenario_loop(tmp_path):
-    context = make_context(tmp_path)
+async def test_enabled_reviewers_cross_only_skips_scenario_loop(tmp_path, state_store):
+    context = make_context(tmp_path, state_store=state_store)
     calls: list[str] = []
     reviewers = [
         RecordingReviewer("spec_compliance", calls),
@@ -154,8 +155,8 @@ async def test_enabled_reviewers_cross_only_skips_scenario_loop(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_enabled_reviewers_empty_list_runs_none(tmp_path):
-    context = make_context(tmp_path)
+async def test_enabled_reviewers_empty_list_runs_none(tmp_path, state_store):
+    context = make_context(tmp_path, state_store=state_store)
     calls: list[str] = []
     reviewers = [
         RecordingReviewer("spec_compliance", calls),
@@ -178,8 +179,10 @@ async def test_enabled_reviewers_empty_list_runs_none(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_enabled_reviewers_unknown_dimension_silently_filtered(tmp_path):
-    context = make_context(tmp_path)
+async def test_enabled_reviewers_unknown_dimension_silently_filtered(
+    tmp_path, state_store
+):
+    context = make_context(tmp_path, state_store=state_store)
     calls: list[str] = []
     reviewers = [
         RecordingReviewer("spec_compliance", calls),

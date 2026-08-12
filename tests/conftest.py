@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from mage.artifacts.mapping import MappingArtifact
+from mage.state_store import StateStore
 
 
 @pytest.fixture
@@ -16,6 +18,22 @@ def tmp_project_dir(tmp_path: Path) -> Path:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     return project_dir
+
+
+@pytest.fixture
+def state_store(tmp_path: Path) -> StateStore:
+    """A real ``StateStore`` with a ``MagicMock`` command runner (P32).
+
+    Tests construct ``PipelineContext(state_store=state_store, ...)`` to
+    match the production injection pattern. The runner is a mock so tests
+    never shell out.
+    """
+    return StateStore(
+        tmp_path,
+        "feature-artifacts",
+        identity=("T", "t@e"),
+        command_runner=MagicMock(),
+    )
 
 
 @pytest.fixture

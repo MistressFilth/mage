@@ -23,10 +23,14 @@ class CleanMechanicalVerifier:
 
 
 def make_context(
-    tmp_path, *, mapping: MappingArtifact | None = None
+    tmp_path,
+    *,
+    mapping: MappingArtifact | None = None,
+    state_store,
 ) -> PipelineContext:
     log = EventsLog(tmp_path / "events.jsonl")
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=mapping or MappingArtifact(project_id="feat-1"),
         events_log=log,
@@ -85,9 +89,11 @@ def make_reviewer(
 class TestInspectFeatureStage:
     @pytest.mark.asyncio
     async def test_passes_when_all_reviewers_clean_and_attaches_artifact(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         reviewers = [
             make_reviewer(dimension)
             for dimension in (
@@ -128,7 +134,7 @@ class TestInspectFeatureStage:
         assert "inspect_feature_passed" in event_types
 
     @pytest.mark.asyncio
-    async def test_critical_finding_marks_feature_pending(self, tmp_path):
+    async def test_critical_finding_marks_feature_pending(self, tmp_path, state_store):
         finding = ReviewerFinding(
             id="f-1",
             severity="critical",
@@ -138,7 +144,7 @@ class TestInspectFeatureStage:
             suggestion="Fix",
             citations=["000000"],
         )
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         stage = InspectFeatureStage(
             context.events_log,
             reviewers=[make_reviewer("spec_compliance", findings=[finding])],
@@ -157,14 +163,14 @@ class TestInspectFeatureStage:
         assert context.mapping.feature_status == "inspect_pending"
 
     @pytest.mark.asyncio
-    async def test_reviewer_errors_fail_closed(self, tmp_path):
+    async def test_reviewer_errors_fail_closed(self, tmp_path, state_store):
         class BrokenReviewer:
             dimension = "spec_compliance"
 
             async def run(self, **kwargs):
                 raise RuntimeError("review backend unavailable")
 
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         stage = InspectFeatureStage(
             context.events_log,
             reviewers=[BrokenReviewer()],
@@ -185,7 +191,9 @@ class TestInspectFeatureStage:
         )
 
     @pytest.mark.asyncio
-    async def test_real_registry_runs_through_stage_with_injected_model(self, tmp_path):
+    async def test_real_registry_runs_through_stage_with_injected_model(
+        self, tmp_path, state_store
+    ):
         from pydantic_ai.models.test import TestModel
 
         from mage.verification.reviewers.registry import feature_reviewer_registry
@@ -201,7 +209,7 @@ class TestInspectFeatureStage:
         reviewers = feature_reviewer_registry(
             model=TestModel(custom_output_args=canned)
         )
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         stage = InspectFeatureStage(
             context.events_log,
             reviewers=reviewers,
@@ -230,7 +238,9 @@ class TestInspectFeatureStage:
 
     @pytest.mark.asyncio
     async def test_full_default_mechanical_precheck_blocks_llm_reviewers(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         feature_path = tmp_path / "happy.feature"
         feature_path.write_text(
@@ -249,7 +259,7 @@ class TestInspectFeatureStage:
                 )
             ],
         )
-        context = make_context(tmp_path, mapping=mapping)
+        context = make_context(tmp_path, mapping=mapping, state_store=state_store)
         verifier = MechanicalVerifier(
             checks=default_check_set(
                 registered_tags={"@status-live"},
@@ -292,7 +302,9 @@ class TestInspectFeatureStage:
         assert mechanical["findings"]
 
     @pytest.mark.asyncio
-    async def test_reviews_every_scenario_with_real_body_and_tags(self, tmp_path):
+    async def test_reviews_every_scenario_with_real_body_and_tags(
+        self, tmp_path, state_store
+    ):
         reviewed = []
         cross_scenarios = []
 
@@ -322,7 +334,7 @@ class TestInspectFeatureStage:
             make_scenario("000001", "second", "Given second\nWhen B\nThen two"),
             make_scenario("000002", "third", "Given third\nWhen C\nThen three"),
         ]
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         stage = InspectFeatureStage(
             context.events_log,
             reviewers=[RecordingReviewer(), CrossReviewer()],
@@ -345,7 +357,9 @@ class TestInspectFeatureStage:
 
     @pytest.mark.asyncio
     async def test_minor_findings_append_cosmetic_queue_and_cross_field_is_findings(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         finding = ReviewerFinding(
             id="minor-1",
@@ -356,7 +370,7 @@ class TestInspectFeatureStage:
             suggestion="Rephrase the Given",
             citations=["000000"],
         )
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         stage = InspectFeatureStage(
             context.events_log,
             reviewers=[make_reviewer("cross_scenario", findings=[finding])],
@@ -385,7 +399,9 @@ class TestInspectFeatureStage:
 
     @pytest.mark.asyncio
     async def test_important_findings_dispatch_one_brief_and_retry_until_clean(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         findings = [
             ReviewerFinding(
@@ -416,7 +432,7 @@ class TestInspectFeatureStage:
         def dispatch_fix_wave(**kwargs):
             dispatches.append(kwargs)
 
-        context = make_context(tmp_path)
+        context = make_context(tmp_path, state_store=state_store)
         stage = InspectFeatureStage(
             context.events_log,
             reviewers=[ImportantThenCleanReviewer()],

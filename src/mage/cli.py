@@ -36,6 +36,7 @@ from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.providers.config import load_xdg_providers
+from mage.state_store import state_store_for
 from mage.verification.host_overrides import default_check_set, load_host_config
 from mage.verification.mechanical import (
     MechanicalVerifier,
@@ -549,6 +550,9 @@ async def cmd_run(args):
             schema_version=2, project_id=project_dir.name, base_bids=[]
         )
 
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+
     persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
     saved = persistence.load_state()
     if saved is not None:
@@ -560,6 +564,7 @@ async def cmd_run(args):
     else:
         initial_context = PipelineContext(
             project_dir=project_dir,
+            state_store=state_store,
             mapping=mapping,
             events_log=log,
             plan_path=project_dir / "plan.md",
@@ -694,8 +699,12 @@ async def cmd_settle_run(args):
             base_bids=[],
         )
 
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+
     ctx = PipelineContext(
         project_dir=project_dir,
+        state_store=state_store,
         mapping=mapping,
         events_log=log,
         plan_path=project_dir / "plan.md",

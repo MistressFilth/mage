@@ -44,8 +44,9 @@ def test_inspect_journal_entry_defaults_feature_id_to_empty():
     assert entry.feature_id == ""
 
 
-def test_pipeline_context_feature_id_defaults_to_empty():
+def test_pipeline_context_feature_id_defaults_to_empty(state_store):
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=Path("/tmp"),
         mapping=MappingArtifact(schema_version=2, project_id="p"),
         events_log="/tmp/events.jsonl",
@@ -53,8 +54,9 @@ def test_pipeline_context_feature_id_defaults_to_empty():
     assert ctx.feature_id == ""
 
 
-def test_pipeline_context_accepts_feature_id():
+def test_pipeline_context_accepts_feature_id(state_store):
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=Path("/tmp"),
         mapping=MappingArtifact(schema_version=2, project_id="p"),
         events_log="/tmp/events.jsonl",

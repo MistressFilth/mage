@@ -299,6 +299,7 @@ def _make_pass_duck_reviewer(dimension: str):
 @pytest.mark.asyncio
 async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
     tmp_path: Path,
+    state_store,
 ):
     """Drive Inscribe + InspectFeature through the Python API.
 
@@ -314,6 +315,7 @@ async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
 
     mapping = MappingArtifact.load(project_dir / "mapping.yaml")
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,

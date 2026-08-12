@@ -6,12 +6,14 @@ import asyncio
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.runner import AutomationCursor
+from mage.state_store import StateStore, state_store_for
 from mage.verification.host_overrides import HostConfig
 
 
@@ -21,6 +23,7 @@ class PipelineContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     project_dir: Path
+    state_store: StateStore  # P32: required; in-memory only (excluded from dump)
     mapping: MappingArtifact
     events_log: EventsLog
     current_stage: str | None = None
@@ -30,6 +33,41 @@ class PipelineContext(BaseModel):
     automation_cursor: AutomationCursor | None = None
     host_config: HostConfig | None = None
     feature_id: str = ""
+
+    @field_serializer("state_store")
+    def _serialize_state_store(self, store: StateStore) -> dict[str, str]:
+        """Persist the StateStore as a {project_root, branch_name} stub.
+
+        The CommandRunner is not serializable; we re-derive identity and the
+        runner via ``state_store_for`` on load.
+        """
+        return {
+            "project_root": str(store.project_root),
+            "branch_name": store.branch_name,
+        }
+
+    @field_validator("state_store", mode="before")
+    @classmethod
+    def _deserialize_state_store(cls, value: object) -> object:
+        """Reconstruct StateStore from a persisted stub dict on load.
+
+        Pass-through when the value is already a StateStore instance (the
+        normal construction path).
+        """
+        if isinstance(value, dict):
+            from mage.host_project_config import MageTomlConfig
+
+            project_root_str = value.get("project_root")
+            branch_name = value.get("branch_name")
+            if not isinstance(project_root_str, str) or not isinstance(
+                branch_name, str
+            ):
+                return value
+            return state_store_for(
+                Path(project_root_str),
+                MageTomlConfig(orphan_branch=branch_name),
+            )
+        return value
 
     @field_serializer("events_log")
     def _serialize_events_log(self, log: EventsLog) -> str:
@@ -53,6 +91,15 @@ class PipelineContext(BaseModel):
             if project_dir is not None:
                 return project_dir / "plan.md"
         return value
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # state_store is bound at construction; reassignment is forbidden so a
+        # downstream stage cannot silently swap it under the pipeline.
+        if name == "state_store" and "state_store" in self.__dict__:
+            raise AttributeError(
+                "state_store is immutable; construct a new PipelineContext instead"
+            )
+        super().__setattr__(name, value)
 
     def __init__(self, **data: object) -> None:
         super().__init__(**data)

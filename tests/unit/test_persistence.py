@@ -67,7 +67,9 @@ class TestFileStatePersistence:
         quarantined = list((tmp_path / "state").glob("pipeline-state.yaml.corrupt.*"))
         assert len(quarantined) == 1
 
-    def test_pipeline_context_round_trip_through_persistence(self, tmp_path: Path):
+    def test_pipeline_context_round_trip_through_persistence(
+        self, tmp_path: Path, state_store
+    ):
         """PipelineContext with EventsLog survives FileStatePersistence round-trip."""
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import EventsLog
@@ -75,6 +77,7 @@ class TestFileStatePersistence:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(schema_version=2, project_id="rt", base_bids=[]),
             events_log=log,

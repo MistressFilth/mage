@@ -15,7 +15,10 @@ from mage.orchestration.nodes import PipelineContext
 
 
 def _ctx(
-    tmp_path: Path, scenario_status: LifecycleStatus = LifecycleStatus.LIVE
+    tmp_path: Path,
+    scenario_status: LifecycleStatus = LifecycleStatus.LIVE,
+    *,
+    state_store,
 ) -> PipelineContext:
     m = MappingArtifact(
         project_id="p",
@@ -38,13 +41,16 @@ def _ctx(
         ],
     )
     return PipelineContext(
-        project_dir=tmp_path, mapping=m, events_log=EventsLog(tmp_path / "events.jsonl")
+        state_store=state_store,
+        project_dir=tmp_path,
+        mapping=m,
+        events_log=EventsLog(tmp_path / "events.jsonl"),
     )
 
 
 @pytest.mark.asyncio
-async def test_stage_releases_lock_on_scenario_approved(tmp_path):
-    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED)
+async def test_stage_releases_lock_on_scenario_approved(tmp_path, state_store):
+    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED, state_store=state_store)
     ctx.current_sub_bid = "A"
     stage = DisciplineStage(ctx.events_log)
     await stage._handle_event(
@@ -59,8 +65,8 @@ async def test_stage_releases_lock_on_scenario_approved(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_calls_begin_revision_on_revision_requested(tmp_path):
-    ctx = _ctx(tmp_path, LifecycleStatus.LIVE)
+async def test_stage_calls_begin_revision_on_revision_requested(tmp_path, state_store):
+    ctx = _ctx(tmp_path, LifecycleStatus.LIVE, state_store=state_store)
     stage = DisciplineStage(ctx.events_log)
     await stage._handle_event(
         ctx,
@@ -82,7 +88,9 @@ async def test_stage_calls_begin_revision_on_revision_requested(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_calls_begin_supersession_on_supersession_requested(tmp_path):
+async def test_stage_calls_begin_supersession_on_supersession_requested(
+    tmp_path, state_store
+):
     new_entry = BaseBIDEntry(
         base_bid="00001",
         behavior_name="b1",
@@ -98,7 +106,7 @@ async def test_stage_calls_begin_supersession_on_supersession_requested(tmp_path
         ],
         behavior_halt=[],
     )
-    ctx = _ctx(tmp_path)
+    ctx = _ctx(tmp_path, state_store=state_store)
     ctx.mapping = MappingArtifact(
         project_id="p",
         base_bids=[
@@ -136,8 +144,10 @@ async def test_stage_calls_begin_supersession_on_supersession_requested(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_stage_completes_pending_supersession_on_scenario_live(tmp_path):
-    ctx = _ctx(tmp_path)
+async def test_stage_completes_pending_supersession_on_scenario_live(
+    tmp_path, state_store
+):
+    ctx = _ctx(tmp_path, state_store=state_store)
     ctx.mapping = MappingArtifact(
         project_id="p",
         base_bids=[
@@ -191,8 +201,8 @@ async def test_stage_completes_pending_supersession_on_scenario_live(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_idempotent_on_duplicate_scenario_approved(tmp_path):
-    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED)
+async def test_stage_idempotent_on_duplicate_scenario_approved(tmp_path, state_store):
+    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED, state_store=state_store)
     ctx.current_sub_bid = "A"
     stage = DisciplineStage(ctx.events_log)
     for _ in range(3):
@@ -208,8 +218,8 @@ async def test_stage_idempotent_on_duplicate_scenario_approved(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_emits_reverted_event_on_revision(tmp_path):
-    ctx = _ctx(tmp_path, LifecycleStatus.LIVE)
+async def test_stage_emits_reverted_event_on_revision(tmp_path, state_store):
+    ctx = _ctx(tmp_path, LifecycleStatus.LIVE, state_store=state_store)
     stage = DisciplineStage(ctx.events_log)
     await stage._handle_event(
         ctx,
@@ -231,8 +241,10 @@ async def test_stage_emits_reverted_event_on_revision(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_emits_deprecated_event_on_supersession_complete(tmp_path):
-    ctx = _ctx(tmp_path)
+async def test_stage_emits_deprecated_event_on_supersession_complete(
+    tmp_path, state_store
+):
+    ctx = _ctx(tmp_path, state_store=state_store)
     ctx.mapping = MappingArtifact(
         project_id="p",
         base_bids=[
@@ -290,7 +302,7 @@ def _reversion_log_for(mapping: MappingArtifact, sub_bid: str) -> list:
 
 
 @pytest.mark.asyncio
-async def test_stage_idempotent_on_duplicate_revision_requested(tmp_path):
+async def test_stage_idempotent_on_duplicate_revision_requested(tmp_path, state_store):
     """Replaying the same revision event must not duplicate state.
 
     Three dispatches of SCENARIO_REVISION_REQUESTED for the same sub_bid
@@ -300,7 +312,7 @@ async def test_stage_idempotent_on_duplicate_revision_requested(tmp_path):
     short-circuited so they neither append duplicate audit entries nor
     corrupt the reversion log.
     """
-    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED)
+    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED, state_store=state_store)
     stage = DisciplineStage(ctx.events_log)
     payload = {
         "sub_bid": "A",
@@ -335,14 +347,16 @@ async def test_stage_idempotent_on_duplicate_revision_requested(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_idempotent_on_duplicate_supersession_requested(tmp_path):
+async def test_stage_idempotent_on_duplicate_supersession_requested(
+    tmp_path, state_store
+):
     """Replaying the same supersession event must not duplicate state.
 
     Three dispatches of SCENARIO_SUPERSESSION_REQUESTED for the same
     (old_sub_bid, new_sub_bid) pair produce one supersession reversion log
     entry for the old scenario.
     """
-    ctx = _ctx(tmp_path)
+    ctx = _ctx(tmp_path, state_store=state_store)
     ctx.mapping = MappingArtifact(
         project_id="p",
         base_bids=[
@@ -393,14 +407,14 @@ async def test_stage_idempotent_on_duplicate_supersession_requested(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_idempotent_on_duplicate_scenario_live(tmp_path):
+async def test_stage_idempotent_on_duplicate_scenario_live(tmp_path, state_store):
     """Replaying the same live event must not duplicate supersession completion.
 
     Three dispatches of SCENARIO_LIVE for the same new_sub_bid complete the
     supersession once: one SCENARIO_DEPRECATED event and one supersession-
     completion log entry.
     """
-    ctx = _ctx(tmp_path)
+    ctx = _ctx(tmp_path, state_store=state_store)
     ctx.mapping = MappingArtifact(
         project_id="p",
         base_bids=[
@@ -462,11 +476,13 @@ async def test_stage_idempotent_on_duplicate_scenario_live(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stage_scenario_approved_does_not_release_lock_held_by_other(tmp_path):
+async def test_stage_scenario_approved_does_not_release_lock_held_by_other(
+    tmp_path, state_store
+):
     """A stale SCENARIO_APPROVED for sub_bid B must not clear the lock for A."""
     from mage.orchestration.discipline.policy import acquire_cycle_lock
 
-    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED)
+    ctx = _ctx(tmp_path, LifecycleStatus.APPROVED, state_store=state_store)
     await acquire_cycle_lock(ctx, "A")
     assert ctx.current_sub_bid == "A"
 

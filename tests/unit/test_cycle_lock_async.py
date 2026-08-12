@@ -12,8 +12,9 @@ from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext
 
 
-def _ctx(tmp_path):
+def _ctx(tmp_path, state_store):
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(
             project_id="p",
@@ -30,16 +31,16 @@ def _ctx(tmp_path):
     )
 
 
-def test_get_cycle_lock_returns_same_instance(tmp_path):
-    ctx = _ctx(tmp_path)
+def test_get_cycle_lock_returns_same_instance(tmp_path, state_store):
+    ctx = _ctx(tmp_path, state_store=state_store)
     a = ctx._get_cycle_lock()
     b = ctx._get_cycle_lock()
     assert a is b
 
 
-def test_get_cycle_lock_threadsafe_init(tmp_path):
+def test_get_cycle_lock_threadsafe_init(tmp_path, state_store):
     """Concurrent first-touch must yield exactly one lock instance."""
-    ctx = _ctx(tmp_path)
+    ctx = _ctx(tmp_path, state_store=state_store)
     locks = []
 
     def grab():

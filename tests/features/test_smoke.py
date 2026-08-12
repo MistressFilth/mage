@@ -37,7 +37,7 @@ class CountingStage(StageNode):
 
 class TestFoundationEndToEnd:
     @pytest.mark.asyncio
-    async def test_full_flow(self, tmp_project_dir: Path):
+    async def test_full_flow(self, tmp_project_dir: Path, state_store):
         # 1. Mapping artifact: create with one base BID.
         mapping = MappingArtifact(
             schema_version=2,
@@ -78,6 +78,7 @@ class TestFoundationEndToEnd:
         state_dir = tmp_project_dir / "state"
         persistence = FileStatePersistence(state_dir, PipelineContext)
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=loaded,
             events_log=EventsLog(tmp_project_dir / "events.jsonl"),

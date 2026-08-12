@@ -112,7 +112,7 @@ def _canned_inscribe_output() -> InscribeOutput:
 
 
 @pytest.mark.asyncio
-async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
+async def test_e2e_revision_full_loop(tmp_path: Path, state_store) -> None:
     """Full revision loop: APPROVED → begin_revision → INSCRIBING → APPROVED.
 
     Mirrors what the Inspect-loop spec-route finding would trigger, but
@@ -166,6 +166,7 @@ async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -250,7 +251,7 @@ async def test_e2e_revision_full_loop(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
+async def test_e2e_supersession_full_loop(tmp_path: Path, state_store) -> None:
     """Full supersession loop: SCENARIO_SUPERSESSION_REQUESTED → SCENARIO_LIVE.
 
     Drives ``DisciplineStage._handle_event`` end-to-end so the test
@@ -296,6 +297,7 @@ async def test_e2e_supersession_full_loop(tmp_path: Path) -> None:
     )
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,

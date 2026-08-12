@@ -11,9 +11,12 @@ from mage.orchestration.inspect_feature import InspectFeatureStage
 from mage.orchestration.nodes import PipelineContext
 
 
-def _make_pipeline_context(tmp_path: Path, feature_id: str) -> PipelineContext:
+def _make_pipeline_context(
+    tmp_path: Path, feature_id: str, state_store
+) -> PipelineContext:
     mapping = MappingArtifact(schema_version=2, project_id="p", base_bids=[])
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=mapping,
         events_log=str(tmp_path / "events.jsonl"),
@@ -21,9 +24,11 @@ def _make_pipeline_context(tmp_path: Path, feature_id: str) -> PipelineContext:
     )
 
 
-def test_append_cosmetics_threads_feature_id_from_caller(tmp_path):
+def test_append_cosmetics_threads_feature_id_from_caller(tmp_path, state_store):
     """Cosmetic-queue entry carries the feature_id threaded by the caller, not 'unknown'."""
-    context = _make_pipeline_context(tmp_path, feature_id="")  # staging
+    context = _make_pipeline_context(
+        tmp_path, feature_id="", state_store=state_store
+    )  # staging
     stage = InspectFeatureStage.__new__(InspectFeatureStage)  # bypass __init__
     stage.events_log = EventsLog(tmp_path / "events.jsonl")
 
@@ -51,9 +56,9 @@ def test_append_cosmetics_threads_feature_id_from_caller(tmp_path):
     assert queue[0].get("feature_id") != "unknown"
 
 
-def test_append_cosmetics_propagates_empty_feature_id(tmp_path):
+def test_append_cosmetics_propagates_empty_feature_id(tmp_path, state_store):
     """Empty feature_id from caller remains empty string in queue (no 'unknown' fallback)."""
-    context = _make_pipeline_context(tmp_path, feature_id="")
+    context = _make_pipeline_context(tmp_path, feature_id="", state_store=state_store)
     stage = InspectFeatureStage.__new__(InspectFeatureStage)
     stage.events_log = EventsLog(tmp_path / "events.jsonl")
 

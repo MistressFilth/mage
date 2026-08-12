@@ -63,9 +63,14 @@ def _stage(
     )
 
 
-def _ctx(project_dir: Path, log: EventsLog) -> PipelineContext:
+def _ctx(project_dir: Path, log: EventsLog, state_store) -> PipelineContext:
     mapping = MappingArtifact(project_id="feat-001")
-    return PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    return PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
 
 @pytest.mark.asyncio

@@ -23,12 +23,19 @@ class HaltStage(StageNode):
 
 
 @pytest.mark.asyncio
-async def test_graph_runner_catches_stage_halted_emits_halt_persisted(tmp_path):
+async def test_graph_runner_catches_stage_halted_emits_halt_persisted(
+    tmp_path, state_store
+):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     log = EventsLog(project_dir / "events.jsonl")
     mapping = MappingArtifact(project_id="feat-001")
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
 
     graph = PipelineGraph(stages=[HaltStage(log)], events_log=log)
     with pytest.raises(SystemExit) as exc_info:
