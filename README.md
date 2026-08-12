@@ -170,8 +170,10 @@ configured — which keeps the CLI deterministic with no credentials present.
 prints the planned file edits. `mage cosmetic apply <feature-id>` writes the
 edits and commits each one. `--dry-run` refines and emits audit events
 (`COSMETIC_ITEM_SKIPPED`) without touching files or creating commits. State is
-persisted at `.mage/cosmetic_applied.yaml` so re-runs skip sub_bids whose
-content hash matches the prior apply; a different hash re-applies.
+persisted at `cosmetic/cosmetic_applied.yaml` on the orphan branch
+(`refs/mage/<orphan_branch>`, default `refs/mage/feature-artifacts`) so re-runs
+skip sub_bids whose content hash matches the prior apply; a different hash
+re-applies.
 
 ### Cosmetic queue control
 
@@ -179,8 +181,8 @@ The cosmetic queue can now be inspected and controlled directly.
 
 | Command | Purpose |
 |---|---|
-| `mage cosmetic watch` | Long-running daemon; writes a PID file at `<project>/.mage/cosmetic_watcher.pid`. |
-| `mage cosmetic unwatch` | Stop the daemon via the PID file (SIGTERM, escalate with `--force`). |
+| `mage cosmetic watch` | Long-running daemon; writes `cosmetic_watcher.pid` on the orphan branch (`refs/mage/<orphan_branch>:cosmetic_watcher.pid`). |
+| `mage cosmetic unwatch` | Stop the daemon via the orphan-branch PID file (SIGTERM, escalate with `--force`). |
 | `mage cosmetic list <feature_id>` | Row-per-entry table of pending cosmetic items; `--format json`. |
 | `mage cosmetic show <feature_id>` | Refined output (LLM). `--raw` skips the LLM. `--journal` adds the inspect journal for the same feature. |
 | `mage cosmetic apply <feature_id>` | Apply pending items to disk; `--filter sub_bid=...` narrows. |
@@ -190,14 +192,16 @@ queue to a literal sub_bid set.
 
 ## Plan approval
 
-When `HostConfig.require_plan_approval=True` (in `.mage/config.yaml`), the
-decomposition stage halts after rendering `plan.md` and waits for an operator
-to clear the gate before the plan is finalized. Two events mark the boundary:
+When `HostConfig.require_plan_approval=True` (host config is read from the
+orphan branch at `host_config.yaml`), the decomposition stage halts after
+rendering `plan.md` and waits for an operator to clear the gate before the
+plan is finalized. Two events mark the boundary:
 
 - `APPROVAL_REQUESTED` — the gate has halted; a marker is on disk.
 - `APPROVAL_GRANTED` — the gate cleared; the plan finalizes.
 
-The marker file lives at `<project_dir>/.mage/approval_pending.json` and holds
+The marker file lives on the orphan branch at
+`refs/mage/<orphan_branch>:approval_pending.json` and holds
 `{feature_id, plan_digest, plan_path, requested_at}`. The digest binds the
 marker to the exact plan content that was rendered — editing the plan invalidates
 the marker.
@@ -207,10 +211,13 @@ the marker.
 1. The pipeline halts with `StageHalted(reason="plan_approval")`. The marker is
    written and `APPROVAL_REQUESTED` is appended to `events.jsonl`.
 2. Review `<project_dir>/plan.md`. Then either:
-   - **Approve.** Delete the marker (`rm <project_dir>/.mage/approval_pending.json`)
-     and re-run `mage run`. The next run sees the marker absent, finds a prior
-     `APPROVAL_REQUESTED` for the same digest in `events.jsonl`, emits
-     `APPROVAL_GRANTED`, and finalizes the plan.
+   - **Approve.** Re-run `mage run` after the next pipeline tick — the
+     gate sees the marker on the orphan branch with a matching digest,
+     emits `APPROVAL_GRANTED`, and finalizes the plan. To pre-clear the
+     marker for batch approval, run
+     `mage state restore --from=<ts>` to revert migration, manually
+     delete the legacy marker, then re-migrate. To check the marker
+     location, use `mage state show approval_pending.json`.
    - **Request a revision.** Edit `plan.md`, re-run `mage run`. The new plan
      produces a new digest; the old marker is stale, so the gate overwrites it
      and re-halts with `StageHalted(reason="plan_approval_stale")`.
@@ -223,7 +230,7 @@ the marker.
 Automated runs should disable the gate at the host config:
 
 ```yaml
-# .mage/config.yaml
+# host_config.yaml (read from refs/mage/<orphan_branch>:host_config.yaml)
 host_config:
   require_plan_approval: false
 ```
