@@ -50,7 +50,9 @@ async def _plant_fixture(
     """Plant a fixture project ready for ``mage run --dry-run``.
 
     Writes:
-    - ``mapping.yaml`` with one APPROVED scenario under ``base_bid``.
+    - ``mapping.yaml`` with one APPROVED scenario under ``base_bid`` (P32:
+      also seeded onto the orphan branch so the CLI can read it via
+      ``state_store``).
     - ``plan.md`` (empty placeholder; ``Plan`` finalization is Plan 2).
     - ``events.jsonl`` (empty; the events log touches itself on open).
 
@@ -92,6 +94,34 @@ async def _plant_fixture(
         behavior_halt=[],
     )
     await mapping.save(project_dir / "mapping.yaml")
+
+    # P32: init a git repo and seed the mapping onto the orphan branch so
+    # the production CLI (which reads via the state store) can find it.
+    import asyncio
+    import subprocess
+
+    from mage.state_store import StateStore
+
+    def _init_git() -> None:
+        subprocess.run(
+            ["git", "init"], cwd=project_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "t@e"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+
+    await asyncio.to_thread(_init_git)
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    await mapping.save_to_state_store(state_store)
 
     # Empty placeholders. The pipeline needs both files to exist on disk.
     (project_dir / "plan.md").touch()
@@ -307,8 +337,14 @@ async def test_mage_run_resumes_from_persisted_cursor(
     assert exc_info.value.code == 0
 
     # The cursor was persisted.
-    state_dir = project_dir / ".mage" / "state"
-    persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
+    # P32: mapping lives on the orphan branch; read via the state store.
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.state_store import StateStore
+
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    persistence = FileStatePersistence(
+        state_store=state_store, state_type=PipelineContext
+    )
     saved = persistence.load_state()
     assert saved is not None
     assert saved.automation_cursor is not None
@@ -317,9 +353,7 @@ async def test_mage_run_resumes_from_persisted_cursor(
     assert saved.automation_cursor.iteration == 1
 
     # The mapping was marked halted.
-    from mage.artifacts.mapping import MappingArtifact
-
-    halted_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    halted_mapping = MappingArtifact.load_from_state_store(state_store)
     assert halted_mapping.feature_status == "halted"
 
     # Second run: repair the fixture (swap to the real dry-run runner) and run.

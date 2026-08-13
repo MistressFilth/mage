@@ -62,12 +62,13 @@ def _target(sub_bid: str = "00001-0001") -> ScenarioTarget:
     )
 
 
-def _ctx(tmp_path):
+def _ctx(tmp_path, state_store):
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
 
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -77,7 +78,7 @@ def _ctx(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_clean_increment_produces_one_scenario_outcome(tmp_path):
+async def test_clean_increment_produces_one_scenario_outcome(tmp_path, state_store):
     target = _target()
 
     class _Etch:
@@ -103,14 +104,14 @@ async def test_clean_increment_produces_one_scenario_outcome(tmp_path):
         etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8
     )  # type: ignore[arg-type]
 
-    outcomes = await runner.run(_ctx(tmp_path), [target])
+    outcomes = await runner.run(_ctx(tmp_path, state_store=state_store), [target])
 
     assert outcomes == [ScenarioOutcome(sub_bid="00001-0001", test_paths=["t.py"])]
     assert runner.cursor is None  # cleared after a clean scenario
 
 
 @pytest.mark.asyncio
-async def test_code_route_re_loops_until_clean(tmp_path):
+async def test_code_route_re_loops_until_clean(tmp_path, state_store):
     target = _target()
 
     class _Etch:
@@ -157,14 +158,14 @@ async def test_code_route_re_loops_until_clean(tmp_path):
         etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8
     )  # type: ignore[arg-type]
 
-    outcomes = await runner.run(_ctx(tmp_path), [target])
+    outcomes = await runner.run(_ctx(tmp_path, state_store=state_store), [target])
 
     assert len(outcomes) == 1
     assert reviewer.calls == 2  # two inspect calls before clean
 
 
 @pytest.mark.asyncio
-async def test_spec_route_raises_scenario_inspect_halted(tmp_path):
+async def test_spec_route_raises_scenario_inspect_halted(tmp_path, state_store):
     from mage.orchestration.etch import ScenarioInspectHalted
 
     target = _target()
@@ -193,11 +194,11 @@ async def test_spec_route_raises_scenario_inspect_halted(tmp_path):
     )  # type: ignore[arg-type]
 
     with pytest.raises(ScenarioInspectHalted):
-        await runner.run(_ctx(tmp_path), [target])
+        await runner.run(_ctx(tmp_path, state_store), [target])
 
 
 @pytest.mark.asyncio
-async def test_cosmetic_only_does_not_re_loop(tmp_path):
+async def test_cosmetic_only_does_not_re_loop(tmp_path, state_store):
     target = _target()
 
     class _Etch:
@@ -225,13 +226,13 @@ async def test_cosmetic_only_does_not_re_loop(tmp_path):
         etch=etch, realize=realize, inspect_loop=inspect, per_loop_max_iterations=8
     )  # type: ignore[arg-type]
 
-    await runner.run(_ctx(tmp_path), [target])
+    await runner.run(_ctx(tmp_path, state_store), [target])
 
     assert calls["n"] == 1
 
 
 @pytest.mark.asyncio
-async def test_resume_skips_completed_scenarios(tmp_path):
+async def test_resume_skips_completed_scenarios(tmp_path, state_store):
     """First scenario is already done; resume at the second."""
     t1 = _target(sub_bid="00001-0001")
     t2 = _target(sub_bid="00001-0002")
@@ -260,14 +261,16 @@ async def test_resume_skips_completed_scenarios(tmp_path):
     )  # type: ignore[arg-type]
     cursor = AutomationCursor(sub_bid="00001-0002", increment_index=0, iteration=1)
 
-    outcomes = await runner.run(_ctx(tmp_path), [t1, t2], cursor=cursor)
+    outcomes = await runner.run(
+        _ctx(tmp_path, state_store=state_store), [t1, t2], cursor=cursor
+    )
 
     assert etch_calls == ["00001-0002"]
     assert outcomes == [ScenarioOutcome(sub_bid="00001-0002", test_paths=["t.py"])]
 
 
 @pytest.mark.asyncio
-async def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path):
+async def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path, state_store):
     """The cursor's iteration is the next attempt, not the completed one."""
     t1 = _target(sub_bid="00001-0001")
     inspect_iterations: list[int] = []
@@ -294,14 +297,14 @@ async def test_resume_at_mid_scenario_starts_at_cursor_iteration(tmp_path):
     )  # type: ignore[arg-type]
     cursor = AutomationCursor(sub_bid="00001-0001", increment_index=1, iteration=3)
 
-    await runner.run(_ctx(tmp_path), [t1], cursor=cursor)
+    await runner.run(_ctx(tmp_path, state_store=state_store), [t1], cursor=cursor)
 
     # increment 0 was skipped (completed before halt); increment 1 starts at iter 3
     assert [i for i in inspect_iterations] == [3]
 
 
 @pytest.mark.asyncio
-async def test_cursor_cleared_after_clean_scenario(tmp_path):
+async def test_cursor_cleared_after_clean_scenario(tmp_path, state_store):
     t1 = _target()
 
     class _Etch:
@@ -327,7 +330,7 @@ async def test_cursor_cleared_after_clean_scenario(tmp_path):
         per_loop_max_iterations=8,
     )
     await runner.run(
-        _ctx(tmp_path),
+        _ctx(tmp_path, state_store),
         [t1],
         cursor=AutomationCursor(sub_bid="00001-0001", increment_index=0, iteration=1),
     )

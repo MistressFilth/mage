@@ -9,7 +9,7 @@ import pytest
 
 class TestE2EInspectSettle:
     @pytest.mark.asyncio
-    async def test_full_feature_through_settle(self, tmp_path):
+    async def test_full_feature_through_settle(self, tmp_path, state_store):
         from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.verdict import ReviewerVerdict
         from mage.orchestration.events import EventsLog
@@ -20,6 +20,7 @@ class TestE2EInspectSettle:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
@@ -102,15 +103,15 @@ class TestE2EInspectSettle:
         assert "settle_feature_finalized" in types
         assert "settle_cosmetic_queued" in types
 
-        # Verify report file
-        report = (tmp_path / ".mage" / "settle" / "feat-1.md").read_text()
+        # Verify report file (P32: on the orphan branch).
+        report = state_store.read("settle/feat-1.md").decode("utf-8")
         assert "feat-1" in report
         assert "kept" in report
 
 
 class TestE2EInspectFeatureHalt:
     @pytest.mark.asyncio
-    async def test_eof_budget_overflow_raises_halt(self, tmp_path):
+    async def test_eof_budget_overflow_raises_halt(self, tmp_path, state_store):
         from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
         from mage.orchestration.events import EventsLog
@@ -123,6 +124,7 @@ class TestE2EInspectFeatureHalt:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
@@ -204,7 +206,7 @@ class TestE2EInspectFeatureHalt:
 
 class TestE2ECosmeticQueueAccumulation:
     @pytest.mark.asyncio
-    async def test_minor_findings_flow_to_cosmetic_queue(self, tmp_path):
+    async def test_minor_findings_flow_to_cosmetic_queue(self, tmp_path, state_store):
         from mage.artifacts.mapping import MappingArtifact
         from mage.artifacts.verdict import ReviewerFinding, ReviewerVerdict
         from mage.orchestration.events import EventsLog
@@ -214,6 +216,7 @@ class TestE2ECosmeticQueueAccumulation:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,

@@ -116,8 +116,9 @@ from mage.orchestration.exceptions import CycleAlreadyInProgress
 from mage.orchestration.nodes import PipelineContext
 
 
-def _context(tmp_path: Path) -> PipelineContext:
+def _context(tmp_path: Path, state_store) -> PipelineContext:
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=_mapping([]),
         events_log=__import__(
@@ -127,31 +128,31 @@ def _context(tmp_path: Path) -> PipelineContext:
 
 
 @pytest.mark.asyncio
-async def test_p2_acquire_succeeds_when_unset(tmp_path):
-    ctx = _context(tmp_path)
+async def test_p2_acquire_succeeds_when_unset(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     await acquire_cycle_lock(ctx, "A")
     assert ctx.current_sub_bid == "A"
 
 
 @pytest.mark.asyncio
-async def test_p2_acquire_raises_when_held_by_other(tmp_path):
-    ctx = _context(tmp_path)
+async def test_p2_acquire_raises_when_held_by_other(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     await acquire_cycle_lock(ctx, "A")
     with pytest.raises(CycleAlreadyInProgress):
         await acquire_cycle_lock(ctx, "B")
 
 
 @pytest.mark.asyncio
-async def test_p2_acquire_allows_same_sub_bid_reacquire(tmp_path):
-    ctx = _context(tmp_path)
+async def test_p2_acquire_allows_same_sub_bid_reacquire(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     await acquire_cycle_lock(ctx, "A")
     await acquire_cycle_lock(ctx, "A")  # no raise
     assert ctx.current_sub_bid == "A"
 
 
 @pytest.mark.asyncio
-async def test_p2_release_clears_lock(tmp_path):
-    ctx = _context(tmp_path)
+async def test_p2_release_clears_lock(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     await acquire_cycle_lock(ctx, "A")
     await release_cycle_lock(ctx)
     assert ctx.current_sub_bid is None

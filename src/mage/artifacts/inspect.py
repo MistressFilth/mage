@@ -9,12 +9,15 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from mage.orchestration.events import Event, EventsLog, EventType
+
+if TYPE_CHECKING:
+    from mage.state_store import StateStore
 
 # Per-loop / end-of-feature Inspect findings-journal entry.
 InspectRoute = Literal["spec", "code", "cosmetic"]
@@ -160,6 +163,128 @@ class InspectArtifact:
             )
         )
         return digest
+
+    @classmethod
+    async def finalize_to_state_store(
+        cls,
+        state_store: StateStore,
+        relative_path: str,
+        content: InspectArtifactContent,
+        events_log: EventsLog,
+    ) -> str:
+        """Write Inspect YAML to the orphan branch via ``state_store`` (P32).
+
+        Serializes the content, computes SHA256, writes via ``state_store.write``,
+        and emits ``INSPECT_FEATURE_FINALIZED`` with the canonical payload.
+        ``relative_path`` is the orphan-branch-relative path (e.g.
+        ``inspect/<feature_id>/<iteration>.yaml``).
+
+        Returns inspect_sha256.
+        """
+        from mage.state_store import StateStore
+
+        if not isinstance(state_store, StateStore):
+            raise TypeError(
+                f"state_store must be a StateStore; got {type(state_store).__name__}"
+            )
+        payload = yaml.safe_dump(content.model_dump(mode="json"), sort_keys=False)
+        digest = cls._compute_digest(payload)
+        state_store.write(relative_path, payload.encode("utf-8"))
+
+        await events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=EventType.INSPECT_FEATURE_FINALIZED,
+                payload={
+                    "inspect_path": relative_path,
+                    "inspect_sha256": digest,
+                    "feature_id": content.feature_id,
+                    "iteration": content.iteration,
+                    "ready_to_merge": content.ready_to_merge,
+                },
+            )
+        )
+        return digest
+
+    @classmethod
+    async def load_from_state_store(
+        cls,
+        state_store: StateStore,
+        relative_path: str,
+        events_log: EventsLog,
+    ) -> InspectArtifactContent:
+        """Read InspectArtifact from the orphan branch via ``state_store`` (P32).
+
+        Reads the bytes via ``state_store.read(relative_path)``, verifies the
+        digest against the most recent ``INSPECT_FEATURE_FINALIZED`` event for
+        that path, and returns the parsed ``InspectArtifactContent``.
+
+        Raises ``InspectArtifactError`` if no event is recorded for the path
+        (refuses to read unwitnessed bytes), or if the digest does not match.
+        """
+        from mage.state_store import StateStore
+
+        if not isinstance(state_store, StateStore):
+            raise TypeError(
+                f"state_store must be a StateStore; got {type(state_store).__name__}"
+            )
+        event = cls._latest_event_for_relative_path(
+            events_log, relative_path, (EventType.INSPECT_FEATURE_FINALIZED,)
+        )
+        if event is None:
+            raise InspectArtifactError(
+                f"No INSPECT_FEATURE_FINALIZED event for {relative_path}; "
+                "refusing to read."
+            )
+
+        recorded_digest = event.payload.get("inspect_sha256")
+        if recorded_digest is None:
+            raise InspectArtifactError(
+                f"Event for {relative_path} has no inspect_sha256 in payload"
+            )
+
+        raw = state_store.read(relative_path)
+        if not raw:
+            raise InspectArtifactError(
+                f"InspectArtifact file {relative_path} is absent on the orphan branch"
+            )
+
+        content = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        computed = cls._compute_digest(content)
+
+        if computed != recorded_digest:
+            await events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.PLAN_DIGEST_MISMATCH,
+                    payload={
+                        "inspect_path": relative_path,
+                        "recorded_sha256": recorded_digest,
+                        "computed_sha256": computed,
+                    },
+                )
+            )
+            raise InspectArtifactDigestMismatchError(
+                f"InspectArtifact at {relative_path} digest mismatch: "
+                f"recorded={recorded_digest}, computed={computed}"
+            )
+
+        data = yaml.safe_load(content)
+        return InspectArtifactContent.model_validate(data)
+
+    @staticmethod
+    def _latest_event_for_relative_path(
+        events_log: EventsLog, relative_path: str, event_types: tuple[EventType, ...]
+    ) -> Event | None:
+        candidates = [
+            e
+            for e in events_log.read_all()
+            if e.event_type in event_types
+            and e.payload.get("inspect_path") == relative_path
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda e: e.timestamp)
 
     @classmethod
     async def load(cls, path: Path, events_log: EventsLog) -> InspectArtifactContent:

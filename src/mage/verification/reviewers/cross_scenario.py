@@ -13,6 +13,7 @@ Added to feature_reviewer_registry (Plan 5 Task 3).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import ClassVar
 
 from mage.artifacts.verdict import ReviewerVerdict
@@ -62,6 +63,7 @@ class CrossScenarioReviewer(ReviewerAgent):
         verdict_path,  # Liskov compat; unused at feature scope
         feature_summary: dict,
         scenarios: list[dict],
+        state_store=None,  # P32 task 12 fix: persist through orphan branch when present
     ) -> ReviewerVerdict:
         """Run the reviewer across the whole feature.
 
@@ -69,8 +71,17 @@ class CrossScenarioReviewer(ReviewerAgent):
         feature's scenario set. The signature mirrors `ReviewerAgent.run`
         plus two feature-scoped extras (`feature_summary`, `scenarios`)
         and is therefore Liskov-compatible.
+
+        ``state_store`` (P32 task 12 fix): when provided, the verdict is
+        persisted to the orphan branch via ``state_store.write`` rather
+        than the working tree. Without it the call falls through to the
+        legacy ``VerdictArtifact.finalize(Path(verdict_path), ...)`` for
+        test-only callers (matches ``ReviewerAgent.run``).
         """
         from datetime import UTC, datetime
+
+        from mage.artifacts.verdict import VerdictArtifact
+        from mage.state_store import StateStore
 
         prompt = (
             f"Feature summary: {feature_summary}\n\n"
@@ -86,4 +97,12 @@ class CrossScenarioReviewer(ReviewerAgent):
         result_dict["reviewer_id"] = f"{self.dimension}@v1"
         # Note: draft_hash is not meaningful at feature scope; use a stable placeholder
         result_dict["draft_hash"] = ""
-        return ReviewerVerdict.model_validate(result_dict)
+        finalized = ReviewerVerdict.model_validate(result_dict)
+
+        if state_store is not None and isinstance(state_store, StateStore):
+            await VerdictArtifact.finalize_to_state_store(
+                state_store, str(verdict_path), finalized, events_log
+            )
+        else:
+            await VerdictArtifact.finalize(Path(verdict_path), finalized, events_log)
+        return finalized

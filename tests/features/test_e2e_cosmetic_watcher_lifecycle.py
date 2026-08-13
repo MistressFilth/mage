@@ -1,4 +1,10 @@
-"""Spawn a real `mage cosmetic watch` and stop it via `mage cosmetic unwatch`."""
+"""Spawn a real `mage cosmetic watch` and stop it via `mage cosmetic unwatch`.
+
+P32 task 13: the PID file lives on the mage orphan branch at
+``cosmetic_watcher.pid`` rather than at ``<project_dir>/.mage/cosmetic_watcher.pid``.
+This test reads the PID via the StateStore-backed helpers so the e2e
+flow exercises the same path as production.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from mage.cosmetic_pid import pid_file_path, read_pid
+from mage.cosmetic_pid import (
+    pid_file_via_state_store,
+    read_pid_via_state_store,
+)
+from mage.state_store import StateStore
 
 
 def _mage() -> list[str]:
@@ -20,6 +30,24 @@ def _mage() -> list[str]:
     if binary is None:
         pytest.fail("mage console script not found on PATH")
     return [binary]
+
+
+def _store(project_dir: Path) -> StateStore:
+    """Build a StateStore anchored at ``project_dir`` (P32 task 13)."""
+    subprocess.run(["git", "init"], cwd=project_dir, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.name", "T"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "t@e"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    return StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
 
 
 @pytest.mark.skipif(
@@ -36,6 +64,8 @@ feature_cosmetic_queue: []
 feature_status: pending
 """
     (tmp_path / "mapping.yaml").write_text(mapping_yaml)
+    state_store = _store(tmp_path)
+    pid_ref = pid_file_via_state_store(state_store)
 
     watch_proc = subprocess.Popen(
         [
@@ -53,13 +83,13 @@ feature_status: pending
     try:
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
-            if read_pid(tmp_path) is not None:
+            if read_pid_via_state_store(state_store) is not None:
                 break
             time.sleep(0.05)
         else:
             pytest.fail("PID file did not appear within 5s")
 
-        parsed = read_pid(tmp_path)
+        parsed = read_pid_via_state_store(state_store)
         assert parsed is not None
         recorded_pid, recorded_start_time = parsed
         assert recorded_pid == watch_proc.pid
@@ -80,7 +110,8 @@ feature_status: pending
             check=False,
         )
         assert result.returncode == 0
-        assert not pid_file_path(tmp_path).exists()
+        # Orphan branch: the PID entry has been removed.
+        assert not state_store.read(pid_ref)
         assert watch_proc.wait(timeout=10.0) == 0
 
         events = [

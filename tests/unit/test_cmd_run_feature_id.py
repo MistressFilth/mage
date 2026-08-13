@@ -16,22 +16,22 @@ import yaml
 from mage.cli import _resolve_feature_id
 
 
-def _save_pipeline_state(project: Path, feature_id: str) -> None:
+def _save_pipeline_state(project: Path, feature_id: str, state_store) -> None:
     """Persist a pipeline context with ``feature_id`` for resume tests."""
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.events import EventsLog
     from mage.orchestration.nodes import PipelineContext
 
-    state_dir = project / ".mage" / "state"
-    state_dir.mkdir(parents=True)
     saved = PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=MappingArtifact(schema_version=2, project_id="e2e", base_bids=[]),
         events_log=EventsLog(project / "events.jsonl"),
         feature_id=feature_id,
     )
-    (state_dir / "pipeline-state.yaml").write_text(
-        yaml.safe_dump(saved.model_dump(mode="json"), sort_keys=False)
+    state_store.write(
+        "state/pipeline-state.yaml",
+        yaml.safe_dump(saved.model_dump(mode="json"), sort_keys=False).encode("utf-8"),
     )
 
 
@@ -157,14 +157,16 @@ class TestCmdRunFeatureIdIntegration:
             )
         assert exc_info.value.code == 2
 
-    def test_cmd_run_overrides_saved_state_feature_id(self, tmp_path, monkeypatch):
+    def test_cmd_run_overrides_saved_state_feature_id(
+        self, tmp_path, monkeypatch, state_store
+    ):
         """Saved state has feature_id='feat-X'; CLI passes 'feat-Y' → final 'feat-Y' (rebadge)."""
         project = tmp_path / "proj"
         project.mkdir()
         (project / "mapping.yaml").write_text(
             "schema_version: 2\nproject_id: e2e\nbase_bids: []\n"
         )
-        _save_pipeline_state(project, "feat-X")
+        _save_pipeline_state(project, "feat-X", state_store)
 
         from mage.orchestration import graph as graph_module
 
@@ -190,7 +192,10 @@ class TestCmdRunFeatureIdIntegration:
         assert captured["context"].feature_id == "feat-Y"
 
     def test_cmd_run_preserves_saved_feature_id_when_flag_omitted(
-        self, tmp_path, monkeypatch
+        self,
+        tmp_path,
+        monkeypatch,
+        state_store,
     ):
         """Saved state has feature_id='feat-X'; no flag → preserved as 'feat-X'."""
         project = tmp_path / "proj"
@@ -198,7 +203,7 @@ class TestCmdRunFeatureIdIntegration:
         (project / "mapping.yaml").write_text(
             "schema_version: 2\nproject_id: e2e\nbase_bids: []\n"
         )
-        _save_pipeline_state(project, "feat-X")
+        _save_pipeline_state(project, "feat-X", state_store)
 
         from mage.orchestration import graph as graph_module
 

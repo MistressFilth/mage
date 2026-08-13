@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mage.artifacts.inspect import InspectRoute
 
 if TYPE_CHECKING:
     from mage.orchestration.events import EventsLog
+    from mage.state_store import StateStore
 
 
 class ReviewerFinding(BaseModel):
@@ -157,6 +159,146 @@ class VerdictArtifact:
             )
         )
         return digest
+
+    @classmethod
+    async def finalize_to_state_store(
+        cls,
+        state_store: StateStore,
+        relative_path: str,
+        model: BaseModel,
+        events_log,
+    ) -> str:
+        """Write verdict/aggregate to the orphan branch via ``state_store`` (P32).
+
+        Serializes the model, computes SHA256, writes via ``state_store.write``,
+        and emits the appropriate event:
+        ``REVIEWER_VERDICT_RECORDED`` for ``ReviewerVerdict``,
+        ``REVIEW_AGGREGATE_RECORDED`` for ``ReviewerAggregate``.
+
+        ``relative_path`` is the orphan-branch-relative path (e.g.
+        ``verdicts/<draft_hash>/<dimension>.yaml``).
+
+        Returns verdict_sha256.
+        """
+        from mage.orchestration.events import Event, EventType
+        from mage.state_store import StateStore
+
+        if not isinstance(state_store, StateStore):
+            raise TypeError(
+                f"state_store must be a StateStore; got {type(state_store).__name__}"
+            )
+        content = yaml.safe_dump(model.model_dump(mode="json"), sort_keys=False)
+        digest = cls._compute_digest(content)
+        state_store.write(relative_path, content.encode("utf-8"))
+
+        if isinstance(model, ReviewerAggregate):
+            event_type_value = "review_aggregate_recorded"
+        else:
+            event_type_value = "reviewer_verdict_recorded"
+
+        event_type = EventType(event_type_value)
+        await events_log.append(
+            Event(
+                timestamp=datetime.now(UTC),
+                event_type=event_type,
+                payload={
+                    "verdict_path": relative_path,
+                    "verdict_sha256": digest,
+                    "dimension": getattr(model, "dimension", None),
+                    "outcome": getattr(model, "outcome", None)
+                    or getattr(model, "decision", None),
+                },
+            )
+        )
+        return digest
+
+    @classmethod
+    async def load_from_state_store(
+        cls,
+        state_store: StateStore,
+        relative_path: str,
+        events_log,
+    ) -> BaseModel:
+        """Load verdict/aggregate from the orphan branch via ``state_store`` (P32).
+
+        Reads via ``state_store.read(relative_path)``, verifies the digest
+        against the most recent REVIEWER_VERDICT_RECORDED /
+        REVIEW_AGGREGATE_RECORDED event for that path, and returns the
+        original Pydantic model (``ReviewerVerdict`` or
+        ``ReviewerAggregate``).
+        """
+        import yaml
+
+        from mage.orchestration.events import Event, EventType
+        from mage.state_store import StateStore
+
+        if not isinstance(state_store, StateStore):
+            raise TypeError(
+                f"state_store must be a StateStore; got {type(state_store).__name__}"
+            )
+        event = cls._latest_event_for_relative_path(
+            events_log,
+            relative_path,
+            (EventType.REVIEWER_VERDICT_RECORDED, EventType.REVIEW_AGGREGATE_RECORDED),
+        )
+        if event is None:
+            raise VerdictError(
+                f"No REVIEWER_VERDICT_RECORDED/REVIEW_AGGREGATE_RECORDED "
+                f"event for {relative_path}"
+            )
+
+        recorded_digest = event.payload.get("verdict_sha256")
+        if recorded_digest is None:
+            raise VerdictError(
+                f"Event for {relative_path} has no verdict_sha256 in payload"
+            )
+
+        raw = state_store.read(relative_path)
+        if not raw:
+            raise VerdictError(
+                f"Verdict file {relative_path} is absent on the orphan branch"
+            )
+
+        content = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        computed = cls._compute_digest(content)
+
+        if computed != recorded_digest:
+            await events_log.append(
+                Event(
+                    timestamp=datetime.now(UTC),
+                    event_type=EventType.PLAN_DIGEST_MISMATCH,
+                    payload={
+                        "verdict_path": relative_path,
+                        "recorded_sha256": recorded_digest,
+                        "computed_sha256": computed,
+                    },
+                )
+            )
+            raise VerdictDigestMismatchError(
+                f"Verdict at {relative_path} digest mismatch: "
+                f"recorded={recorded_digest}, computed={computed}"
+            )
+
+        data = yaml.safe_load(content)
+        if "per_dimension" in data:
+            return ReviewerAggregate.model_validate(data)
+        return ReviewerVerdict.model_validate(data)
+
+    @staticmethod
+    def _latest_event_for_relative_path(
+        events_log,
+        relative_path: str,
+        event_types: tuple,
+    ):
+        candidates = [
+            e
+            for e in events_log.read_all()
+            if e.event_type in event_types
+            and e.payload.get("verdict_path") == relative_path
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda e: e.timestamp)
 
     @classmethod
     async def load(cls, path, events_log) -> BaseModel:

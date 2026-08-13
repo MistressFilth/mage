@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from mage.artifacts.mapping import MappingArtifact
 from mage.orchestration.events import EventsLog
 
 ASCERTAIN_FULL = """---
@@ -37,10 +38,9 @@ def project_dir(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_decomposition_stage_runs_end_to_end(project_dir):
+async def test_decomposition_stage_runs_end_to_end(project_dir, state_store):
     from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
     from mage.artifacts.enumeration import BehaviorSpec
-    from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.decomposition import DecompositionStage
     from mage.orchestration.nodes import PipelineContext
 
@@ -70,18 +70,25 @@ async def test_decomposition_stage_runs_end_to_end(project_dir):
 
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
 
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
     result_ctx = await stage.run(ctx)
 
     assert (project_dir / "decomposition.yaml").exists()
     assert (project_dir / "behaviors.yaml").exists()
     assert (project_dir / "plan.md").exists()
-    assert (project_dir / "mapping.yaml").exists()
+    # P32: mapping lives on the orphan branch; read back via the state store.
+    saved_mapping = MappingArtifact.load_from_state_store(state_store)
+    assert len(saved_mapping.base_bids) == 2
     assert len(result_ctx.mapping.base_bids) == 2
 
 
 @pytest.mark.asyncio
-async def test_decomposition_stage_writes_decomposition_yaml(project_dir):
+async def test_decomposition_stage_writes_decomposition_yaml(project_dir, state_store):
     from mage.agents.decomposition import ArchitectureSpec, DecompositionOutput
     from mage.artifacts.enumeration import BehaviorSpec
     from mage.artifacts.mapping import MappingArtifact
@@ -106,7 +113,12 @@ async def test_decomposition_stage_writes_decomposition_yaml(project_dir):
     host_config.plan_template_path = None
 
     stage = DecompositionStage(events_log=log, agent=agent, host_config=host_config)
-    ctx = PipelineContext(project_dir=project_dir, mapping=mapping, events_log=log)
+    ctx = PipelineContext(
+        state_store=state_store,
+        project_dir=project_dir,
+        mapping=mapping,
+        events_log=log,
+    )
     await stage.run(ctx)
 
     import yaml

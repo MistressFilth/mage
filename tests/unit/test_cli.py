@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -48,11 +48,13 @@ class TestCli:
         feature_path.write_text(
             "Feature: Test\n\n  Scenario: Valid\n    Given x\n    When y\n    Then z\n"
         )
-        config_dir = tmp_project_dir / ".mage"
-        config_dir.mkdir()
-        (config_dir / "config.yaml").write_text(
-            "max_iterations: 3\ncheck_set: default\n"
-        )
+        # cmd_verify calls state_store_for, which (Fix 1) auto-migrates
+        # any legacy ``.mage/`` into the orphan branch. Init git so the
+        # orphan branch has somewhere to land; this test is not about
+        # the migration path.
+        from tests.conftest import init_git_repo
+
+        init_git_repo(tmp_project_dir)
 
         from mage.artifacts.mapping import BaseBIDEntry, MappingArtifact
 
@@ -117,6 +119,46 @@ def _run_cli(*args, **kwargs):
     if error_box:
         raise error_box[0]
     return result_box[0] if result_box else None
+
+
+def _state_store_for(project_dir: Path):
+    """Build a StateStore anchored at ``project_dir`` (P32 task 13)."""
+    from mage.state_store import StateStore
+
+    return StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+
+
+async def _seed_state_store_mapping(project_dir: Path) -> None:
+    """Init a git repo at ``project_dir`` and write ``mapping.yaml`` to the
+    orphan-branch state store (P32).
+
+    Most CLI tests seed a working-tree ``mapping.yaml`` directly. The new
+    CLI reads through the state store, so the seed must land on the orphan
+    branch instead. The on-disk ``mapping.yaml`` may still exist (some
+    tests inspect it) but the canonical data lives at the state-store path.
+    """
+    import asyncio
+    import subprocess
+
+    from mage.state_store import StateStore
+
+    def _run_git(args: list[str]) -> None:
+        subprocess.run(args, cwd=project_dir, check=True, capture_output=True)
+
+    await asyncio.to_thread(_run_git, ["git", "init"])
+    await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+    await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    mapping_path = project_dir / "mapping.yaml"
+    if mapping_path.exists():
+        import yaml
+
+        from mage.artifacts.mapping import MappingArtifact
+
+        mapping = MappingArtifact.model_validate(
+            yaml.safe_load(mapping_path.read_text())
+        )
+        await mapping.save_to_state_store(state_store)
 
 
 @pytest.mark.asyncio
@@ -253,12 +295,25 @@ def test_mage_run_without_dry_run_does_not_raise_not_implemented(tmp_path):
 def test_mage_run_dry_run_completes_on_empty_project(tmp_path):
     """Empty project: no behaviors, no approved scenarios. Pipeline should
     no-op cleanly and exit 0."""
+    import subprocess as _sp
+
     from mage.cli import main
 
     project = tmp_path / "proj"
     project.mkdir()
-    (project / "mapping.yaml").write_text(
-        "schema_version: 2\nproject_id: p\nbase_bids: []\n"
+    # P32: mapping lives on the orphan branch; init a git repo and seed it.
+    _sp.run(["git", "init"], cwd=project, check=True, capture_output=True)
+    _sp.run(
+        ["git", "config", "user.name", "T"],
+        cwd=project,
+        check=True,
+        capture_output=True,
+    )
+    _sp.run(
+        ["git", "config", "user.email", "t@e"],
+        cwd=project,
+        check=True,
+        capture_output=True,
     )
     rc = main(["run", "--dry-run", "--project-dir", str(project)])
     assert rc == 0
@@ -266,12 +321,25 @@ def test_mage_run_dry_run_completes_on_empty_project(tmp_path):
 
 def test_mage_run_dry_run_does_not_raise_systemexit(tmp_path):
     """Empty project does not emit a halt; mage run returns 0, not SystemExit."""
+    import subprocess as _sp
+
     from mage.cli import main
 
     project = tmp_path / "proj"
     project.mkdir()
-    (project / "mapping.yaml").write_text(
-        "schema_version: 2\nproject_id: p\nbase_bids: []\n"
+    # P32: mapping lives on the orphan branch; init a git repo.
+    _sp.run(["git", "init"], cwd=project, check=True, capture_output=True)
+    _sp.run(
+        ["git", "config", "user.name", "T"],
+        cwd=project,
+        check=True,
+        capture_output=True,
+    )
+    _sp.run(
+        ["git", "config", "user.email", "t@e"],
+        cwd=project,
+        check=True,
+        capture_output=True,
     )
     # The halt scenario is covered in Task 14. This test pins the
     # no-op contract: empty project with --dry-run returns cleanly.
@@ -281,6 +349,8 @@ def test_mage_run_dry_run_does_not_raise_systemexit(tmp_path):
 
 @pytest.mark.asyncio
 async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
+    import asyncio
+    import subprocess
     import sys
     from datetime import UTC, datetime
 
@@ -290,9 +360,18 @@ async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
         VerdictArtifact,
     )
     from mage.orchestration.events import EventsLog
+    from mage.state_store import StateStore
 
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
+
+    def _run_git(args: list[str]) -> None:
+        subprocess.run(args, cwd=project_dir, check=True, capture_output=True)
+
+    await asyncio.to_thread(_run_git, ["git", "init"])
+    await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+    await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
     log = EventsLog(project_dir / "events.jsonl")
 
     agg = ReviewerAggregate(
@@ -309,8 +388,9 @@ async def test_review_show_prints_latest_aggregate(tmp_path, capsys):
         decision="approved",
         reasoning="all passed",
     )
-    path = project_dir / "agg.yaml"
-    await VerdictArtifact.finalize(path, agg, log)
+    await VerdictArtifact.finalize_to_state_store(
+        state_store, "verdicts/x/aggregate.yaml", agg, log
+    )
 
     test_argv = ["mage", "--project-dir", str(project_dir), "review", "show"]
     with patch.object(sys, "argv", test_argv):
@@ -360,6 +440,7 @@ class TestCosmeticShow:
                 }
             )
         )
+        await _seed_state_store_mapping(project_dir)
 
         stub_item = CosmeticPatch(
             sub_bid="00000-001",
@@ -425,6 +506,7 @@ class TestCosmeticShow:
                 }
             )
         )
+        await _seed_state_store_mapping(project_dir)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
@@ -480,6 +562,7 @@ class TestCosmeticApply:
                 }
             )
         )
+        await _seed_state_store_mapping(project_dir)
 
         stub_item = CosmeticPatch(
             sub_bid="00000-001",
@@ -502,15 +585,21 @@ class TestCosmeticApply:
         # Stub subprocess so we can detect whether git commit was attempted.
         recorded: list[tuple] = []
 
+        # The mapping.yaml content the CLI should read back via the state store.
+        mapping_text = (project_dir / "mapping.yaml").read_text()
+
         def fake_run(cmd, **kwargs):
             recorded.append((cmd, kwargs))
 
-            class R:
-                returncode = 0
-                stdout = ""
-                stderr = ""
-
-            return R()
+            r = MagicMock()
+            r.returncode = 0
+            r.stderr = ""
+            r.stdout = ""
+            # Return the seeded mapping when the CLI's state store reads
+            # it back via `git show refs/mage/...:mapping.yaml`.
+            if cmd[:2] == ["git", "show"] and "refs/mage/" in cmd[2]:
+                r.stdout = mapping_text
+            return r
 
         monkeypatch.setattr("subprocess.run", fake_run)
         rc = _run_cli(
@@ -525,7 +614,23 @@ class TestCosmeticApply:
         assert "CONST = 42" not in target_file.read_text(), (
             "dry-run must not modify the file"
         )
-        assert recorded == [], f"dry-run must not invoke git, got {recorded!r}"
+        # Filter out the state-store read/show calls — they're internal
+        # state-store plumbing, not user-visible commits. The state store
+        # also shells `git config user.name/email` to resolve identity.
+        user_git_calls = [
+            (cmd, kwargs)
+            for cmd, kwargs in recorded
+            if not (
+                (cmd[:2] == ["git", "show"] and "refs/mage/" in cmd[2])
+                or (
+                    cmd[:2] == ["git", "config"]
+                    and cmd[2] in ("user.name", "user.email")
+                )
+            )
+        ]
+        assert user_git_calls == [], (
+            f"dry-run must not invoke git, got {user_git_calls!r}"
+        )
         # Event was logged though.
         events = list((project_dir / "events.jsonl").read_text().splitlines())
         assert any("cosmetic_item_skipped" in line for line in events), (
@@ -578,18 +683,24 @@ class TestCosmeticApply:
             lambda **kw: _PassthroughRefiner(),
         )
 
+        # P32: seed the mapping on the orphan branch so the CLI can read it.
+        await _seed_state_store_mapping(project_dir)
+
         # Stub subprocess so we don't try to git-commit.
         recorded: list[tuple] = []
+
+        mapping_text = (project_dir / "mapping.yaml").read_text()
 
         def fake_run(cmd, **kwargs):
             recorded.append((cmd, kwargs))
 
-            class R:
-                returncode = 0
-                stdout = ""
-                stderr = ""
-
-            return R()
+            r = MagicMock()
+            r.returncode = 0
+            r.stderr = ""
+            r.stdout = ""
+            if cmd[:2] == ["git", "show"] and "refs/mage/" in cmd[2]:
+                r.stdout = mapping_text
+            return r
 
         monkeypatch.setattr("subprocess.run", fake_run)
         rc = _run_cli(
@@ -623,7 +734,7 @@ class TestCosmeticApply:
         from mage.artifacts.cosmetic_state import (
             CosmeticApplied,
             CosmeticAppliedState,
-            save_state,
+            save_state_via_store,
         )
 
         project_dir = tmp_path
@@ -661,6 +772,9 @@ class TestCosmeticApply:
             proposed_by="IncrementQualityReviewer",
         )
 
+        # P32: seed the mapping on the orphan branch so the CLI can read it.
+        await _seed_state_store_mapping(project_dir)
+
         # Pre-seed state with matching hash.
         prior = CosmeticAppliedState(
             applied={
@@ -671,7 +785,7 @@ class TestCosmeticApply:
                 ),
             }
         )
-        await save_state(project_dir, prior)
+        await save_state_via_store(_state_store_for(project_dir), prior)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
@@ -697,7 +811,7 @@ class TestCosmeticApply:
         from mage.artifacts.cosmetic_state import (
             CosmeticApplied,
             CosmeticAppliedState,
-            save_state,
+            save_state_via_store,
         )
 
         project_dir = tmp_path
@@ -724,6 +838,9 @@ class TestCosmeticApply:
             )
         )
 
+        # P32: seed the mapping on the orphan branch so the CLI can read it.
+        await _seed_state_store_mapping(project_dir)
+
         prior = CosmeticAppliedState(
             applied={
                 "00000-001": CosmeticApplied(
@@ -733,7 +850,7 @@ class TestCosmeticApply:
                 ),
             }
         )
-        await save_state(project_dir, prior)
+        await save_state_via_store(_state_store_for(project_dir), prior)
 
         monkeypatch.setattr(
             "mage.agents.cosmetic_refiner.CosmeticRefiner",
@@ -742,15 +859,18 @@ class TestCosmeticApply:
 
         recorded: list[tuple] = []
 
+        mapping_text = (project_dir / "mapping.yaml").read_text()
+
         def fake_run(cmd, **kwargs):
             recorded.append((cmd, kwargs))
 
-            class R:
-                returncode = 0
-                stdout = ""
-                stderr = ""
-
-            return R()
+            r = MagicMock()
+            r.returncode = 0
+            r.stderr = ""
+            r.stdout = ""
+            if cmd[:2] == ["git", "show"] and "refs/mage/" in cmd[2]:
+                r.stdout = mapping_text
+            return r
 
         # Patch subprocess.run directly: the asyncio.to_thread wrapper in
         # cli.py preserves the patched function without blocking the LLM
@@ -760,24 +880,64 @@ class TestCosmeticApply:
         rc = _run_cli("cosmetic", "apply", "feat-1", "--project-dir", str(project_dir))
         assert rc == 0
         assert "x = 42" in target.read_text(), "hash mismatch must allow reapply"
-        assert len(recorded) == 1, (
-            f"expected exactly one git commit invocation, got {recorded!r}"
+
+        # Filter out state-store plumbing — read/write on the mage orphan
+        # branch (refs/mage/...) does not count as a user-visible commit.
+        # Only the cosmetic-apply "git commit" of the file change should
+        # remain. The state-store's plumbing subcommands and its identity-
+        # resolution config probes are filtered out.
+        def _is_state_store_plumbing(cmd: list[str]) -> bool:
+            sub = cmd[:2] if len(cmd) >= 2 else [""]
+            if sub[0] != "git":
+                return False
+            plumbing_subcommands = {
+                "mktree",
+                "hash-object",
+                "commit-tree",
+                "update-ref",
+                "ls-tree",
+                "show",
+                "rev-parse",
+            }
+            if sub[1] in plumbing_subcommands:
+                return True
+            config_probes = {"user.name", "user.email"}
+            return bool(
+                sub[1] == "config" and len(cmd) >= 3 and cmd[2] in config_probes
+            )
+
+        user_git_calls = [
+            (cmd, kwargs)
+            for cmd, kwargs in recorded
+            if not _is_state_store_plumbing(cmd)
+        ]
+        assert len(user_git_calls) == 1, (
+            f"expected exactly one git commit invocation, got {user_git_calls!r}"
         )
 
 
 class TestInspectShow:
     @pytest.mark.asyncio
     async def test_inspect_show_renders_artifact(self, tmp_path, capsys):
+        import asyncio
+        import subprocess
         from datetime import UTC, datetime
 
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.orchestration.events import EventsLog
+        from mage.state_store import StateStore
 
-        # Build a minimal project with an InspectArtifact
+        # Build a minimal project with an InspectArtifact on the orphan branch.
         project = tmp_path / "proj"
         project.mkdir()
-        inspect_dir = project / ".mage" / "inspect" / "feat-1"
-        inspect_dir.mkdir(parents=True)
+
+        def _run_git(args: list[str]) -> None:
+            subprocess.run(args, cwd=project, check=True, capture_output=True)
+
+        await asyncio.to_thread(_run_git, ["git", "init"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+        state_store = StateStore(project, "feature-artifacts", identity=("T", "t@e"))
         log = EventsLog(project / "events.jsonl")
         artifact = InspectArtifactContent(
             feature_id="feat-1",
@@ -793,7 +953,9 @@ class TestInspectShow:
             ready_to_merge=True,
             ledger_markdown="| step | result |\n|---|---|\n| mechanical | pass |",
         )
-        await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+        await InspectArtifact.finalize_to_state_store(
+            state_store, "inspect/feat-1/1.yaml", artifact, log
+        )
 
         rc = _run_cli(["inspect", "show", "feat-1", "--project-dir", str(project)])
         out = capsys.readouterr().out
@@ -833,15 +995,27 @@ class TestSettleRun:
     async def test_settle_run_non_interactive(self, tmp_path, capsys, monkeypatch):
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.orchestration.events import EventsLog
+        from mage.state_store import StateStore
 
         project = tmp_path / "proj"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         self._install_runner(monkeypatch, project)
 
-        # Build a ready-to-merge InspectArtifact
-        inspect_dir = project / ".mage" / "inspect" / "feat-1"
-        inspect_dir.mkdir(parents=True)
+        # P32: init a git repo so the state store has somewhere to live.
+        # The mapping is empty here; load_from_state_store tolerates that.
+        import asyncio
+        import subprocess
+
+        def _run_git(args: list[str]) -> None:
+            subprocess.run(args, cwd=project, check=True, capture_output=True)
+
+        await asyncio.to_thread(_run_git, ["git", "init"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+        state_store = StateStore(project, "feature-artifacts", identity=("T", "t@e"))
+
+        # Build a ready-to-merge InspectArtifact on the orphan branch.
         artifact = InspectArtifactContent(
             feature_id="feat-1",
             inspected_at=datetime.now(UTC),
@@ -856,7 +1030,9 @@ class TestSettleRun:
             ready_to_merge=True,
             ledger_markdown="",
         )
-        await InspectArtifact.finalize(inspect_dir / "1.yaml", artifact, log)
+        await InspectArtifact.finalize_to_state_store(
+            state_store, "inspect/feat-1/1.yaml", artifact, log
+        )
 
         rc = _run_cli(
             [
@@ -888,15 +1064,28 @@ class TestSettleRun:
         capsys,
         monkeypatch,
     ):
+        import asyncio
+        import subprocess
+
         from mage.artifacts.inspect import InspectArtifact, InspectArtifactContent
         from mage.orchestration.events import EventsLog
+        from mage.state_store import StateStore
 
         project = tmp_path / "proj"
         project.mkdir()
         log = EventsLog(project / "events.jsonl")
         self._install_runner(monkeypatch, project, test_returncode=1)
-        await InspectArtifact.finalize(
-            project / ".mage" / "inspect" / "feat-1" / "1.yaml",
+
+        def _run_git(args: list[str]) -> None:
+            subprocess.run(args, cwd=project, check=True, capture_output=True)
+
+        await asyncio.to_thread(_run_git, ["git", "init"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.name", "T"])
+        await asyncio.to_thread(_run_git, ["git", "config", "user.email", "t@e"])
+        state_store = StateStore(project, "feature-artifacts", identity=("T", "t@e"))
+        await InspectArtifact.finalize_to_state_store(
+            state_store,
+            "inspect/feat-1/1.yaml",
             InspectArtifactContent(
                 feature_id="feat-1",
                 inspected_at=datetime.now(UTC),

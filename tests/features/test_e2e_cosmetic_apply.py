@@ -47,8 +47,16 @@ def _seed_mapping(project: Path, feature_id: str, items: list[dict]) -> None:
 
     Each entry must satisfy the Task 2 validator: non-empty ``feature_id``
     plus ``sub_bid``, ``text``, ``location: {file, line}``, ``proposed_by``.
+
+    P32: also seed the mapping onto the orphan branch at the project
+    so the CLI (which reads via state_store) can find the queue.
     """
+    import asyncio
+
     import yaml
+
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.state_store import StateStore
 
     mapping = {
         "schema_version": 2,
@@ -57,6 +65,12 @@ def _seed_mapping(project: Path, feature_id: str, items: list[dict]) -> None:
         "feature_cosmetic_queue": items,
     }
     (project / "mapping.yaml").write_text(yaml.safe_dump(mapping))
+
+    state_store = StateStore(project, "feature-artifacts", identity=("e2e", "e2e@mage"))
+    artifact = MappingArtifact.model_validate(
+        yaml.safe_load((project / "mapping.yaml").read_text())
+    )
+    asyncio.run(artifact.save_to_state_store(state_store))
 
 
 def test_e2e_cosmetic_apply_writes_files_and_commits(tmp_path: Path) -> None:

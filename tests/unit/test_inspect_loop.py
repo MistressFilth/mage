@@ -17,8 +17,9 @@ from mage.verification.host_overrides import HostConfig
 from mage.verification.mechanical import CheckResult
 
 
-def _context(tmp_path) -> PipelineContext:
+def _context(tmp_path, state_store) -> PipelineContext:
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -80,8 +81,8 @@ def _increment() -> Increment:
 
 
 @pytest.mark.asyncio
-async def test_clean_increment_returns_none(tmp_path):
-    ctx = _context(tmp_path)
+async def test_clean_increment_returns_none(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[]))
     mech = _Mechanical([])
     stage = InspectLoopStage(
@@ -105,8 +106,8 @@ async def test_clean_increment_returns_none(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_code_route_re_loops(tmp_path):
-    ctx = _context(tmp_path)
+async def test_code_route_re_loops(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     finding = _Finding(
         id="f1",
         location="a.py:1",
@@ -139,10 +140,12 @@ async def test_code_route_re_loops(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
+async def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(
+    tmp_path, state_store
+):
     """Per GC-9: cosmetic is queued and does not re-loop. The runner must see
     None for cosmetic-only passes, not "cosmetic", so the while loop breaks."""
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     finding = _Finding(
         id="f1",
         location="a.py:1",
@@ -176,8 +179,8 @@ async def test_cosmetic_route_returns_none_so_runner_does_not_re_loop(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_spec_route_returns_spec(tmp_path):
-    ctx = _context(tmp_path)
+async def test_spec_route_returns_spec(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     finding = _Finding(
         id="f1",
         location="a.py:1",
@@ -214,11 +217,11 @@ async def test_spec_route_returns_spec(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_budget_exceeded_emits_failed_then_raises(tmp_path):
+async def test_budget_exceeded_emits_failed_then_raises(tmp_path, state_store):
     """Per the per-loop budget guard: when iteration > per_loop_max_iterations,
     inspect_increment must emit INSPECT_LOOP_FAILED with reason='per_loop_budget_exceeded'
     BEFORE raising ScenarioInspectHalted."""
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     ctx.iteration = 3
     reviewer = _Reviewer(_Verdict(dimension="increment_quality", findings=[]))
     mech = _Mechanical([])

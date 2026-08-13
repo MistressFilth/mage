@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml as _yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -90,13 +91,19 @@ async def enumerate_behaviors(
     project_dir: Path | None = None,
     events_log: EventsLog | None = None,
     feature_id: str = "",
+    state_store: Any = None,
 ) -> tuple[MappingArtifact, Path] | list[BaseBIDEntry]:
     """Validate behavior specs, assign base BIDs, and write files atomically.
 
     When ``project_dir`` and ``events_log`` are provided, writes
-    ``behaviors.yaml`` and updates ``mapping.yaml``, emits a
+    ``behaviors.yaml`` and updates the mapping, emits a
     ``BEHAVIORS_ENUMERATED`` event, and returns ``(updated_mapping,
     behaviors_yaml_path)``.
+
+    P32: when ``state_store`` is provided, the mapping update goes through
+    the orphan branch (``MappingArtifact.save_to_state_store``); otherwise
+    the legacy working-tree path is used for backward compatibility with
+    tests that have not yet been wired to a state store.
 
     The legacy two-argument form returns the new entries without writing files;
     it is retained for callers from the previous enumeration interface.
@@ -208,8 +215,13 @@ async def enumerate_behaviors(
     tmp.write_text(_yaml.safe_dump(behaviors_data, sort_keys=False), encoding="utf-8")
     tmp.replace(behaviors_path)
 
-    # Write updated mapping atomically.
-    await updated_mapping.save(project_dir / "mapping.yaml")
+    # P32: persist updated mapping via the orphan branch when state_store
+    # is provided; fall back to the working-tree path for backward
+    # compatibility with tests that haven't been wired to a state store.
+    if state_store is not None:
+        await updated_mapping.save_to_state_store(state_store)
+    else:
+        await updated_mapping.save(project_dir / "mapping.yaml")
 
     await events_log.append(
         Event(

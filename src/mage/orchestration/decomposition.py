@@ -15,9 +15,12 @@ from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.exceptions import StageHalted
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.orchestration.plan_writer import render_plan
+from mage.state_store import StateStore
 from mage.verification.host_overrides import HostConfig
 
 DEFAULT_TEMPLATE_PATH = Path(__file__).parent / "plan_template.md"
+
+APPROVAL_PENDING_PATH = "approval_pending.json"  # canonical ref path on orphan branch
 
 
 class DecompositionStage(StageNode):
@@ -82,6 +85,7 @@ class DecompositionStage(StageNode):
             project_dir,
             self.events_log,
             feature_id=ascertain.feature_id,
+            state_store=context.state_store,
         )
         assert isinstance(enumeration_result, tuple)
         updated_mapping, _behaviors_path = enumeration_result
@@ -108,6 +112,7 @@ class DecompositionStage(StageNode):
             plan_path=context.plan_path,
             feature_id=ascertain.feature_id,
             project_dir=project_dir,
+            state_store=context.state_store,
         )
 
         # 8. Finalize Plan
@@ -137,6 +142,7 @@ class DecompositionStage(StageNode):
         plan_path: Path,
         feature_id: str,
         project_dir: Path,
+        state_store: StateStore,
     ) -> None:
         """Halt the pipeline until the operator clears the approval marker.
 
@@ -146,14 +152,18 @@ class DecompositionStage(StageNode):
         - Marker absent + prior APPROVAL_REQUESTED in events for current digest:
           emit APPROVAL_GRANTED (operator cleared marker after reviewing).
         - Stale or malformed marker: overwrite with new digest, re-halt.
+
+        P32: the marker lives on the mage orphan branch at
+        ``approval_pending.json`` (Path: ``APPROVAL_PENDING_PATH``), not at
+        ``<project_dir>/.mage/approval_pending.json``. ``state_store`` is
+        required so the gate can read/write the canonical marker.
         """
         if not self.host_config.require_plan_approval:
             return
 
         plan_digest = compute_plan_digest(plan_content)
         plan_path_rel = plan_path.relative_to(project_dir)
-        marker = project_dir / ".mage" / "approval_pending.json"
-        pending = self._read_marker(marker)
+        pending = self._read_marker(state_store)
 
         if pending is not None and (
             pending.get("_malformed") is True
@@ -161,7 +171,7 @@ class DecompositionStage(StageNode):
         ):
             # Stale or malformed marker: overwrite and re-halt.
             self._write_marker(
-                marker,
+                state_store,
                 feature_id=feature_id,
                 plan_digest=plan_digest,
                 plan_path=plan_path_rel,
@@ -196,7 +206,7 @@ class DecompositionStage(StageNode):
                     },
                 )
             )
-            marker.unlink()
+            self._delete_marker(state_store)
             return
 
         # No marker: check if a prior APPROVAL_REQUESTED matches current digest.
@@ -217,7 +227,7 @@ class DecompositionStage(StageNode):
 
         # First halt.
         self._write_marker(
-            marker,
+            state_store,
             feature_id=feature_id,
             plan_digest=plan_digest,
             plan_path=plan_path_rel,
@@ -240,44 +250,46 @@ class DecompositionStage(StageNode):
         )
 
     @staticmethod
-    def _read_marker(marker: Path) -> dict | None:
-        """Read the approval marker file.
+    def _read_marker(state_store: StateStore) -> dict | None:
+        """Read the approval marker from the orphan branch.
 
         Returns None when absent, a sentinel dict {"_malformed": True} when
         present but unparseable (so the gate treats it as stale), or the
         parsed payload when valid.
         """
-        if not marker.exists():
-            return None
         import json
 
+        data = state_store.read(APPROVAL_PENDING_PATH)
+        if not data:
+            return None
         try:
-            return json.loads(marker.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+            return json.loads(data.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return {"_malformed": True}
 
     @staticmethod
     def _write_marker(
-        marker: Path,
+        state_store: StateStore,
         *,
         feature_id: str,
         plan_digest: str,
         plan_path: Path,
     ) -> None:
-        """Atomically write the approval marker file."""
+        """Atomically write the approval marker to the orphan branch."""
         import json
-        import os
 
-        marker.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "feature_id": feature_id,
             "plan_digest": plan_digest,
             "plan_path": str(plan_path),
             "requested_at": datetime.now(UTC).isoformat(),
         }
-        tmp = marker.with_suffix(marker.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        os.replace(tmp, marker)
+        state_store.write(APPROVAL_PENDING_PATH, json.dumps(payload).encode("utf-8"))
+
+    @staticmethod
+    def _delete_marker(state_store: StateStore) -> None:
+        """Best-effort delete the approval marker from the orphan branch."""
+        state_store.delete(APPROVAL_PENDING_PATH)
 
     def _last_requested_digest(self, feature_id: str, plan_digest: str) -> str | None:
         """Return plan_digest if any APPROVAL_REQUESTED matches; else None.

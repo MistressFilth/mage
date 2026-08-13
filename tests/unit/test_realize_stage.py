@@ -17,8 +17,9 @@ from mage.orchestration.runner import Increment, ScenarioTarget
 from mage.verification.host_overrides import HostConfig
 
 
-def _context(tmp_path: Path) -> PipelineContext:
+def _context(tmp_path: Path, state_store) -> PipelineContext:
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -36,8 +37,8 @@ class _StubAgent:
 
 
 @pytest.mark.asyncio
-async def test_run_increment_emits_realize_increment_done(tmp_path):
-    ctx = _context(tmp_path)
+async def test_run_increment_emits_realize_increment_done(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     target = ScenarioTarget(
         base_bid="00001",
         sub_bid="00001-0001",
@@ -95,12 +96,14 @@ def _journal_entry(
 
 
 @pytest.mark.asyncio
-async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
+async def test_run_increment_pulls_carry_forward_from_inspect_journal(
+    tmp_path, state_store
+):
     """Pins the R3 / R21 carry-forward contract: RealizeStage builds
     `carry_forward` from the last `per_scenario_window` entries of the
     target sub_bid's inspect_journal.
     """
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     target = ScenarioTarget(
         base_bid="00001",
         sub_bid="00001-0001",
@@ -132,12 +135,14 @@ async def test_run_increment_pulls_carry_forward_from_inspect_journal(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp_path):
+async def test_run_increment_pulls_cross_scenario_observations_from_siblings(
+    tmp_path, state_store
+):
     """Pins the R3 / R21 cross-scenario contract: entries from sibling
     sub_bids appear in `cross_scenario_observations`, ordered most-recent
     first, truncated to `cross_scenario_window`.
     """
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     target = ScenarioTarget(
         base_bid="00001",
         sub_bid="00001-0001",
@@ -176,9 +181,9 @@ async def test_run_increment_pulls_cross_scenario_observations_from_siblings(tmp
 
 
 @pytest.mark.asyncio
-async def test_run_increment_carry_forward_window_respects_size(tmp_path):
+async def test_run_increment_carry_forward_window_respects_size(tmp_path, state_store):
     """`per_scenario_window` truncates the per-scenario slice."""
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     target = ScenarioTarget(
         base_bid="00001",
         sub_bid="00001-0001",
@@ -218,9 +223,10 @@ def _git_init(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_run_increment_diff_emits_incomplete_event_on_path_traversal(
     tmp_path: Path,
+    state_store,
 ) -> None:
     _git_init(tmp_path)
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     target = ScenarioTarget(
         base_bid="00001",
         sub_bid="00001-0001",

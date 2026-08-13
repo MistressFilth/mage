@@ -9,7 +9,6 @@ mapping. Emits SCENARIO_LIVE per completed scenario so InspectFeatureStage's
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 from mage.artifacts.mapping import LifecycleStatus, ScenarioEntry
 from mage.orchestration.discipline.policy import guard_automation_entry
@@ -91,8 +90,9 @@ class AutomationStage(StageNode):
         new_mapping = context.mapping.model_copy(update={"base_bids": new_base_bids})
         context.mapping = new_mapping
 
-        mapping_path = context.project_dir / "mapping.yaml"
-        if context.project_dir is not None and Path(context.project_dir).exists():
-            await new_mapping.save(mapping_path)
+        # P32: persist via the orphan branch — the state store is the
+        # canonical writer; the working-tree mapping.yaml is no longer
+        # touched by mage.
+        await new_mapping.save_to_state_store(context.state_store)
         context.automation_cursor = None
         return context

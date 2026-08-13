@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,17 @@ from mage import cli
 from mage.artifacts.mapping import MappingArtifact
 
 
-def _write_mapping(project_dir: Path, *, feature_id: str, findings: list[dict]) -> Path:
+async def _write_mapping(
+    project_dir: Path, *, feature_id: str, findings: list[dict]
+) -> Path:
+    """Write a mapping.yaml AND seed it onto the orphan branch (P32).
+
+    The CLI reads through the state store, so the canonical seed must
+    land on the orphan branch. The working-tree file is also kept for
+    parity with the pre-migration layout.
+    """
+    import asyncio
+
     path = project_dir / "mapping.yaml"
     artifact = MappingArtifact(
         project_id="demo",
@@ -20,6 +31,43 @@ def _write_mapping(project_dir: Path, *, feature_id: str, findings: list[dict]) 
     path.write_text(
         yaml.safe_dump(artifact.model_dump(mode="json", by_alias=True), sort_keys=False)
     )
+    # P32: seed the orphan branch. init git first.
+
+    def _check_git() -> bool:
+        return (
+            subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=project_dir,
+                capture_output=True,
+                check=False,
+            ).returncode
+            == 0
+        )
+
+    def _init_git() -> None:
+        subprocess.run(
+            ["git", "init"], cwd=project_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "t@e"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+
+    has_git = await asyncio.to_thread(_check_git)
+    if not has_git:
+        await asyncio.to_thread(_init_git)
+    from mage.state_store import StateStore
+
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    await artifact.save_to_state_store(state_store)
     return path
 
 
@@ -42,7 +90,7 @@ class _Args:
 async def test_apply_filter_unknown_exits_2(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _write_mapping(
+    await _write_mapping(
         tmp_path,
         feature_id="feat",
         findings=[
@@ -70,7 +118,7 @@ async def test_apply_filter_narrows_calls_apply_for_feature(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The narrowed sub_bid set is what reaches apply_for_feature."""
-    _write_mapping(
+    await _write_mapping(
         tmp_path,
         feature_id="feat",
         findings=[
@@ -121,7 +169,7 @@ async def test_apply_filter_narrows_calls_apply_for_feature(
 async def test_apply_without_filter_calls_apply_with_all_sub_bids(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _write_mapping(
+    await _write_mapping(
         tmp_path,
         feature_id="feat",
         findings=[
@@ -165,7 +213,7 @@ async def test_apply_does_not_crash_on_null_sub_bid(
     The apply set is built from non-empty strings only; the null entry is
     silently dropped so apply_for_feature never sees a None sub_bid.
     """
-    _write_mapping(
+    await _write_mapping(
         tmp_path,
         feature_id="feat",
         findings=[
@@ -212,7 +260,7 @@ async def test_apply_passes_feature_id_through(
     feature_id the user provided so any future feature-scoped logic
     in apply_for_feature sees the correct value.
     """
-    _write_mapping(
+    await _write_mapping(
         tmp_path,
         feature_id="feat-a",
         findings=[
@@ -256,36 +304,41 @@ async def test_apply_for_feature_narrows_by_feature_id(
 
     Important #3: when a sub_bid exists in two features, the
     feature-scoped apply must not pick up the other feature's entry.
+    P32: the mapping now lives on the orphan branch, so we seed it
+    via ``MappingArtifact.save_to_state_store`` and the function picks
+    it up via ``state_store_for(...)``.
     """
     from mage.orchestration.cosmetic_apply import apply_for_feature
+    from mage.state_store import state_store_for
 
     project_dir = tmp_path
-    (project_dir / "mapping.yaml").write_text(
-        yaml.safe_dump(
-            MappingArtifact(
-                project_id="demo",
-                cosmetic_findings=[
-                    {
-                        "sub_bid": "01JF",
-                        "scenario_name": "in-feat-a",
-                        "location": "src/a.py",
-                        "text": "x",
-                        "proposed_by": "increment_quality",
-                        "feature_id": "feat-a",
-                    },
-                    {
-                        "sub_bid": "01JF",
-                        "scenario_name": "in-feat-b",
-                        "location": "src/b.py",
-                        "text": "y",
-                        "proposed_by": "increment_quality",
-                        "feature_id": "feat-b",
-                    },
-                ],
-            ).model_dump(mode="json", by_alias=True),
-            sort_keys=False,
-        )
+    # P32: a real git repo so the orphan branch can be created.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    mapping = MappingArtifact(
+        project_id="demo",
+        cosmetic_findings=[
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "in-feat-a",
+                "location": "src/a.py",
+                "text": "x",
+                "proposed_by": "increment_quality",
+                "feature_id": "feat-a",
+            },
+            {
+                "sub_bid": "01JF",
+                "scenario_name": "in-feat-b",
+                "location": "src/b.py",
+                "text": "y",
+                "proposed_by": "increment_quality",
+                "feature_id": "feat-b",
+            },
+        ],
     )
+    state_store = state_store_for(project_dir, mage_toml=None)
+    await mapping.save_to_state_store(state_store)
 
     captured: list[str] = []
 

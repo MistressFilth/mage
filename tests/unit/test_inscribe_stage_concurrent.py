@@ -86,7 +86,9 @@ def _write_behaviors_yaml(project_dir: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_inscribe_stage_constructs_semaphore_with_max_concurrent_llm_calls(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
+    state_store,
 ):
     """The reviewer loop must dispatch concurrently via asyncio.Semaphore
     sized by host_config.max_concurrent_llm_calls."""
@@ -115,6 +117,7 @@ async def test_inscribe_stage_constructs_semaphore_with_max_concurrent_llm_calls
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,

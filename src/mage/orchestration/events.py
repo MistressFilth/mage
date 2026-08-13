@@ -134,6 +134,15 @@ class EventType(str, Enum):
     PROVIDER_RESOLVED = "provider_resolved"
     PROVIDER_RESOLVED_FAILED = "provider_resolved_failed"
 
+    # Plan 32 — Orphan-branch state I/O + migration
+    STATE_STORE_READ = "state_store_read"
+    STATE_STORE_WRITE = "state_store_write"
+    STATE_STORE_DELETE = "state_store_delete"
+    STATE_MIGRATED = "state_migrated"
+    STATE_MIGRATED_PARTIAL = "state_migrated_partial"
+    STATE_MIGRATION_RESTORED = "state_migration_restored"
+    STATE_BOOTSTRAPPED = "state_bootstrapped"
+
 
 class Event(BaseModel):
     """One event in the log."""
@@ -177,6 +186,19 @@ class EventsLog:
         async with self._get_lock():
             with self.log_path.open("a") as f:
                 f.write(line + "\n")
+
+    def append_sync(self, event: Event) -> None:
+        """Append one event synchronously.
+
+        Mirrors :meth:`append` for callers outside an asyncio event loop
+        (the state_store/state_migration modules are sync; their emits
+        must not require ``await``). Writes a single line atomically —
+        sufficient because each call is one ``write()`` of a small
+        payload on POSIX/Win32.
+        """
+        line = event.model_dump_json()
+        with self.log_path.open("a") as f:
+            f.write(line + "\n")
 
     def read_all(self) -> list[Event]:
         """Read all events from the log in order."""

@@ -24,7 +24,7 @@ from mage.orchestration.events import Event, EventsLog, EventType
 from mage.orchestration.nodes import PipelineContext
 
 
-def _ctx_with_supersession(tmp_path: Path) -> PipelineContext:
+def _ctx_with_supersession(tmp_path: Path, state_store) -> PipelineContext:
     """Build a context where new scenario supersedes old, both LIVE."""
     m = MappingArtifact(
         project_id="p",
@@ -55,6 +55,7 @@ def _ctx_with_supersession(tmp_path: Path) -> PipelineContext:
         ],
     )
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=m,
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -62,8 +63,8 @@ def _ctx_with_supersession(tmp_path: Path) -> PipelineContext:
 
 
 @pytest.mark.asyncio
-async def test_resolved_event_deprecates_old(tmp_path: Path) -> None:
-    ctx = _ctx_with_supersession(tmp_path)
+async def test_resolved_event_deprecates_old(tmp_path: Path, state_store) -> None:
+    ctx = _ctx_with_supersession(tmp_path, state_store=state_store)
     stage = DisciplineStage(ctx.events_log)
     await stage._handle_event(
         ctx,
@@ -86,8 +87,10 @@ async def test_resolved_event_deprecates_old(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolved_event_emits_scenario_deprecated(tmp_path: Path) -> None:
-    ctx = _ctx_with_supersession(tmp_path)
+async def test_resolved_event_emits_scenario_deprecated(
+    tmp_path: Path, state_store
+) -> None:
+    ctx = _ctx_with_supersession(tmp_path, state_store=state_store)
     stage = DisciplineStage(ctx.events_log)
     await stage._handle_event(
         ctx,
@@ -109,8 +112,10 @@ async def test_resolved_event_emits_scenario_deprecated(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolved_event_is_idempotent_on_repeat(tmp_path: Path) -> None:
-    ctx = _ctx_with_supersession(tmp_path)
+async def test_resolved_event_is_idempotent_on_repeat(
+    tmp_path: Path, state_store
+) -> None:
+    ctx = _ctx_with_supersession(tmp_path, state_store=state_store)
     stage = DisciplineStage(ctx.events_log)
     evt = Event(
         timestamp=datetime.now(UTC),

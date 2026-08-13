@@ -28,11 +28,12 @@ class _StubAgent(EtchAgent):
         )
 
 
-def _context(tmp_path):
+def _context(tmp_path, state_store):
     from mage.artifacts.mapping import MappingArtifact
     from mage.orchestration.nodes import PipelineContext
 
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -42,8 +43,8 @@ def _context(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_scenario_emits_one_increment_per_step(tmp_path):
-    ctx = _context(tmp_path)
+async def test_run_scenario_emits_one_increment_per_step(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     agent = _StubAgent()
     stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
     target = ScenarioTarget(
@@ -71,8 +72,8 @@ async def test_run_scenario_emits_one_increment_per_step(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
-    ctx = _context(tmp_path)
+async def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path, state_store):
+    ctx = _context(tmp_path, state_store=state_store)
     agent = _StubAgent()
     stage = EtchStage(ctx.events_log, agent=agent)  # type: ignore[arg-type]
     target = ScenarioTarget(
@@ -89,7 +90,9 @@ async def test_run_scenario_passes_target_sub_bid_to_agent(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_etch_stage_with_mage_toml_emits_provider_resolved(tmp_path, monkeypatch):
+async def test_etch_stage_with_mage_toml_emits_provider_resolved(
+    tmp_path, monkeypatch, state_store
+):
     """EtchStage constructed with mage_toml must emit PROVIDER_RESOLVED via
     ``flush_pending_events`` so the audit trail records the resolution.
 
@@ -107,7 +110,7 @@ async def test_etch_stage_with_mage_toml_emits_provider_resolved(tmp_path, monke
         ),
     }
     mage_toml = MageTomlConfig(default_model="claude-sonnet-5-20251001")
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     stage = EtchStage(
         ctx.events_log,
         agent=_StubAgent(),
@@ -129,7 +132,7 @@ async def test_etch_stage_with_mage_toml_emits_provider_resolved(tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_etch_stage_flush_is_idempotent(tmp_path, monkeypatch):
+async def test_etch_stage_flush_is_idempotent(tmp_path, monkeypatch, state_store):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     providers = {
         "anthropic": ProviderConfig(
@@ -138,7 +141,7 @@ async def test_etch_stage_flush_is_idempotent(tmp_path, monkeypatch):
         ),
     }
     mage_toml = MageTomlConfig(default_model="claude-sonnet-5-20251001")
-    ctx = _context(tmp_path)
+    ctx = _context(tmp_path, state_store=state_store)
     stage = EtchStage(
         ctx.events_log,
         agent=_StubAgent(),

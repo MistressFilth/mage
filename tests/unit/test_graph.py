@@ -33,7 +33,7 @@ class TaggingStage(StageNode):
 
 class TestPipelineGraph:
     @pytest.mark.asyncio
-    async def test_runs_stages_in_order(self, tmp_project_dir: Path):
+    async def test_runs_stages_in_order(self, tmp_project_dir: Path, state_store):
         log = EventsLog(tmp_project_dir / "events.jsonl")
         graph = PipelineGraph(
             stages=[
@@ -43,6 +43,7 @@ class TestPipelineGraph:
             events_log=log,
         )
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
             events_log=log,
@@ -51,13 +52,16 @@ class TestPipelineGraph:
         assert result.iteration == 2
 
     @pytest.mark.asyncio
-    async def test_emits_events_for_each_stage(self, tmp_project_dir: Path):
+    async def test_emits_events_for_each_stage(
+        self, tmp_project_dir: Path, state_store
+    ):
         log = EventsLog(tmp_project_dir / "events.jsonl")
         graph = PipelineGraph(
             stages=[IncrementingStage(events_log=log), TaggingStage(events_log=log)],
             events_log=log,
         )
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
             events_log=log,
@@ -73,10 +77,13 @@ class TestPipelineGraph:
         assert {e.payload["stage"] for e in started} == {"increment", "tag"}
 
     @pytest.mark.asyncio
-    async def test_empty_stages_returns_context_unchanged(self, tmp_project_dir: Path):
+    async def test_empty_stages_returns_context_unchanged(
+        self, tmp_project_dir: Path, state_store
+    ):
         log = EventsLog(tmp_project_dir / "events.jsonl")
         graph = PipelineGraph(stages=[], events_log=log)
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
             events_log=log,
@@ -86,7 +93,9 @@ class TestPipelineGraph:
 
 
 @pytest.mark.asyncio
-async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path):
+async def test_pipeline_graph_catches_plan_revision_required_and_halts(
+    tmp_path, state_store
+):
     from mage.artifacts.plan import PlanRevisionRequired
     from mage.orchestration.events import EventsLog, EventType
     from mage.orchestration.graph import PipelineGraph
@@ -116,6 +125,7 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
     )
 
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(schema_version=2, project_id="t", base_bids=[]),
         events_log=log,
@@ -134,7 +144,9 @@ async def test_pipeline_graph_catches_plan_revision_required_and_halts(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path):
+async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(
+    tmp_path, state_store
+):
     """I1: ReviewBudgetExhausted raised by InscribeStage is caught by the
     graph; the graph exits cleanly (SystemExit 0) without re-raising.
 
@@ -171,6 +183,7 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
     )
 
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(
             schema_version=2,
@@ -198,14 +211,15 @@ async def test_pipeline_graph_catches_review_budget_exhausted_and_halts(tmp_path
     assert exc_info.value.code == 0
 
     # Plan 25: halted_sub_bids landed on BaseBIDEntry.behavior_halt.
-    saved_mapping = MappingArtifact.load(tmp_path / "mapping.yaml")
+    # P32: mapping is read via the state store.
+    saved_mapping = MappingArtifact.load_from_state_store(state_store)
     target = next(e for e in saved_mapping.base_bids if e.base_bid == "00000")
     assert target.behavior_halt == ["00000-0", "00000-1"]
 
 
 class TestPlan4HaltCatching:
     @pytest.mark.asyncio
-    async def test_graph_catches_scenario_inspect_halted(self, tmp_path):
+    async def test_graph_catches_scenario_inspect_halted(self, tmp_path, state_store):
         """Plan 6: graph catches ScenarioInspectHalted, persists the mapping
         with feature_status='halted', and emits HALT_PERSISTED.
         """
@@ -224,6 +238,7 @@ class TestPlan4HaltCatching:
                 raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -235,11 +250,13 @@ class TestPlan4HaltCatching:
         with pytest.raises(SystemExit):
             await graph.run(ctx)
 
-        saved_mapping = MappingArtifact.load(tmp_path / "mapping.yaml")
+        saved_mapping = MappingArtifact.load_from_state_store(state_store)
         assert saved_mapping.feature_status == "halted"
 
     @pytest.mark.asyncio
-    async def test_graph_updates_in_memory_mapping_after_halt(self, tmp_path):
+    async def test_graph_updates_in_memory_mapping_after_halt(
+        self, tmp_path, state_store
+    ):
         """Plan 6: subsequent stages in the same graph run do not execute
         after a halt (graph exits via SystemExit before reaching them).
         """
@@ -267,6 +284,7 @@ class TestPlan4HaltCatching:
                 return context
 
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -283,7 +301,9 @@ class TestPlan4HaltCatching:
         assert ctx.mapping.feature_status == "halted"
 
     @pytest.mark.asyncio
-    async def test_graph_skips_persist_when_project_dir_missing(self, tmp_path):
+    async def test_graph_skips_persist_when_project_dir_missing(
+        self, tmp_path, state_store
+    ):
         """Plan 6: guard the persistence step. If project_dir does not
         exist, the graph still updates the in-memory mapping without
         crashing trying to save.
@@ -304,6 +324,7 @@ class TestPlan4HaltCatching:
                 raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=missing_dir,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -319,7 +340,9 @@ class TestPlan4HaltCatching:
         assert not (missing_dir / "mapping.yaml").exists()
 
     @pytest.mark.asyncio
-    async def test_graph_emits_at_most_one_halt_event_per_halt(self, tmp_path):
+    async def test_graph_emits_at_most_one_halt_event_per_halt(
+        self, tmp_path, state_store
+    ):
         """Plan 6: InspectLoopStage returns the "spec" route; the runner
         (or its graph shim) translates that into ScenarioInspectHalted, and
         the graph emits exactly one HALT_PERSISTED event for that halt
@@ -337,6 +360,7 @@ class TestPlan4HaltCatching:
 
         log = EventsLog(tmp_path / "events.jsonl")
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -438,7 +462,7 @@ class TestPlan4HaltCatching:
         assert "00000-0" in reason
 
     @pytest.mark.asyncio
-    async def test_graph_run_method_invokes_catch_handler(self, tmp_path):
+    async def test_graph_run_method_invokes_catch_handler(self, tmp_path, state_store):
         """Sanity: PipelineGraph.run() catches ScenarioInspectHalted and
         exits cleanly (SystemExit 0) without re-raising.
         """
@@ -457,6 +481,7 @@ class TestPlan4HaltCatching:
                 raise ScenarioInspectHalted("spec-route finding for sub-bid 00000-0")
 
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="p1"),
             events_log=log,
@@ -487,7 +512,9 @@ class TestPlan4HaltCatching:
 class TestPlan5HaltCatching:
     @pytest.mark.asyncio
     async def test_inspect_feature_halt_persists_once_and_terminates_graph(
-        self, tmp_path
+        self,
+        tmp_path,
+        state_store,
     ):
         from mage.artifacts.mapping import MappingArtifact
         from mage.orchestration.events import Event, EventsLog, EventType
@@ -519,6 +546,7 @@ class TestPlan5HaltCatching:
                 return context
 
         context = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_path,
             mapping=MappingArtifact(project_id="feat-1"),
             events_log=log,
@@ -537,7 +565,8 @@ class TestPlan5HaltCatching:
         assert later_stage_ran == []
         assert context.mapping.feature_status == "halted"
         assert (
-            MappingArtifact.load(tmp_path / "mapping.yaml").feature_status == "halted"
+            MappingArtifact.load_from_state_store(state_store).feature_status
+            == "halted"
         )
         halt_events = [
             event
@@ -548,7 +577,7 @@ class TestPlan5HaltCatching:
 
 
 @pytest.mark.asyncio
-async def test_graph_stops_on_scenario_inspect_halted(tmp_path):
+async def test_graph_stops_on_scenario_inspect_halted(tmp_path, state_store):
     """GC-10: ScenarioInspectHalted now shares the halt-persistence path
     with the other halt types. The graph must raise SystemExit(0), persist
     the mapping as 'halted', and persist halt state — preventing later
@@ -577,6 +606,7 @@ async def test_graph_stops_on_scenario_inspect_halted(tmp_path):
     log = EventsLog(tmp_path / "events.jsonl")
     graph = PipelineGraph(stages=[_HaltStage(log), _Dummy(log)], events_log=log)
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=log,
@@ -586,11 +616,12 @@ async def test_graph_stops_on_scenario_inspect_halted(tmp_path):
     with pytest.raises(SystemExit):
         await graph.run(ctx)
     # Mapping was persisted as halted.
-    saved = MappingArtifact.load(tmp_path / "mapping.yaml")
+    # P32: mapping lives on the orphan branch; read via the state store.
+    saved = MappingArtifact.load_from_state_store(state_store)
     assert saved.feature_status == "halted"
     # State was persisted.
     state = FileStatePersistence(
-        state_dir=tmp_path / ".mage" / "state",
+        state_store=state_store,
         state_type=PipelineContext,
     ).load_state()
     assert state is not None

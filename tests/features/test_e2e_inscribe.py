@@ -81,7 +81,7 @@ def _canned_inscribe_output() -> InscribeOutput:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
+async def test_e2e_inscribe_happy_path(tmp_path: Path, state_store) -> None:
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     events_path = project_dir / "events.jsonl"
@@ -129,7 +129,21 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     )
     await mapping.save(project_dir / "mapping.yaml")
 
+    # P32: also seed the mapping on the orphan branch at project_dir so
+    # the InscribeStage (which reads via context.state_store) sees the
+    # initial base_bid.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    from mage.state_store import StateStore
+
+    project_state_store = StateStore(
+        project_dir, "feature-artifacts", identity=("T", "t@e")
+    )
+    await mapping.save_to_state_store(project_state_store)
+
     context = PipelineContext(
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -152,7 +166,8 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     await stage.run(context)
 
     # Verify mapping has at least one APPROVED scenario under base_bid 00000
-    updated_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    # P32: mapping lives on the orphan branch; read via the state store.
+    updated_mapping = MappingArtifact.load_from_state_store(project_state_store)
     target = next(e for e in updated_mapping.base_bids if e.base_bid == "00000")
     assert len(target.scenarios) >= 1
     assert target.scenarios[0].lifecycle_status == LifecycleStatus.APPROVED
@@ -161,9 +176,9 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
     scenario_files = list((project_dir / "scenarios" / "00000").glob("*.feature"))
     assert len(scenario_files) >= 1
 
-    # Verify verdict files were written
-    verdicts_root = project_dir / ".mage" / "verdicts"
-    assert verdicts_root.exists()
+    # Verify verdict files were written (P32: on the orphan branch).
+    verdicts_entries = project_state_store.list_dir("verdicts")
+    assert verdicts_entries, "no verdicts/ entries on the orphan branch"
 
     # Verify events
     events = log.read_all()
@@ -174,7 +189,9 @@ async def test_e2e_inscribe_happy_path(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
+async def test_e2e_inscribe_with_subset_of_reviewers(
+    tmp_path: Path, state_store
+) -> None:
     """When HostConfig.enabled_reviewers is a subset, only those run."""
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
@@ -219,7 +236,21 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
     )
     await mapping.save(project_dir / "mapping.yaml")
 
+    # P32: also seed the mapping on the orphan branch at project_dir so
+    # the InscribeStage (which reads via context.state_store) sees the
+    # initial base_bid.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    from mage.state_store import StateStore as _P32_SS
+
+    project_state_store = _P32_SS(
+        project_dir, "feature-artifacts", identity=("T", "t@e")
+    )
+    await mapping.save_to_state_store(project_state_store)
+
     context = PipelineContext(
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -248,15 +279,18 @@ async def test_e2e_inscribe_with_subset_of_reviewers(tmp_path: Path) -> None:
     await stage.run(context)
 
     # Mapping was updated with at least one approved scenario
-    updated_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    updated_mapping = MappingArtifact.load_from_state_store(project_state_store)
     target = next(e for e in updated_mapping.base_bids if e.base_bid == "00000")
     assert len(target.scenarios) >= 1
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
+async def test_e2e_inscribe_halts_on_budget_exhaustion(
+    tmp_path: Path, state_store
+) -> None:
     """When reviewers always fail and budget is small, Inscribe halts."""
     from datetime import UTC, datetime
+    from pathlib import Path
 
     from mage.artifacts.verdict import ReviewerVerdict, VerdictArtifact
     from mage.orchestration.inscribe import InscribeStage, ReviewBudgetExhausted
@@ -305,7 +339,21 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
     )
     await mapping.save(project_dir / "mapping.yaml")
 
+    # P32: also seed the mapping on the orphan branch at project_dir so
+    # the InscribeStage (which reads via context.state_store) sees the
+    # initial base_bid.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    from mage.state_store import StateStore as _P32_SS
+
+    project_state_store = _P32_SS(
+        project_dir, "feature-artifacts", identity=("T", "t@e")
+    )
+    await mapping.save_to_state_store(project_state_store)
+
     context = PipelineContext(
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -324,7 +372,7 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
@@ -354,7 +402,9 @@ async def test_e2e_inscribe_halts_on_budget_exhaustion(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> None:
+async def test_e2e_inscribe_emits_mechanical_precheck_passed(
+    tmp_path: Path, state_store
+) -> None:
     """With the default empty-check MechanicalVerifier, every scenario
     passes pre-check and emits MECHANICAL_PRECHECK_PASSED before the
     reviewer loop runs."""
@@ -401,7 +451,21 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
     )
     await mapping.save(project_dir / "mapping.yaml")
 
+    # P32: also seed the mapping on the orphan branch at project_dir so
+    # the InscribeStage (which reads via context.state_store) sees the
+    # initial base_bid.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    from mage.state_store import StateStore as _P32_SS
+
+    project_state_store = _P32_SS(
+        project_dir, "feature-artifacts", identity=("T", "t@e")
+    )
+    await mapping.save_to_state_store(project_state_store)
+
     context = PipelineContext(
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -438,7 +502,7 @@ async def test_e2e_inscribe_emits_mechanical_precheck_passed(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
+async def test_e2e_per_scenario_halt_resume(tmp_path: Path, state_store) -> None:
     """End-to-end halt + resume for Plan 25.
 
     Behavior: scenario-B is already APPROVED on disk (simulates a feature
@@ -461,6 +525,8 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     - existing_scenarios on resume carries scenario-B's real name + body
     - scenario-A approves on resume; final mapping has both approved
     """
+    from pathlib import Path
+
     from mage.artifacts.mapping import ScenarioEntry
     from mage.artifacts.verdict import VerdictArtifact
     from mage.orchestration.inscribe import ReviewBudgetExhausted
@@ -523,7 +589,21 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     )
     await mapping.save(project_dir / "mapping.yaml")
 
+    # P32: also seed the mapping on the orphan branch at project_dir so
+    # the InscribeStage (which reads via context.state_store) sees the
+    # initial base_bid.
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    from mage.state_store import StateStore as _P32_SS
+
+    project_state_store = _P32_SS(
+        project_dir, "feature-artifacts", identity=("T", "t@e")
+    )
+    await mapping.save_to_state_store(project_state_store)
+
     context = PipelineContext(
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -542,7 +622,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     def _canned_scenario_a() -> InscribeOutput:
@@ -609,9 +689,12 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
         }
     )
     await persisted_mapping.save(project_dir / "mapping.yaml")
+    # P32: also persist onto the orphan branch so the second-run reload
+    # via load_from_state_store sees the behavior_halt update.
+    await persisted_mapping.save_to_state_store(project_state_store)
 
     # Reload from disk — behavior_halt must be non-empty after the first run.
-    reloaded = MappingArtifact.load(project_dir / "mapping.yaml")
+    reloaded = MappingArtifact.load_from_state_store(project_state_store)
     reloaded_target = next(e for e in reloaded.base_bids if e.base_bid == "00000")
     assert reloaded_target.behavior_halt == halted
     # scenario-B survives the halt intact (it was already APPROVED and
@@ -626,6 +709,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     # Second run: passing reviewers, scenario-A re-drafts.
     captured.clear()
     second_context = PipelineContext(
+        state_store=project_state_store,
         project_dir=project_dir,
         mapping=reloaded,
         events_log=log,
@@ -655,7 +739,7 @@ async def test_e2e_per_scenario_halt_resume(tmp_path: Path) -> None:
     )
 
     # Final mapping on disk: both scenarios approved.
-    final_mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    final_mapping = MappingArtifact.load_from_state_store(project_state_store)
     final_target = next(e for e in final_mapping.base_bids if e.base_bid == "00000")
     final_names = {s.scenario_name for s in final_target.scenarios}
     assert len(final_target.scenarios) == 2

@@ -248,19 +248,13 @@ class InspectFeatureStage:
             "sub_bid": sub_bid,
             "base_bid": scenario.get("base_bid") or sub_bid[:5],
         }
-        verdict_path = (
-            context.project_dir
-            / ".mage"
-            / "verdicts"
-            / feature_id
-            / sub_bid
-            / f"{reviewer.dimension}.yaml"
-        )
+        verdict_path = f"verdicts/{feature_id}/{sub_bid}/{reviewer.dimension}.yaml"
         verdict = await reviewer.run(
             draft=draft,
             spec_context=spec_context,
             mapping=context.mapping,
             events_log=self.events_log,
+            state_store=context.state_store,
             verdict_path=verdict_path,
         )
         if not isinstance(verdict, ReviewerVerdict):
@@ -343,13 +337,8 @@ class InspectFeatureStage:
                 spec_context={"feature_id": feature_id},
                 mapping=context.mapping,
                 events_log=self.events_log,
-                verdict_path=(
-                    context.project_dir
-                    / ".mage"
-                    / "verdicts"
-                    / feature_id
-                    / f"{reviewer.dimension}.yaml"
-                ),
+                state_store=context.state_store,
+                verdict_path=(f"verdicts/{feature_id}/{reviewer.dimension}.yaml"),
                 feature_summary={"feature_id": feature_id},
                 scenarios=scenarios,
             )
@@ -535,17 +524,16 @@ class InspectFeatureStage:
             ready_to_merge=ready_to_merge,
             ledger_markdown=ledger,
         )
-        artifact_path = (
-            context.project_dir / ".mage" / "inspect" / feature_id / f"{iteration}.yaml"
-        )
-        digest = await InspectArtifact.finalize(
+        artifact_path = f"inspect/{feature_id}/{iteration}.yaml"
+        digest = await InspectArtifact.finalize_to_state_store(
+            context.state_store,
             artifact_path,
             content,
             self.events_log,
         )
         context.mapping = context.mapping.attach_feature_inspect(
             InspectArtifactRef(
-                inspect_path=str(artifact_path),
+                inspect_path=artifact_path,
                 inspect_sha256=digest,
                 finalized_at=datetime.now(UTC),
             )
@@ -558,13 +546,16 @@ class InspectFeatureStage:
                 )
             }
         )
-        await context.mapping.save(context.project_dir / "mapping.yaml")
+        # P32: persist via the orphan branch — the state store is the
+        # canonical writer; the working-tree mapping.yaml is no longer
+        # touched by mage.
+        await context.mapping.save_to_state_store(context.state_store)
 
         if iteration >= self.host_config.eof_max_iterations and not ready_to_merge:
             context.mapping = context.mapping.model_copy(
                 update={"feature_status": "halted"}
             )
-            await context.mapping.save(context.project_dir / "mapping.yaml")
+            await context.mapping.save_to_state_store(context.state_store)
             await self.events_log.append(
                 Event(
                     timestamp=datetime.now(UTC),

@@ -112,7 +112,7 @@ class _StubStage(SettleFeatureStage):
         return ""
 
 
-def test_settle_emits_resolved_and_deprecates_old(tmp_path: Path) -> None:
+def test_settle_emits_resolved_and_deprecates_old(tmp_path: Path, state_store) -> None:
     """A successful settle emits SCENARIO_SUPERSESSION_RESOLVED for each
     in-feature supersession pair, and DisciplineStage then deprecates the
     old scenario when it sees the event."""
@@ -120,7 +120,10 @@ def test_settle_emits_resolved_and_deprecates_old(tmp_path: Path) -> None:
     mapping = _make_mapping_with_supersession()
     events_log = EventsLog(tmp_path / "events.jsonl")
     context = PipelineContext(
-        project_dir=tmp_path, mapping=mapping, events_log=events_log
+        state_store=state_store,
+        project_dir=tmp_path,
+        mapping=mapping,
+        events_log=events_log,
     )
     stage = _StubStage(events_log)
 
@@ -152,7 +155,10 @@ def test_settle_emits_resolved_and_deprecates_old(tmp_path: Path) -> None:
     # OLD to DEPRECATED and the SCENARIO_DEPRECATED event is emitted.
     discipline = DisciplineStage(events_log)
     new_context = PipelineContext(
-        project_dir=tmp_path, mapping=mapping, events_log=events_log
+        state_store=state_store,
+        project_dir=tmp_path,
+        mapping=mapping,
+        events_log=events_log,
     )
     asyncio.run(discipline._handle_event(new_context, resolved[0]))
     base_bid = new_context.mapping.highest_base_bid()
@@ -171,7 +177,7 @@ def test_settle_emits_resolved_and_deprecates_old(tmp_path: Path) -> None:
     assert deprecated[0].payload["new_sub_bid"] == "NEW"
 
 
-def test_settle_skips_resolved_on_discarded(tmp_path: Path) -> None:
+def test_settle_skips_resolved_on_discarded(tmp_path: Path, state_store) -> None:
     """disposition=discarded → zero SCENARIO_SUPERSESSION_RESOLVED events.
 
     Mirrors the existing SCENARIO_SUPERSESSION_REQUESTED skip rule: the
@@ -192,7 +198,10 @@ def test_settle_skips_resolved_on_discarded(tmp_path: Path) -> None:
             )
 
     context = PipelineContext(
-        project_dir=tmp_path, mapping=mapping, events_log=events_log
+        state_store=state_store,
+        project_dir=tmp_path,
+        mapping=mapping,
+        events_log=events_log,
     )
     stage = _DiscardStubStage(events_log)
 

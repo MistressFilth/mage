@@ -134,7 +134,9 @@ def _stub_stage(events_log: EventsLog) -> SettleFeatureStage:
     return stage
 
 
-def test_e2e_settle_emits_supersession_for_supersede_scenario(tmp_path: Path) -> None:
+def test_e2e_settle_emits_supersession_for_supersede_scenario(
+    tmp_path: Path, state_store
+) -> None:
     """A settle over a feature whose scenario has ``supersedes="old-Y"`` emits the event.
 
     The mapping is hand-crafted on disk and round-tripped through
@@ -191,6 +193,7 @@ def test_e2e_settle_emits_supersession_for_supersede_scenario(tmp_path: Path) ->
     events_log = EventsLog(events_log_path)
     loaded = MappingArtifact.load(mapping_path)
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project,
         mapping=loaded,
         events_log=str(events_log_path),

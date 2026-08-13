@@ -64,9 +64,10 @@ def _journal_entry(
     )
 
 
-def _ctx(tmp_path: Path) -> tuple[PipelineContext, EventsLog]:
+def _ctx(tmp_path: Path, state_store) -> tuple[PipelineContext, EventsLog]:
     log = EventsLog(tmp_path / "events.jsonl")
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(project_id="p"),
         events_log=log,
@@ -102,9 +103,11 @@ class TestHostConfigFlowThrough:
         return stage, agent
 
     @pytest.mark.asyncio
-    async def test_per_scenario_window_truncates(self, tmp_path: Path) -> None:
+    async def test_per_scenario_window_truncates(
+        self, tmp_path: Path, state_store
+    ) -> None:
         host_config = HostConfig(per_scenario_window=2, cross_scenario_window=3)
-        ctx, _ = _ctx(tmp_path)
+        ctx, _ = _ctx(tmp_path, state_store=state_store)
         ctx.host_config = host_config
         stage, agent = self._stage(host_config, tmp_path)
 
@@ -128,10 +131,12 @@ class TestHostConfigFlowThrough:
 
     @pytest.mark.asyncio
     async def test_cross_scenario_window_truncates_and_sorts(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
+        state_store,
     ) -> None:
         host_config = HostConfig(per_scenario_window=5, cross_scenario_window=2)
-        ctx, _ = _ctx(tmp_path)
+        ctx, _ = _ctx(tmp_path, state_store=state_store)
         ctx.host_config = host_config
         stage, agent = self._stage(host_config, tmp_path)
 
@@ -166,9 +171,11 @@ class TestHostConfigFlowThrough:
         assert [e.finding_id for e in cross] == ["y", "z"]
 
     @pytest.mark.asyncio
-    async def test_per_scenario_window_zero_yields_empty(self, tmp_path: Path) -> None:
+    async def test_per_scenario_window_zero_yields_empty(
+        self, tmp_path: Path, state_store
+    ) -> None:
         host_config = HostConfig(per_scenario_window=0, cross_scenario_window=3)
-        ctx, _ = _ctx(tmp_path)
+        ctx, _ = _ctx(tmp_path, state_store=state_store)
         ctx.host_config = host_config
         stage, agent = self._stage(host_config, tmp_path)
 
@@ -192,10 +199,12 @@ class TestHostConfigFlowThrough:
 
     @pytest.mark.asyncio
     async def test_cross_scenario_window_zero_yields_empty(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
+        state_store,
     ) -> None:
         host_config = HostConfig(per_scenario_window=5, cross_scenario_window=0)
-        ctx, _ = _ctx(tmp_path)
+        ctx, _ = _ctx(tmp_path, state_store=state_store)
         ctx.host_config = host_config
         stage, agent = self._stage(host_config, tmp_path)
 
@@ -220,9 +229,11 @@ class TestHostConfigFlowThrough:
         assert agent.calls[0]["cross_scenario_observations"] == []
 
     @pytest.mark.asyncio
-    async def test_run_increment_passes_slices_to_agent(self, tmp_path: Path) -> None:
+    async def test_run_increment_passes_slices_to_agent(
+        self, tmp_path: Path, state_store
+    ) -> None:
         host_config = HostConfig(per_scenario_window=3, cross_scenario_window=3)
-        ctx, _ = _ctx(tmp_path)
+        ctx, _ = _ctx(tmp_path, state_store=state_store)
         ctx.host_config = host_config
         stage, agent = self._stage(host_config, tmp_path)
 

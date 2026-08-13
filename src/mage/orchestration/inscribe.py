@@ -251,8 +251,6 @@ class InscribeStage(StageNode):
                     # Reviewer loop (unchanged contract).
                     spec_context = {"behavior_name": behavior_name}
                     draft_hash = compute_draft_hash(scenario, spec_context)
-                    verdicts_dir = project_dir / ".mage" / "verdicts" / draft_hash
-                    verdicts_dir.mkdir(parents=True, exist_ok=True)
 
                     enabled_set = (
                         set(self.host_config.enabled_reviewers)
@@ -273,13 +271,16 @@ class InscribeStage(StageNode):
                         reviewer,
                         *,
                         _semaphore=semaphore,
-                        _verdicts_dir=verdicts_dir,
+                        _draft_hash=draft_hash,
                         _scenario=scenario,
                         _spec_context=spec_context,
                         _mapping=mapping,
+                        _state_store=context.state_store,
                     ):
                         async with _semaphore:
-                            verdict_path = _verdicts_dir / f"{reviewer.dimension}.yaml"
+                            verdict_path = (
+                                f"verdicts/{_draft_hash}/{reviewer.dimension}.yaml"
+                            )
                             return (
                                 reviewer.dimension,
                                 await reviewer.run(
@@ -287,6 +288,7 @@ class InscribeStage(StageNode):
                                     spec_context=_spec_context,
                                     mapping=_mapping,
                                     events_log=self.events_log,
+                                    state_store=_state_store,
                                     verdict_path=verdict_path,
                                 ),
                             )
@@ -299,9 +301,12 @@ class InscribeStage(StageNode):
                         per_dimension_verdicts,
                         iteration=per_scenario_iter[sub_bid],
                     )
-                    aggregate_path = verdicts_dir / "aggregate.yaml"
-                    await VerdictArtifact.finalize(
-                        aggregate_path, aggregate, self.events_log
+                    aggregate_path = f"verdicts/{draft_hash}/aggregate.yaml"
+                    await VerdictArtifact.finalize_to_state_store(
+                        context.state_store,
+                        aggregate_path,
+                        aggregate,
+                        self.events_log,
                     )
 
                     if aggregate.decision == "approved":
@@ -396,8 +401,10 @@ class InscribeStage(StageNode):
                 )
             )
 
-        # Persist updated mapping
-        await mapping.save(project_dir / "mapping.yaml")
+        # P32: persist updated mapping via the orphan branch — the state
+        # store is the canonical writer; the working-tree mapping.yaml is
+        # no longer touched by mage.
+        await mapping.save_to_state_store(context.state_store)
 
         # Emit INSCRIBE_COMPLETED
         await self.events_log.append(

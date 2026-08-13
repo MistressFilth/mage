@@ -1,0 +1,503 @@
+"""Orphan-branch state storage via git plumbing (P32)."""
+
+from __future__ import annotations
+
+import os
+import re
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Protocol
+
+from mage.host_project_config import MageTomlConfig
+from mage.orchestration.events import Event, EventsLog, EventType
+
+__all__ = [
+    "DEFAULT_ORPHAN_BRANCH",
+    "MIGRATION_MARKER",
+    "MageStateConflict",
+    "MageStateMigrated",
+    "StateStore",
+    "is_state_migrated",
+    "set_events_log",
+    "state_store_for",
+]
+
+DEFAULT_ORPHAN_BRANCH = "feature-artifacts"
+_BRANCH_PREFIX = "refs/mage/"
+_PATH_PATTERN = re.compile(r"^[a-zA-Z0-9._/-]+$")
+MIGRATION_MARKER = "_meta/.migrated"
+
+# Module-level sink for state-store / state-migration events. CLI handlers
+# call :func:`set_events_log` once per invocation so the audit trail lands
+# in the project's events.jsonl. Sync writes; see EventsLog.append_sync.
+_STATE_EVENTS_LOG: EventsLog | None = None
+
+
+def set_events_log(events_log: EventsLog | None) -> None:
+    """Set the module-level sink for state-store/state-migration events.
+
+    Pass ``None`` to detach. The sink is process-global, matching how
+    the rest of mage handles shared per-invocation state.
+    """
+    global _STATE_EVENTS_LOG
+    _STATE_EVENTS_LOG = events_log
+
+
+def _emit(event_type: EventType, payload: dict[str, Any]) -> None:
+    """Emit a state event if a sink is configured; no-op otherwise.
+
+    Sync write via :meth:`EventsLog.append_sync` because
+    :class:`StateStore` and :mod:`mage.state_migration` are sync modules.
+    """
+    if _STATE_EVENTS_LOG is None:
+        return
+    event = Event(
+        timestamp=datetime.now(UTC),
+        event_type=event_type,
+        payload=payload,
+    )
+    _STATE_EVENTS_LOG.append_sync(event)
+
+
+class MageStateMigrated(RuntimeError):
+    """Legacy `.mage/` state was accessed post-migration.
+
+    Surfaced when a code path tries to read or write the legacy working-tree
+    layout after auto-migration has already moved state to the orphan branch.
+    Carries the backup timestamp so the caller can prompt for
+    ``mage state restore``.
+    """
+
+    def __init__(self, backup_timestamp: str, backup_path: Path) -> None:
+        self.backup_timestamp = backup_timestamp
+        self.backup_path = backup_path
+        super().__init__(
+            f"Legacy .mage/ state already migrated; backup at {backup_path}. "
+            f"Run `mage state restore --from={backup_timestamp}` to revert."
+        )
+
+
+class MageStateConflict(RuntimeError):
+    """Ref-update retry failed twice; concurrent contention could not be reconciled."""
+
+
+class CommandRunner(Protocol):
+    def run(
+        self,
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        check: bool = False,
+        input: bytes | None = None,
+    ) -> Any: ...
+
+
+class StateStore:
+    """Read/write/delete/list on a project orphan branch.
+
+    Uses ``refs/mage/<branch_name>``. Plumbing-only; never checks the ref out.
+    Each write is an atomic CAS via ``git update-ref`` with one retry on
+    contention.
+    """
+
+    def __init__(
+        self,
+        project_root: Path,
+        branch_name: str,
+        *,
+        identity: tuple[str, str],
+        command_runner: CommandRunner | None = None,
+    ) -> None:
+        self.project_root = Path(project_root)
+        self.branch_name = branch_name
+        self.full_ref = f"{_BRANCH_PREFIX}{branch_name}"
+        self._identity = identity
+        self._runner = command_runner or _default_runner()
+        self._bootstrapped = False
+
+    # -- Read API --
+
+    def read(self, relative_path: str) -> bytes:
+        _validate_path(relative_path)
+        result = self._runner.run(
+            ["git", "show", f"{self.full_ref}:{relative_path}"],
+            cwd=self.project_root,
+        )
+        if result.returncode != 0:
+            # Missing path is a normal state; only emit the audit event
+            # on successful reads so the audit trail doesn't drown in
+            # "" returns from existence probes.
+            return b""
+        stdout = result.stdout
+        if isinstance(stdout, bytes):
+            data = stdout
+        else:
+            data = stdout.encode("utf-8")
+        _emit(EventType.STATE_STORE_READ, {"relative_path": relative_path})
+        return data
+
+    def exists(self, relative_path: str) -> bool:
+        _validate_path(relative_path)
+        result = self._runner.run(
+            ["git", "ls-tree", self.full_ref, "--", relative_path],
+            cwd=self.project_root,
+        )
+        return bool(_stdout_text(result).strip())
+
+    def list_dir(self, relative_path: str) -> list[str]:
+        """List entries under ``relative_path`` (or the branch root when empty).
+
+        An empty ``relative_path`` lists the top-level entries on the branch.
+        A non-empty ``relative_path`` must be a directory path; the returned
+        names are the immediate children (file basenames or subdirectory
+        names — not full paths).
+
+        ``--full-tree`` is required: when ``project_root`` is a subdirectory
+        of a parent git repo, plain ``git ls-tree`` would treat the cwd as
+        the root of the tree and return whatever happens to exist at the
+        cwd's path inside the tree (typically empty), not the tree root.
+        """
+        if relative_path:
+            _validate_path(relative_path)
+            target = f"{self.full_ref}:{relative_path}"
+        else:
+            target = self.full_ref
+        result = self._runner.run(
+            ["git", "ls-tree", "--full-tree", target],
+            cwd=self.project_root,
+        )
+        if result.returncode != 0:
+            return []
+        entries = []
+        for line in _stdout_text(result).splitlines():
+            parts = line.split("\t", 1)
+            if len(parts) == 2:
+                entries.append(parts[1])
+        return entries
+
+    def ref_sha(self) -> str | None:
+        result = self._runner.run(
+            ["git", "rev-parse", "--verify", self.full_ref],
+            cwd=self.project_root,
+        )
+        if result.returncode != 0:
+            return None
+        return _stdout_text(result).strip()
+
+    # -- Write API --
+
+    def write(self, relative_path: str, data: bytes) -> str:
+        _validate_path(relative_path)
+        new_commit_sha = self._mutate(relative_path, data, delete=False)
+        _emit(
+            EventType.STATE_STORE_WRITE,
+            {
+                "relative_path": relative_path,
+                "blob_sha": self._last_blob_sha,
+                "ref_sha": new_commit_sha,
+            },
+        )
+        return new_commit_sha
+
+    def delete(self, relative_path: str) -> str:
+        _validate_path(relative_path)
+        new_commit_sha = self._mutate(relative_path, None, delete=True)
+        _emit(
+            EventType.STATE_STORE_DELETE,
+            {"relative_path": relative_path, "ref_sha": new_commit_sha},
+        )
+        return new_commit_sha
+
+    # -- Internals --
+
+    # Per-instance blob SHA from the most recent :meth:`write` call.
+    # Surfaced through the audit event so the event log carries the
+    # blob-level hash without forcing _mutate to thread a tuple return.
+    _last_blob_sha: str = ""
+
+    def _mutate(self, relative_path: str, data: bytes | None, *, delete: bool) -> str:
+        """Apply write or delete with read-modify-write + retry-on-CAS."""
+        attempts = 0
+        while True:
+            attempts += 1
+            self._ensure_bootstrapped()
+            current_tree = self._read_tree()
+            if delete:
+                current_tree.pop(relative_path, None)
+                self._last_blob_sha = ""
+            else:
+                # data is guaranteed non-None in the write branch (write() passes
+                # bytes, delete() passes None and takes the branch above).
+                assert data is not None
+                self._last_blob_sha = self._hash_blob(data)
+                current_tree[relative_path] = self._last_blob_sha
+            new_tree_sha = self._mktree(current_tree)
+            parent = self.ref_sha() or ""
+            new_commit_sha = self._commit_tree(new_tree_sha, parent)
+            try:
+                self._update_ref(new_commit_sha, parent)
+                return new_commit_sha
+            except _RefMoved:
+                if attempts >= 2:
+                    raise MageStateConflict(
+                        f"ref {self.full_ref} moved under us twice; cannot reconcile"
+                    )
+                continue
+
+    def _ensure_bootstrapped(self) -> None:
+        if self._bootstrapped:
+            return
+        if self.ref_sha() is not None:
+            self._bootstrapped = True
+            return
+        empty_tree_sha = _stdout_text(self._run(["git", "mktree"], check=True)).strip()
+        bootstrap_sha = _stdout_text(
+            self._run(
+                [
+                    "git",
+                    "commit-tree",
+                    empty_tree_sha,
+                    "-m",
+                    "mage: bootstrap state branch",
+                ],
+                check=True,
+            )
+        ).strip()
+        self._update_ref(bootstrap_sha, "")
+        self._bootstrapped = True
+        _emit(
+            EventType.STATE_BOOTSTRAPPED,
+            {"ref_sha": bootstrap_sha, "branch_name": self.branch_name},
+        )
+
+    def _read_tree(self) -> dict[str, str]:
+        # --full-tree: when project_root is a subdirectory of a parent git
+        # repo, plain ``ls-tree -r`` would treat cwd as the tree root and
+        # return nothing. See list_dir() for the same reasoning.
+        result = self._run(["git", "ls-tree", "--full-tree", "-r", self.full_ref])
+        if result.returncode != 0:
+            return {}
+        tree: dict[str, str] = {}
+        for line in _stdout_text(result).splitlines():
+            parts = line.split("\t", 1)
+            if len(parts) == 2:
+                meta, path = parts
+                blob_sha = meta.split()[2]
+                tree[path] = blob_sha
+        return tree
+
+    def _hash_blob(self, data: bytes) -> str:
+        # git hash-object -w --stdin writes + prints sha.
+        proc = self._run(
+            ["git", "hash-object", "-w", "--stdin"],
+            check=True,
+            input_data=data,
+        )
+        return _stdout_text(proc).strip()
+
+    def _mktree(self, tree: dict[str, str]) -> str:
+        if not tree:
+            return _stdout_text(self._run(["git", "mktree"], check=True)).strip()
+        # Split entries into root-level blobs and nested subtrees.
+        files_at_root: dict[str, str] = {}
+        subdirs: dict[str, dict[str, str]] = {}
+        for path, sha in tree.items():
+            if "/" in path:
+                top, rest = path.split("/", 1)
+                subdirs.setdefault(top, {})[rest] = sha
+            else:
+                files_at_root[path] = sha
+        # Build each subdirectory's tree recursively.
+        subdir_shas: dict[str, str] = {
+            name: self._mktree(entries) for name, entries in subdirs.items()
+        }
+        # Build the root tree input: blobs first, then subtrees (sorted).
+        lines = [
+            f"100644 blob {sha}\t{name}" for name, sha in sorted(files_at_root.items())
+        ]
+        lines += [
+            f"040000 tree {sha}\t{name}" for name, sha in sorted(subdir_shas.items())
+        ]
+        input_str = "\n".join(lines)
+        proc = self._run(["git", "mktree"], check=True, input_str=input_str)
+        return _stdout_text(proc).strip()
+
+    def _commit_tree(self, tree_sha: str, parent: str) -> str:
+        args = ["git", "commit-tree", tree_sha, "-m", "mage: state update"]
+        if parent:
+            args += ["-p", parent]
+        return _stdout_text(self._run(args, check=True)).strip()
+
+    def _update_ref(self, new_sha: str, expected_old_sha: str | None = None) -> None:
+        old_sha = "" if expected_old_sha is None else expected_old_sha
+        result = self._run(["git", "update-ref", self.full_ref, new_sha, old_sha])
+        if result.returncode != 0:
+            raise _RefMoved(f"ref {self.full_ref} update failed")
+
+    def _run(
+        self,
+        args: list[str],
+        *,
+        check: bool = False,
+        input_data: bytes | None = None,
+        input_str: str | None = None,
+    ) -> Any:
+        payload: bytes | None = None
+        if input_data is not None:
+            payload = input_data
+        elif input_str is not None:
+            payload = input_str.encode("utf-8")
+        if payload is not None:
+            return self._runner.run(
+                args,
+                cwd=self.project_root,
+                check=check,
+                input=payload,
+            )
+        return self._runner.run(args, cwd=self.project_root, check=check)
+
+
+class _RefMoved(RuntimeError):
+    """Internal signal that update-ref failed (ref moved under us)."""
+
+
+def _stdout_text(result: Any) -> str:
+    """Return a command result's stdout as text, decoding bytes when needed."""
+    stdout = result.stdout
+    return stdout.decode("utf-8") if isinstance(stdout, bytes) else stdout
+
+
+def _validate_path(relative_path: str) -> None:
+    if not relative_path:
+        raise ValueError("relative_path must not be empty")
+    if len(relative_path) > 4096:
+        raise ValueError(f"relative_path length {len(relative_path)} exceeds 4096")
+    if relative_path.startswith("/"):
+        raise ValueError(f"relative_path must not be absolute: {relative_path!r}")
+    if ".." in relative_path.split("/"):
+        raise ValueError(f"relative_path must not contain '..': {relative_path!r}")
+    if not _PATH_PATTERN.fullmatch(relative_path):
+        raise ValueError(
+            f"relative_path {relative_path!r} contains invalid characters; "
+            "must match [a-zA-Z0-9._/-]+"
+        )
+
+
+def _default_runner() -> CommandRunner:
+    """Default CommandRunner: subprocess.run with cwd=project_root."""
+    import subprocess as _sp
+
+    class _SubprocessRunner:
+        def run(
+            self,
+            args: list[str],
+            *,
+            cwd: Path | None = None,
+            check: bool = False,
+            input: bytes | None = None,
+        ) -> Any:
+            return _sp.run(
+                args,
+                cwd=cwd,
+                input=input,
+                capture_output=True,
+                check=check,
+            )
+
+    return _SubprocessRunner()
+
+
+def state_store_for(
+    project_root: Path,
+    mage_toml: MageTomlConfig | None = None,
+    *,
+    command_runner: CommandRunner | None = None,
+) -> StateStore:
+    """Factory: build a StateStore for the given project.
+
+    Auto-runs :func:`mage.state_migration.maybe_migrate` so the first
+    state-touching invocation per project migrates any legacy
+    ``<project_dir>/.mage/`` to the orphan branch and renames the
+    legacy directory to ``<project_dir>/.mage.bak.<ts>/``. The migration
+    helper itself no-ops when there is nothing to migrate, so this is
+    free on every subsequent call.
+    """
+    # Lazy import: state_migration imports this module, so a top-level
+    # import would create a cycle on first load.
+    from mage.state_migration import maybe_migrate
+
+    branch = mage_toml.orphan_branch if mage_toml else DEFAULT_ORPHAN_BRANCH
+    identity = _resolve_identity(project_root)
+    store = StateStore(
+        project_root,
+        branch,
+        identity=identity,
+        command_runner=command_runner,
+    )
+    maybe_migrate(project_root, store)
+    return store
+
+
+def is_state_migrated(project_root: Path) -> bool:
+    """True iff the migration marker exists on the orphan branch.
+
+    Used by legacy Path-based helpers (Fix 3) to decide whether to raise
+    :class:`MageStateMigrated` after auto-migration has run. Errors
+    (no git repo, no orphan branch yet, subprocess failure) are
+    swallowed and treated as "not migrated" so the legacy fallback can
+    run.
+
+    The check is a single ``git ls-tree`` against the orphan ref — it
+    deliberately does NOT go through :func:`state_store_for` because
+    that factory auto-migrates as a side effect, and triggering
+    migration from inside a ``_raise_if_migrated`` guard would race
+    with the caller's own first-touch path.
+    """
+    import subprocess as _sp
+
+    try:
+        result = _sp.run(
+            [
+                "git",
+                "ls-tree",
+                f"{_BRANCH_PREFIX}{DEFAULT_ORPHAN_BRANCH}",
+                "--",
+                MIGRATION_MARKER,
+            ],
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _resolve_identity(project_root: Path) -> tuple[str, str]:
+    """Resolve git identity: MAGE_GIT_* env > git config > default."""
+    name = os.environ.get("MAGE_GIT_NAME")
+    email = os.environ.get("MAGE_GIT_EMAIL")
+    if name and email:
+        return (name, email)
+    import subprocess as _sp
+
+    name_result = _sp.run(
+        ["git", "config", "user.name"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    email_result = _sp.run(
+        ["git", "config", "user.email"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if name_result.returncode == 0 and email_result.returncode == 0:
+        n = name_result.stdout.strip()
+        e = email_result.stdout.strip()
+        if n and e:
+            return (n, e)
+    return ("mage", "mage@localhost")

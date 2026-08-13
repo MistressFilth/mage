@@ -22,6 +22,36 @@ def _setup_empty_project(project_dir):
         "schema_version: 2\nproject_id: e2e-run-feature-id-default\nbase_bids: []\n"
     )
 
+    # P32: init a git repo and seed the mapping onto the orphan branch.
+    import subprocess
+
+    from mage.state_store import StateStore
+
+    subprocess.run(["git", "init"], cwd=project_dir, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.name", "T"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "t@e"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    import asyncio
+
+    import yaml
+
+    from mage.artifacts.mapping import MappingArtifact
+
+    mapping = MappingArtifact.model_validate(
+        yaml.safe_load((project_dir / "mapping.yaml").read_text())
+    )
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    asyncio.run(mapping.save_to_state_store(state_store))
+
 
 async def _plant_feature_id_fixture(project_dir):
     """Plant a fixture with one APPROVED scenario, ready for halt injection."""
@@ -61,6 +91,33 @@ async def _plant_feature_id_fixture(project_dir):
         behavior_halt=[],
     )
     await mapping.save(project_dir / "mapping.yaml")
+
+    # P32: init a git repo and seed the mapping onto the orphan branch.
+    import asyncio
+    import subprocess
+
+    from mage.state_store import StateStore
+
+    def _init_git() -> None:
+        subprocess.run(
+            ["git", "init"], cwd=project_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "T"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "t@e"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+        )
+
+    await asyncio.to_thread(_init_git)
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    await mapping.save_to_state_store(state_store)
 
     # The pipeline needs both files to exist on disk.
     (project_dir / "plan.md").touch()
@@ -156,10 +213,14 @@ async def test_e2e_run_with_feature_id_threads_to_events(
 
     assert exc_info.value.code == 0
 
-    state_path = project_dir / ".mage" / "state" / "pipeline-state.yaml"
-    assert state_path.exists(), "pipeline-state.yaml must be written on halt"
+    # P32: pipeline-state lives on the orphan branch, not on disk.
+    from mage.state_store import StateStore
 
-    state = yaml.safe_load(state_path.read_text())
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    state_bytes = state_store.read("state/pipeline-state.yaml")
+    assert state_bytes, "pipeline-state.yaml must be written on halt"
+
+    state = yaml.safe_load(state_bytes)
     assert state.get("feature_id") == "feat-X", (
         f"Persisted state must record feature_id='feat-X'; got {state.get('feature_id')!r}"
     )

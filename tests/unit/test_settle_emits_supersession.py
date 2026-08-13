@@ -20,10 +20,15 @@ from mage.orchestration.settle_feature import GitEnvironment, SettleFeatureStage
 
 
 def _make_pipeline_context(
-    tmp_path, *, mapping, feature_id
+    tmp_path,
+    *,
+    mapping,
+    feature_id,
+    state_store,
 ) -> tuple[PipelineContext, Path]:
     events_log_path = tmp_path / "events.jsonl"
     context = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=mapping,
         events_log=str(events_log_path),
@@ -95,12 +100,17 @@ def stubbed_stage():
 
 @pytest.mark.asyncio
 async def test_settle_emits_supersession_for_matching_scenarios(
-    tmp_path, stubbed_stage
+    tmp_path,
+    stubbed_stage,
+    state_store,
 ):
     """One scenario tagged feat-X with supersedes=old-Y → one SCENARIO_SUPERSESSION_REQUESTED event."""
     mapping = _make_mapping_with_supersede(feature_id="feat-X", supersedes_old="old-Y")
     context, events_log_path = _make_pipeline_context(
-        tmp_path, mapping=mapping, feature_id="feat-X"
+        tmp_path,
+        mapping=mapping,
+        feature_id="feat-X",
+        state_store=state_store,
     )
 
     stage = stubbed_stage(EventsLog(events_log_path))
@@ -122,12 +132,17 @@ async def test_settle_emits_supersession_for_matching_scenarios(
 
 @pytest.mark.asyncio
 async def test_settle_skips_emission_when_disposition_is_discarded(
-    tmp_path, stubbed_stage
+    tmp_path,
+    stubbed_stage,
+    state_store,
 ):
     """discarded → zero supersession events regardless of mapping content."""
     mapping = _make_mapping_with_supersede(feature_id="feat-X", supersedes_old="old-Y")
     context, events_log_path = _make_pipeline_context(
-        tmp_path, mapping=mapping, feature_id="feat-X"
+        tmp_path,
+        mapping=mapping,
+        feature_id="feat-X",
+        state_store=state_store,
     )
 
     stage = stubbed_stage(EventsLog(events_log_path))
@@ -151,13 +166,18 @@ async def test_settle_skips_emission_when_disposition_is_discarded(
 
 
 @pytest.mark.asyncio
-async def test_settle_skips_scenarios_with_wrong_feature_id(tmp_path, stubbed_stage):
+async def test_settle_skips_scenarios_with_wrong_feature_id(
+    tmp_path, stubbed_stage, state_store
+):
     """Scenario tagged for another feature → no emission (defensive skip)."""
     mapping = _make_mapping_with_supersede(
         feature_id="other-feature", supersedes_old="old-Y"
     )
     context, events_log_path = _make_pipeline_context(
-        tmp_path, mapping=mapping, feature_id="feat-X"
+        tmp_path,
+        mapping=mapping,
+        feature_id="feat-X",
+        state_store=state_store,
     )
 
     stage = stubbed_stage(EventsLog(events_log_path))

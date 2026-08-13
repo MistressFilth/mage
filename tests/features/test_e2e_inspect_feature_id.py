@@ -86,6 +86,19 @@ def test_e2e_cosmetic_apply_filters_by_feature_id(tmp_path: Path):
     subprocess.run(["git", "add", "-A"], cwd=project, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "seed"], cwd=project, check=True)
 
+    # P32: seed the mapping onto the orphan branch so the CLI can read it.
+    import asyncio
+
+    from mage.artifacts.mapping import MappingArtifact
+    from mage.state_store import StateStore
+
+    state_store = StateStore(project, "feature-artifacts", identity=("e2e", "e2e@mage"))
+    asyncio.run(
+        MappingArtifact.model_validate(
+            yaml.safe_load((project / "mapping.yaml").read_text())
+        ).save_to_state_store(state_store)
+    )
+
     subprocess.run(
         [
             "mage",

@@ -17,17 +17,30 @@ from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
 from mage.artifacts.verdict import VerdictError
+from mage.cli_state import (
+    cmd_state_info,
+    cmd_state_ls,
+    cmd_state_restore,
+    cmd_state_show,
+)
+from mage.cli_state import (
+    register as register_state,
+)
 from mage.cosmetic_pid import (
     is_alive_with_start,
-    pid_file_path,
-    read_pid,
-    remove_pid,
+    pid_file_via_state_store,
+    read_pid_via_state_store,
+    remove_pid_via_state_store,
 )
 from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.providers.config import load_xdg_providers
-from mage.verification.host_overrides import default_check_set, load_host_config
+from mage.state_store import state_store_for
+from mage.verification.host_overrides import (
+    default_check_set,
+    load_host_config_via_store,
+)
 from mage.verification.mechanical import (
     MechanicalVerifier,
     ScenarioDraft,
@@ -286,6 +299,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     config_subparsers.add_parser("show", help="Print the effective settings as TOML")
 
+    # mage state <subcommand>
+    register_state(subparsers)
+
     return parser
 
 
@@ -522,22 +538,21 @@ async def cmd_run(args):
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
-    state_dir = project_dir / ".mage" / "state"
 
     # Plan 22: feature_id tag-only threading.
     feature_id = _resolve_feature_id(args)
 
-    mapping_path = project_dir / "mapping.yaml"
-    if mapping_path.exists():
-        # Brief had MappingArtifact.load(mapping_path, log) but the actual
-        # signature is load(path) — drop the spurious log kwarg.
-        mapping = MappingArtifact.load(mapping_path)
-    else:
-        mapping = MappingArtifact(
-            schema_version=2, project_id=project_dir.name, base_bids=[]
-        )
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
 
-    persistence = FileStatePersistence(state_dir=state_dir, state_type=PipelineContext)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # First run of a fresh project has no mapping yet, so the loader returns
+    # a fresh empty artifact — same fallback as the legacy path check.
+    mapping = MappingArtifact.load_from_state_store(state_store)
+
+    persistence = FileStatePersistence(
+        state_store=state_store, state_type=PipelineContext
+    )
     saved = persistence.load_state()
     if saved is not None:
         # Tag-only: rebadge saved state if --feature-id was explicitly passed.
@@ -548,6 +563,7 @@ async def cmd_run(args):
     else:
         initial_context = PipelineContext(
             project_dir=project_dir,
+            state_store=state_store,
             mapping=mapping,
             events_log=log,
             plan_path=project_dir / "plan.md",
@@ -555,7 +571,7 @@ async def cmd_run(args):
             feature_id=feature_id,
         )
 
-    host_config = load_host_config(project_dir)
+    host_config = load_host_config_via_store(state_store)
     initial_context.host_config = host_config
 
     # Plan 9: stages are the same wiring for both --dry-run and real mode.
@@ -583,9 +599,12 @@ async def cmd_review_show(args):
     """Display the latest aggregate verdict for the project."""
     from mage.artifacts.verdict import ReviewerAggregate, VerdictArtifact
     from mage.orchestration.events import EventsLog
+    from mage.state_store import state_store_for
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
 
     events = log.read_all()
     aggregate_events = [
@@ -601,21 +620,23 @@ async def cmd_review_show(args):
     latest = max(aggregate_events, key=lambda e: e.timestamp)
     digest = latest.payload.get("verdict_sha256")
 
-    # C4: read the decision from the AGGREGATE file on disk (single source
-    # of truth) rather than relying on the event payload, which the
-    # VerdictArtifact schema doesn't include. The verdict_path in the
-    # payload points to the aggregate.yaml we wrote.
+    # C4: read the decision from the AGGREGATE file on the orphan branch
+    # (single source of truth) rather than relying on the event payload,
+    # which the VerdictArtifact schema doesn't include. The verdict_path
+    # in the payload points to the relative ``verdicts/.../aggregate.yaml``
+    # we wrote.
     aggregate_path_str = latest.payload.get("verdict_path")
     decision = None
     if aggregate_path_str:
-        aggregate_path = Path(aggregate_path_str)
         try:
-            aggregate = await VerdictArtifact.load(aggregate_path, log)
+            aggregate = await VerdictArtifact.load_from_state_store(
+                state_store, aggregate_path_str, log
+            )
             decision = ReviewerAggregate.model_validate(aggregate).decision
         except (VerdictError, OSError) as e:
             print(
                 f"mage review show: warning: failed to read aggregate at "
-                f"{aggregate_path}: {e}",
+                f"{aggregate_path_str}: {e}",
                 file=sys.stderr,
             )
 
@@ -631,22 +652,38 @@ async def cmd_inspect_show(args):
     """Display the latest Inspect artifact for a feature."""
     from mage.artifacts.inspect import InspectArtifact
     from mage.orchestration.events import EventsLog
+    from mage.state_store import state_store_for
 
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
-    inspect_dir = project_dir / ".mage" / "inspect" / args.feature_id
-    if not inspect_dir.exists():
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+
+    # P32: locate artifacts on the orphan branch; pick the highest
+    # iteration so callers see the most recent state.
+    parent_dir = f"inspect/{args.feature_id}"
+    entries = state_store.list_dir(parent_dir)
+    if not entries:
         print(f"No inspect directory for feature {args.feature_id!r}", file=sys.stderr)
         return 1
 
-    # Find the highest iteration
-    candidates = sorted(inspect_dir.glob("*.yaml"))
+    candidates: list[tuple[int, str]] = []
+    for entry in entries:
+        basename = entry.rsplit("/", 1)[-1]
+        if not basename.endswith(".yaml"):
+            continue
+        try:
+            iteration = int(basename[: -len(".yaml")])
+        except ValueError:
+            continue
+        candidates.append((iteration, f"{parent_dir}/{basename}"))
+
     if not candidates:
         print(f"No inspect artifacts for feature {args.feature_id!r}", file=sys.stderr)
         return 1
-    latest = candidates[-1]
+    latest_path = max(candidates, key=lambda item: item[0])[1]
 
-    content = await InspectArtifact.load(latest, log)
+    content = await InspectArtifact.load_from_state_store(state_store, latest_path, log)
     print(f"# Inspect Feature {content.feature_id}")
     print(f"iteration: {content.iteration}/{content.eof_max_iterations}")
     print(f"ready_to_merge: {content.ready_to_merge}")
@@ -671,19 +708,15 @@ async def cmd_settle_run(args):
     project_dir: Path = args.project_dir
     log = EventsLog(project_dir / "events.jsonl")
 
-    # Load mapping (default to empty if missing — matches cmd_verify pattern).
-    mapping_path = project_dir / "mapping.yaml"
-    if mapping_path.exists():
-        mapping = MappingArtifact.load(mapping_path)
-    else:
-        mapping = MappingArtifact(
-            schema_version=2,
-            project_id=project_dir.name,
-            base_bids=[],
-        )
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — matches the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
 
     ctx = PipelineContext(
         project_dir=project_dir,
+        state_store=state_store,
         mapping=mapping,
         events_log=log,
         plan_path=project_dir / "plan.md",
@@ -725,7 +758,7 @@ async def cmd_settle_run(args):
 
     stage = SettleFeatureStage(
         log,
-        host_config=load_host_config(project_dir),
+        host_config=load_host_config_via_store(state_store),
     )
     try:
         await stage.run_settle(ctx, feature_id=args.feature_id, disposition=disposition)
@@ -754,18 +787,16 @@ async def cmd_cosmetic_show(args) -> int:
     and emits a stable text dump. `--journal` appends inspect journal
     entries for the same feature. `--filter sub_bid=...` narrows.
     """
-    from mage.artifacts.cosmetic_state import load_state
+    from mage.artifacts.cosmetic_state import load_state_via_store
     from mage.artifacts.mapping import MappingArtifact
     from mage.cosmetic_filters import FilterParseError, parse_filters
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic show: no mapping found at {mapping_path}", file=sys.stderr
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — mirrors the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     raw_filter = getattr(args, "filter", None)
     try:
         filters = parse_filters(raw_filter, subcommand="cosmetic show")
@@ -793,7 +824,7 @@ async def cmd_cosmetic_show(args) -> int:
             return 2
         queue = [q for q in queue if _queue_sub_bid(q) in allowed]
     queue.sort(key=lambda q: _queue_sub_bid(q))
-    state = load_state(project_dir)
+    state = load_state_via_store(state_store)
     if getattr(args, "raw", False):
         for q in queue:
             sub_bid = _queue_sub_bid(q)
@@ -827,7 +858,7 @@ async def cmd_cosmetic_show(args) -> int:
         return 0
     from mage.agents.cosmetic_refiner import CosmeticRefiner
 
-    host_config = load_host_config(project_dir)
+    host_config = load_host_config_via_store(state_store)
     mage_toml = load_mage_toml(project_dir)
     providers, default_provider = load_xdg_providers()
     model, _, _ = await resolve_model_logged(
@@ -899,14 +930,11 @@ async def cmd_cosmetic_apply(args) -> int:
     from mage.orchestration.cosmetic_apply import apply_for_feature
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic apply: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — mirrors the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     raw_filter = getattr(args, "filter", None)
     try:
         filters = parse_filters(raw_filter, subcommand="cosmetic apply")
@@ -942,20 +970,17 @@ async def cmd_cosmetic_apply(args) -> int:
 
 async def cmd_cosmetic_list(args) -> int:
     """List cosmetic queue entries for a feature. Text or JSON output."""
-    from mage.artifacts.cosmetic_state import load_state
+    from mage.artifacts.cosmetic_state import load_state_via_store
     from mage.artifacts.mapping import MappingArtifact
     from mage.cosmetic_filters import FilterParseError, parse_filters
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    mapping_path = project_dir / "mapping.yaml"
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic list: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
-    state = load_state(project_dir)
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — mirrors the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
+    state = load_state_via_store(state_store)
     raw_filter = getattr(args, "filter", None)
     try:
         filters = parse_filters(raw_filter, subcommand="cosmetic list")
@@ -1025,8 +1050,11 @@ async def cmd_mapping_save(args) -> int:
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
     log = EventsLog(project_dir / "events.jsonl")
-    mapping = MappingArtifact.load(project_dir / "mapping.yaml")
-    await mapping.save(project_dir / "mapping.yaml", events_log=log)
+    # P32: mapping lives on the orphan branch; load+save via the state store.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
+    await mapping.save_to_state_store(state_store, events_log=log)
     return 0
 
 
@@ -1058,7 +1086,13 @@ async def cmd_cosmetic_watch(args) -> int:
 
 
 async def cmd_cosmetic_unwatch(args) -> int:
-    """Stop the cosmetic watcher daemon by PID file, with SIGTERM/SIGKILL escalation."""
+    """Stop the cosmetic watcher daemon by PID file, with SIGTERM/SIGKILL escalation.
+
+    P32 task 13: the PID file lives on the mage orphan branch. The CLI
+    constructs the canonical ``StateStore`` for the project (honoring
+    ``mage.toml.orphan_branch``) and reads/writes the orphan-branch PID
+    file via the StateStore API rather than touching the working tree.
+    """
     from datetime import UTC, datetime
 
     from mage.orchestration.cosmetic_watcher import (
@@ -1068,17 +1102,26 @@ async def cmd_cosmetic_unwatch(args) -> int:
     from mage.orchestration.events import Event, EventType
 
     project_dir: Path = getattr(args, "project_dir", Path.cwd())
-    path = pid_file_path(project_dir)
-    parsed = read_pid(project_dir)
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    pid_ref = pid_file_via_state_store(state_store)
+    parsed = read_pid_via_state_store(state_store)
     if parsed is None:
         print(
             f"mage cosmetic unwatch: no watcher running for {project_dir}",
             file=sys.stderr,
         )
         return 0
-    pid, start_time = parsed
+    pid, start_time_int = parsed
+    # State-store-backed PID files record start_time as int; the legacy
+    # Path-based PID files recorded it as a float. ``is_alive_with_start``
+    # accepts float | None, so coerce for backward compatibility with
+    # legacy daemon-write sites and historical state on the branch.
+    start_time: float | None = (
+        float(start_time_int) if start_time_int is not None else None
+    )
     if not is_alive_with_start(pid, start_time):
-        remove_pid(project_dir)
+        remove_pid_via_state_store(state_store)
         print(
             f"mage cosmetic unwatch: removed stale pid file for pid={pid}",
             file=sys.stderr,
@@ -1089,7 +1132,7 @@ async def cmd_cosmetic_unwatch(args) -> int:
                 timestamp=datetime.now(UTC),
                 event_type=EventType.COSMETIC_WATCHER_STALE_PID_REMOVED,
                 payload={
-                    "pid_file_path": str(path),
+                    "pid_file_path": pid_ref,
                     "recorded_pid": pid,
                 },
             )
@@ -1102,8 +1145,9 @@ async def cmd_cosmetic_unwatch(args) -> int:
         requester_pid=os.getpid(),
         timeout_s=5.0,
         force=getattr(args, "force", False),
+        state_store=state_store,
     )
-    if read_pid(project_dir) is None:
+    if read_pid_via_state_store(state_store) is None:
         return 0
     print(
         "mage cosmetic unwatch: watcher did not stop after 5000ms; "
@@ -1116,13 +1160,11 @@ async def cmd_cosmetic_unwatch(args) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     """Run mechanical verification on a single scenario."""
     project_dir: Path = args.project_dir
-    mapping = (
-        MappingArtifact.load(project_dir / "mapping.yaml")
-        if (project_dir / "mapping.yaml").exists()
-        else MappingArtifact(
-            schema_version=2, project_id=project_dir.name, base_bids=[]
-        )
-    )
+    # P32: mapping lives on the orphan branch; load from the state store.
+    # Empty mapping when the branch is fresh — matches the legacy fallback.
+    mage_toml = load_mage_toml(project_dir)
+    state_store = state_store_for(project_dir, mage_toml)
+    mapping = MappingArtifact.load_from_state_store(state_store)
     # For Plan 1, we run with empty registries (host project can configure later).
     checks = default_check_set(registered_tags=set(), step_patterns=[])
     verifier = MechanicalVerifier(checks=checks)
@@ -1182,6 +1224,14 @@ async def _main(argv: list[str] | None = None) -> int:
         return cli_config.cmd_config_init()
     if args.command == "config" and args.config_command == "show":
         return cli_config.cmd_config_show()
+    if args.command == "state" and args.state_action == "ls":
+        return cmd_state_ls(args)
+    if args.command == "state" and args.state_action == "show":
+        return cmd_state_show(args)
+    if args.command == "state" and args.state_action == "info":
+        return cmd_state_info(args)
+    if args.command == "state" and args.state_action == "restore":
+        return cmd_state_restore(args)
     parser.print_help()
     raise SystemExit(1)
 

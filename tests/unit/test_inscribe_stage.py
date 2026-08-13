@@ -113,7 +113,10 @@ def _write_behaviors_yaml(project_dir: Path, feature_id: str = "feat-1") -> Path
 
 @pytest.mark.asyncio
 async def test_inscribe_stage_runs_end_to_end_with_test_model(
-    tmp_path, all_seven_reviewers, canned_inscribe_output
+    tmp_path,
+    all_seven_reviewers,
+    canned_inscribe_output,
+    state_store,
 ):
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
@@ -141,6 +144,7 @@ async def test_inscribe_stage_runs_end_to_end_with_test_model(
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -170,7 +174,9 @@ async def test_inscribe_stage_runs_end_to_end_with_test_model(
 
 
 @pytest.mark.asyncio
-async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch):
+async def test_inscribe_stage_halts_when_budget_exhausted(
+    tmp_path, monkeypatch, state_store
+):
     """When iteration >= max_iterations and aggregate says needs_refactor,
     emit REVIEW_HALT_PERSISTED and raise ReviewBudgetExhausted."""
     from mage.agents.inscribe import InscribeAgent
@@ -220,6 +226,7 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -247,9 +254,11 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
+            from pathlib import Path
+
             from mage.artifacts.verdict import VerdictArtifact
 
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     failing_reviewer = AlwaysFailReviewer(model=TestModel(custom_output_args=None))
@@ -281,7 +290,7 @@ async def test_inscribe_stage_halts_when_budget_exhausted(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_per_scenario_halt_sibling_continues(tmp_path) -> None:
+async def test_per_scenario_halt_sibling_continues(tmp_path, state_store) -> None:
     """I5 fix: when one scenario exhausts, sibling scenarios continue drafting
     and the behavior-level halt carries the halted sub_bid list."""
     from mage.agents.inscribe import InscribeAgent, InscribeOutput, ScenarioSpec
@@ -332,6 +341,7 @@ async def test_per_scenario_halt_sibling_continues(tmp_path) -> None:
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -367,9 +377,11 @@ async def test_per_scenario_halt_sibling_continues(tmp_path) -> None:
                 reviewer_id=f"{self.dimension}@v1",
                 findings=[],
             )
+            from pathlib import Path
+
             from mage.artifacts.verdict import VerdictArtifact
 
-            await VerdictArtifact.finalize(verdict_path, v, events_log)
+            await VerdictArtifact.finalize(Path(verdict_path), v, events_log)
             return v
 
     host_config = HostConfig(max_iterations=1)
@@ -422,7 +434,9 @@ async def test_review_budget_exhausted_has_halted_sub_bids_attribute() -> None:
 
 @pytest.mark.asyncio
 async def test_existing_scenarios_uses_scenario_name_and_gherkin(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
+    state_store,
 ) -> None:
     """I2 fix: existing_scenarios reflects real scenario_name + gherkin_body
     on prior ScenarioEntry, not the sub_bid placeholder."""
@@ -483,6 +497,7 @@ async def test_existing_scenarios_uses_scenario_name_and_gherkin(
     await mapping.save(project_dir / "mapping.yaml")
 
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,

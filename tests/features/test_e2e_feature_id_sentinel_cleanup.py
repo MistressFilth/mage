@@ -203,7 +203,11 @@ def _canned_inscribe_output() -> InscribeOutput:
 
 
 async def _seed_minimal_project(project_dir: Path, feature_id: str) -> MappingArtifact:
-    """Write behaviors.yaml + mapping.yaml on disk for the given feature_id."""
+    """Write behaviors.yaml + mapping.yaml on disk for the given feature_id.
+
+    P32: also seed the mapping onto the orphan branch so the CLI can read
+    it via the state store.
+    """
     (project_dir / "behaviors.yaml").write_text(
         yaml.safe_dump(
             {
@@ -242,6 +246,14 @@ async def _seed_minimal_project(project_dir: Path, feature_id: str) -> MappingAr
         ],
     )
     await mapping.save(project_dir / "mapping.yaml")
+
+    # P32: init git + seed the mapping onto the orphan branch.
+    from mage.state_store import StateStore
+    from tests.conftest import init_git_repo
+
+    init_git_repo(project_dir)
+    state_store = StateStore(project_dir, "feature-artifacts", identity=("T", "t@e"))
+    await mapping.save_to_state_store(state_store)
     return mapping
 
 
@@ -299,6 +311,7 @@ def _make_pass_duck_reviewer(dimension: str):
 @pytest.mark.asyncio
 async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
     tmp_path: Path,
+    state_store,
 ):
     """Drive Inscribe + InspectFeature through the Python API.
 
@@ -312,8 +325,9 @@ async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
     log = EventsLog(events_path)
     await _seed_minimal_project(project_dir, feature_id=feature_id)
 
-    mapping = MappingArtifact.load(project_dir / "mapping.yaml")
+    mapping = MappingArtifact.load_from_state_store(state_store)
     context = PipelineContext(
+        state_store=state_store,
         project_dir=project_dir,
         mapping=mapping,
         events_log=log,
@@ -391,7 +405,7 @@ async def test_e2e_run_inscribe_and_inspect_never_emit_unknown_feature_id(
 
     # Cosmetic queue entries (on disk via re-loaded mapping) must carry
     # the real feature_id, never "unknown".
-    updated = MappingArtifact.load(project_dir / "mapping.yaml")
+    updated = MappingArtifact.load_from_state_store(state_store)
     queue = updated.cosmetic_findings
     assert queue, "expected at least one cosmetic queue entry"
     for entry in queue:

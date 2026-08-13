@@ -16,8 +16,9 @@ from mage.orchestration.nodes import PipelineContext
 from mage.verification.host_overrides import HostConfig
 
 
-def _ctx(tmp_path: Path) -> PipelineContext:
+def _ctx(tmp_path: Path, state_store) -> PipelineContext:
     return PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(
             project_id="p",
@@ -59,11 +60,13 @@ class _MechanicalVerifier:
 
 @pytest.mark.asyncio
 async def test_inspect_feature_stage_constructs_semaphore_with_max_concurrent_llm_calls(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
+    monkeypatch,
+    state_store,
 ):
     """InspectFeature per-scenario dispatch must construct asyncio.Semaphore
     sized by host_config.max_concurrent_llm_calls."""
-    ctx = _ctx(tmp_path)
+    ctx = _ctx(tmp_path, state_store=state_store)
     reviewers = [
         _make_reviewer("spec_compliance"),
         _make_reviewer("scenario_clarity"),

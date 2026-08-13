@@ -12,8 +12,9 @@ from mage.orchestration.nodes import PipelineContext, StageNode
 
 
 class TestPipelineContext:
-    def test_minimal_context(self, tmp_project_dir: Path):
+    def test_minimal_context(self, tmp_project_dir: Path, state_store):
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
             events_log=EventsLog(tmp_project_dir / "events.jsonl"),
@@ -35,7 +36,9 @@ class TestStageNode:
         assert "_run" in IncompleteStage.__abstractmethods__
 
     @pytest.mark.asyncio
-    async def test_run_emits_start_and_complete_events(self, tmp_project_dir: Path):
+    async def test_run_emits_start_and_complete_events(
+        self, tmp_project_dir: Path, state_store
+    ):
         class SimpleStage(StageNode):
             name = "simple"
 
@@ -46,6 +49,7 @@ class TestStageNode:
         log = EventsLog(log_path)
         stage = SimpleStage(events_log=log)
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
             events_log=log,
@@ -59,7 +63,9 @@ class TestStageNode:
         assert events[1].payload == {"stage": "simple"}
 
     @pytest.mark.asyncio
-    async def test_run_records_failure_event_on_exception(self, tmp_project_dir: Path):
+    async def test_run_records_failure_event_on_exception(
+        self, tmp_project_dir: Path, state_store
+    ):
         class FailingStage(StageNode):
             name = "failing"
 
@@ -70,6 +76,7 @@ class TestStageNode:
         log = EventsLog(log_path)
         stage = FailingStage(events_log=log)
         ctx = PipelineContext(
+            state_store=state_store,
             project_dir=tmp_project_dir,
             mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
             events_log=log,
@@ -82,12 +89,13 @@ class TestStageNode:
         assert events[0].event_type == EventType.STAGE_STARTED
 
 
-def test_pipeline_context_plan_path_default(tmp_path):
+def test_pipeline_context_plan_path_default(tmp_path, state_store):
     from mage.orchestration.nodes import PipelineContext
 
     mapping = MappingArtifact(schema_version=2, project_id="test", base_bids=[])
     events_log = EventsLog(tmp_path / "events.jsonl")
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=mapping,
         events_log=events_log,
@@ -95,11 +103,12 @@ def test_pipeline_context_plan_path_default(tmp_path):
     assert ctx.plan_path == tmp_path / "plan.md"
 
 
-def test_pipeline_context_plan_path_overridable(tmp_path):
+def test_pipeline_context_plan_path_overridable(tmp_path, state_store):
     from mage.orchestration.nodes import PipelineContext
 
     custom = tmp_path / "custom-plan.md"
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(schema_version=2, project_id="test", base_bids=[]),
         events_log=EventsLog(tmp_path / "events.jsonl"),
@@ -108,11 +117,12 @@ def test_pipeline_context_plan_path_overridable(tmp_path):
     assert ctx.plan_path == custom
 
 
-def test_pipeline_context_carries_automation_cursor(tmp_path):
+def test_pipeline_context_carries_automation_cursor(tmp_path, state_store):
     from mage.orchestration.nodes import PipelineContext
     from mage.orchestration.runner import AutomationCursor
 
     ctx = PipelineContext(
+        state_store=state_store,
         project_dir=tmp_path,
         mapping=MappingArtifact(schema_version=2, project_id="p", base_bids=[]),
         events_log=EventsLog(tmp_path / "events.jsonl"),

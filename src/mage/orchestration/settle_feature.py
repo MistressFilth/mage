@@ -108,18 +108,29 @@ class SettleFeatureStage(StageNode):
         return context
 
     @staticmethod
-    def _latest_inspect_path(project_dir: Path, feature_id: str) -> Path:
-        inspect_dir = project_dir / ".mage" / "inspect" / feature_id
-        if not inspect_dir.exists():
-            raise SettleNotReadyError(
-                f"No InspectArtifact directory for feature {feature_id!r}"
-            )
-        candidates: list[tuple[int, Path]] = []
-        for path in inspect_dir.glob("*.yaml"):
+    def _latest_inspect_path(state_store, feature_id: str) -> str:
+        """Return the relative path of the highest-iteration Inspect artifact
+        on the orphan branch for ``feature_id`` (P32).
+
+        Uses ``state_store.list_dir`` to enumerate the entries under
+        ``inspect/<feature_id>/`` and selects the numerically-largest
+        ``<iteration>.yaml``. The returned value is a relative path
+        suitable for ``InspectArtifact.load_from_state_store``.
+        """
+        parent_dir = f"inspect/{feature_id}"
+        entries = state_store.list_dir(parent_dir)
+        candidates: list[tuple[int, str]] = []
+        for entry in entries:
+            # ``list_dir`` returns the immediate-child names; reconstruct
+            # the full orphan-branch-relative path for the loader.
+            basename = entry.rsplit("/", 1)[-1]
+            if not basename.endswith(".yaml"):
+                continue
             try:
-                candidates.append((int(path.stem), path))
+                iteration = int(basename[: -len(".yaml")])
             except ValueError:
                 continue
+            candidates.append((iteration, f"{parent_dir}/{basename}"))
         if not candidates:
             raise SettleNotReadyError(
                 f"No InspectArtifact iterations for feature {feature_id!r}"
@@ -131,8 +142,10 @@ class SettleFeatureStage(StageNode):
         context: PipelineContext,
         feature_id: str,
     ) -> InspectArtifactContent:
-        path = self._latest_inspect_path(context.project_dir, feature_id)
-        content = await InspectArtifact.load(path, context.events_log)
+        path = self._latest_inspect_path(context.state_store, feature_id)
+        content = await InspectArtifact.load_from_state_store(
+            context.state_store, path, context.events_log
+        )
         if content.feature_id != feature_id:
             raise SettleNotReadyError(
                 f"InspectArtifact feature_id {content.feature_id!r} does not match "
@@ -505,8 +518,8 @@ class SettleFeatureStage(StageNode):
                 f"expected one of {sorted(_VALID_DISPOSITIONS)}"
             )
 
-        report_path = context.project_dir / ".mage" / "settle" / f"{feature_id}.md"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path = f"settle/{feature_id}.md"
+        cosmetic_path = f"settle/{feature_id}-cosmetic.md"
         await self._load_ready_inspect(context, feature_id)
 
         # Plan 14: request supersession for every scenario in this feature
@@ -544,8 +557,8 @@ class SettleFeatureStage(StageNode):
                 },
             )
         )
-        cosmetic_path = report_path.with_name(f"{feature_id}-cosmetic.md")
-        cosmetic_path.write_text(self._render_cosmetic_md(queue), encoding="utf-8")
+        cosmetic_text = self._render_cosmetic_md(queue)
+        context.state_store.write(cosmetic_path, cosmetic_text.encode("utf-8"))
         await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),
@@ -607,19 +620,22 @@ class SettleFeatureStage(StageNode):
 
         # Write the report before flipping the mapping: a failed write must not
         # leave a persisted "settled" status with no record of what happened.
-        report_path.write_text(
+        context.state_store.write(
+            report_path,
             self._render_report(
                 feature_id=feature_id,
                 disposition=disposition,
                 queue_size=len(queue),
                 environment=environment,
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         context.mapping = context.mapping.model_copy(
             update={"feature_status": "settled"}
         )
-        await context.mapping.save(context.project_dir / "mapping.yaml")
+        # P32: persist via the orphan branch — the state store is the
+        # canonical writer; the working-tree mapping.yaml is no longer
+        # touched by mage.
+        await context.mapping.save_to_state_store(context.state_store)
         await self.events_log.append(
             Event(
                 timestamp=datetime.now(UTC),

@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,7 +18,8 @@ import yaml
 from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import Event, EventsLog, EventType
 from mage.providers.config import load_xdg_providers
-from mage.verification.host_overrides import load_host_config
+from mage.state_store import StateStore, state_store_for
+from mage.verification.host_overrides import load_host_config_via_store
 
 
 async def apply_for_feature(
@@ -28,6 +28,7 @@ async def apply_for_feature(
     *,
     dry_run: bool = False,
     feature_id: str | None = None,
+    state_store: StateStore | None = None,
 ) -> int:
     """Apply cosmetic queue items for the given sub_bids.
 
@@ -37,28 +38,38 @@ async def apply_for_feature(
     positional) and the available sub_bids are pre-filtered to that
     feature in `cmd_cosmetic_apply` before reaching this function.
 
+    ``state_store`` is required for production (mapping lives on the
+    orphan branch after P32 task 10). When ``None``, the factory fallback
+    builds one via ``state_store_for(project_dir, load_mage_toml(...))``
+    so the API stays ergonomic for ad-hoc CLI/test use.
+
     Returns 0 on success (including no-op when the requested set is empty
-    or all entries resolve to a no-op), 1 if mapping.yaml is missing.
+    or all entries resolve to a no-op), 1 if the mapping is empty/absent
+    on the orphan branch.
     """
     from mage.agents.cosmetic_refiner import CosmeticRefiner
     from mage.artifacts.cosmetic_state import (
         CosmeticApplied,
         is_already_applied,
-        load_state,
-        save_state,
+        load_state_via_store,
+        save_state_via_store,
     )
     from mage.artifacts.mapping import MappingArtifact
 
-    mapping_path = project_dir / "mapping.yaml"
     log = EventsLog(project_dir / "events.jsonl")
-    if not mapping_path.exists():
-        print(
-            f"mage cosmetic apply: no mapping found at {mapping_path}",
-            file=sys.stderr,
-        )
-        return 1
-    mapping = MappingArtifact.load(mapping_path)
-    host_config = load_host_config(project_dir)
+    if state_store is None:
+        # P32: the working-tree mapping.yaml is no longer authoritative;
+        # construct the orphan-branch store from mage.toml. This matches
+        # the watcher-side fallback so a missed `state_store=` arg still
+        # hits the right storage.
+        state_store = state_store_for(project_dir, load_mage_toml(project_dir))
+    # P32: a fresh project has no mapping on the orphan branch yet;
+    # load_from_state_store returns the canonical empty artifact in that
+    # case, and the empty queue makes this a no-op (rc=0). The legacy
+    # "no mapping found" guard is gone — empty mapping IS the first-run
+    # state on the orphan branch, same as `cmd_cosmetic_apply`.
+    mapping = MappingArtifact.load_from_state_store(state_store)
+    host_config = load_host_config_via_store(state_store)
     mage_toml = load_mage_toml(project_dir)
     providers, default_provider = load_xdg_providers()
     model, _, _ = await resolve_model_logged(
@@ -85,7 +96,7 @@ async def apply_for_feature(
     )
 
     now = datetime.now(UTC)
-    state = load_state(project_dir)
+    state = load_state_via_store(state_store)
     for item in refined:
         if item.file_path is None:
             await log.append(
@@ -157,7 +168,7 @@ async def apply_for_feature(
                     rationale=item.rationale,
                 )
                 try:
-                    await save_state(project_dir, state)
+                    await save_state_via_store(state_store, state)
                 except (yaml.YAMLError, OSError) as exc:
                     await log.append(
                         Event(
