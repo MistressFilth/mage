@@ -40,7 +40,7 @@ def test_legacy_dot_mage_migrates(tmp_path: Path) -> None:
     init_git_repo(tmp_path)
     legacy = tmp_path / ".mage" / "inspect" / "fid"
     legacy.mkdir(parents=True)
-    (legacy / "0.yaml").write_text("finding: yes\n")
+    (legacy / "0.yaml").write_bytes(b"finding: yes\n")
 
     store = _bare_store(tmp_path)
     assert maybe_migrate(tmp_path, store) is True
@@ -71,7 +71,7 @@ def test_legacy_migration_is_idempotent(tmp_path: Path) -> None:
     init_git_repo(tmp_path)
     legacy = tmp_path / ".mage"
     legacy.mkdir()
-    (legacy / "foo.yaml").write_text("bar\n")
+    (legacy / "foo.yaml").write_bytes(b"bar\n")
 
     store = _bare_store(tmp_path)
     assert maybe_migrate(tmp_path, store) is True
@@ -91,7 +91,7 @@ def test_state_store_for_triggers_auto_migration(tmp_path: Path) -> None:
     init_git_repo(tmp_path)
     legacy = tmp_path / ".mage"
     legacy.mkdir()
-    (legacy / "foo.yaml").write_text("bar\n")
+    (legacy / "foo.yaml").write_bytes(b"bar\n")
 
     state_store_for(tmp_path, MageTomlConfig())
     backups = list(tmp_path.glob(".mage.bak.*"))

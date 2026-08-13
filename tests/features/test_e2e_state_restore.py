@@ -31,9 +31,9 @@ def test_state_restore_roundtrip(tmp_path: Path) -> None:
     # 1. Plant + migrate.
     legacy_root = tmp_path / ".mage"
     (legacy_root / "inspect" / "fid").mkdir(parents=True)
-    (legacy_root / "inspect" / "fid" / "0.yaml").write_text("finding: yes\n")
+    (legacy_root / "inspect" / "fid" / "0.yaml").write_bytes(b"finding: yes\n")
     (legacy_root / "state").mkdir()
-    (legacy_root / "state" / "pipeline-state.yaml").write_text("stage: inscribe\n")
+    (legacy_root / "state" / "pipeline-state.yaml").write_bytes(b"stage: inscribe\n")
 
     store = state_store_for(tmp_path, MageTomlConfig())
     backups = list(tmp_path.glob(".mage.bak.*"))
@@ -71,7 +71,7 @@ def test_state_restore_roundtrip_via_cli(tmp_path: Path) -> None:
 
     legacy_root = tmp_path / ".mage"
     (legacy_root / "foo").mkdir(parents=True)
-    (legacy_root / "foo" / "bar.yaml").write_text("baz\n")
+    (legacy_root / "foo" / "bar.yaml").write_bytes(b"baz\n")
 
     # `mage state info` against an empty orphan ref.
     info_empty = main(["--project-dir", str(tmp_path), "state", "info"])

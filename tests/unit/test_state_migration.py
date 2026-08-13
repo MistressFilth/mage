@@ -54,7 +54,7 @@ def _populate_legacy_state(project_root: Path, files: dict[str, str]) -> None:
     for rel, content in files.items():
         path = project_root / ".mage" / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        path.write_bytes(content.encode("utf-8"))
 
 
 def test_maybe_migrate_noop_when_no_legacy_dir(git_repo: Path) -> None:
@@ -103,7 +103,7 @@ def test_maybe_migrate_rejects_symlink(git_repo: Path) -> None:
     legacy = git_repo / ".mage"
     legacy.mkdir()
     target = git_repo / "target.txt"
-    target.write_text("hello")
+    target.write_bytes(b"hello")
     (legacy / "link.yaml").symlink_to(target)
     store = _bare_store(git_repo)
     with pytest.raises(MageStateMigrationUnsupported):
