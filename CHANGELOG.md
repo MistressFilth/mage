@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-14
+
 ### Added
 
 - `mage providers test` subcommand: probe every configured provider's reachability via a single HTTP `models.list()` call per provider, list returned models, and cross-check the pinned `default_model`. Human-readable output by default; `--format json` for CI. Exits non-zero on any network failure.
