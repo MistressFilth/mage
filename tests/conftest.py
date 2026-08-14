@@ -11,6 +11,59 @@ import pytest
 from mage.artifacts.mapping import MappingArtifact
 from mage.state_store import StateStore
 
+# Variables git exports to its hooks. Any of them redirects a plain
+# ``git`` invocation away from its ``cwd`` and at the exporting repository.
+_INHERITED_GIT_ENV = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+)
+
+# XDG roots mage resolves, each also honoured under a ``MAGE_`` prefix.
+_XDG_SPEC_VARS = (
+    "XDG_DATA_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+    "XDG_RUNTIME_DIR",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ambient_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Detach every test from the invoking shell's git and XDG state.
+
+    Two leaks, both of which make the suite pass or fail on machine state
+    rather than on the code under test:
+
+    * ``git`` exports ``GIT_DIR``, ``GIT_INDEX_FILE`` and friends to the hooks
+      it runs. The ``make test`` pre-commit hook inherits them, so every
+      ``subprocess.run(["git", ...], cwd=<temp repo>)`` retargets the *real*
+      repository instead of the temporary one -- dozens of git-touching tests
+      fail and stray fixture files get staged into the actual index.
+    * A developer's real ``~/.config/mage/config.toml`` reaches the provider
+      resolver, so tests expecting the no-LLM ``TestModel`` passthrough instead
+      resolve a live provider and demand its API key.
+
+    Clearing the git variables and pointing the XDG roots at ``tmp_path`` makes
+    the suite behave identically from a shell, from inside a git hook, and on
+    CI. Tests needing specific values still override them: a ``monkeypatch``
+    call in the test body wins over this fixture.
+    """
+    for var in _INHERITED_GIT_ENV:
+        monkeypatch.delenv(var, raising=False)
+
+    xdg_root = tmp_path / "xdg"
+    for var in _XDG_SPEC_VARS:
+        monkeypatch.delenv(f"MAGE_{var}", raising=False)
+        target = xdg_root / var.lower()
+        target.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv(var, str(target))
+
 
 @pytest.fixture
 def tmp_project_dir(tmp_path: Path) -> Path:
