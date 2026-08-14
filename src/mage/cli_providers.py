@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
-from mage.providers.probe import ProbeResult
+import json as _json
+import sys
+from typing import Literal
 
-__all__: list[str] = []
+from mage.providers.config import load_xdg_providers
+from mage.providers.probe import ProbeResult, probe_provider
+
+__all__ = ["test_providers"]
+
+# Tell pytest not to collect from this module: ``test_providers`` matches the
+# default ``python_functions = test_*`` pattern, and re-exporting it via
+# ``from mage.cli_providers import test_providers`` would otherwise make the
+# public function appear as a stray collected test.
+__test__ = False
+
+Format = Literal["human", "json"]
 
 _GLYPH_OK = "✓"
 _GLYPH_WARN = "⚠"
@@ -46,3 +59,27 @@ def _format_json(results: list[ProbeResult]) -> dict[str, object]:
         "ok": all(r.network_ok for r in results),
         "providers": [r.model_dump() for r in results],
     }
+
+
+def test_providers(fmt: str) -> int:
+    """Probe every configured provider. Returns process exit code."""
+    if fmt not in ("human", "json"):
+        raise ValueError(f"unknown format: {fmt!r}")
+
+    providers, _default = load_xdg_providers()
+    results = [probe_provider(name, cfg) for name, cfg in sorted(providers.items())]
+
+    if fmt == "json":
+        sys.stdout.write(_json.dumps(_format_json(results), indent=2) + "\n")
+    else:
+        sys.stdout.write(_format_human(results) + "\n")
+
+    return 0 if all(r.network_ok for r in results) else 1
+
+
+# Mark the public aggregator as not-a-test even though its name matches the
+# default ``python_functions = test_*`` pattern. Without this, ``from
+# mage.cli_providers import test_providers`` re-exports the name into the
+# importing test module's namespace and pytest collects it as a stray test
+# that fails because ``fmt`` is not a fixture.
+test_providers.__test__ = False  # type: ignore[attr-defined, ty:unresolved-attribute]

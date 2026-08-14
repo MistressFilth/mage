@@ -85,3 +85,115 @@ def test_json_envelope_ok_true_when_all_green():
 def test_default_model_present_false_does_not_flip_ok():
     out = _format_json([_r(default_model_present=False)])
     assert out["ok"] is True
+
+
+from unittest.mock import patch
+
+from mage.cli_providers import test_providers
+from mage.providers.config import ProviderConfig
+
+
+def test_test_providers_prints_json_and_returns_zero_when_all_ok(capsys, monkeypatch):
+    monkeypatch.setenv("MAGIC_KEY", "x")
+    providers = {
+        "alpha": ProviderConfig.model_construct(
+            api_key_env="MAGIC_KEY", base_url=None, default_model=None, options={}
+        ),
+    }
+    fake_result = _r(
+        name="alpha",
+        base_url=None,
+        default_model=None,
+        default_model_present=None,
+        models=[],
+    )
+    with (
+        patch(
+            "mage.cli_providers.load_xdg_providers", return_value=(providers, "alpha")
+        ),
+        patch("mage.cli_providers.probe_provider", return_value=fake_result),
+    ):
+        rc = test_providers("json")
+    assert rc == 0
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert parsed["ok"] is True
+
+
+def test_test_providers_returns_one_when_any_network_fails(capsys, monkeypatch):
+    monkeypatch.setenv("MAGIC_KEY", "x")
+    providers = {
+        "alpha": ProviderConfig.model_construct(
+            api_key_env="MAGIC_KEY", base_url=None, default_model=None, options={}
+        ),
+        "beta": ProviderConfig.model_construct(
+            api_key_env="MAGIC_KEY", base_url=None, default_model=None, options={}
+        ),
+    }
+    fake_ok = _r(
+        name="alpha",
+        base_url=None,
+        default_model=None,
+        default_model_present=None,
+        models=[],
+    )
+    fake_bad = _r(
+        name="beta",
+        base_url=None,
+        default_model=None,
+        default_model_present=None,
+        models=[],
+        network_ok=False,
+        error="boom",
+        latency_ms=None,
+    )
+    with (
+        patch(
+            "mage.cli_providers.load_xdg_providers", return_value=(providers, "alpha")
+        ),
+        patch("mage.cli_providers.probe_provider", side_effect=[fake_ok, fake_bad]),
+    ):
+        rc = test_providers("human")
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "alpha" in out and "beta" in out
+    assert "1 ok, 1 failed" in out
+
+
+def test_test_providers_iterates_in_sorted_order(capsys, monkeypatch):
+    monkeypatch.setenv("MAGIC_KEY", "x")
+    providers = {
+        "zeta": ProviderConfig.model_construct(
+            api_key_env="MAGIC_KEY", base_url=None, default_model=None, options={}
+        ),
+        "alpha": ProviderConfig.model_construct(
+            api_key_env="MAGIC_KEY", base_url=None, default_model=None, options={}
+        ),
+    }
+    calls: list[str] = []
+
+    def _probe(name, cfg):
+        calls.append(name)
+        return _r(
+            name=name,
+            base_url=None,
+            default_model=None,
+            default_model_present=None,
+            models=[],
+        )
+
+    with (
+        patch(
+            "mage.cli_providers.load_xdg_providers", return_value=(providers, "alpha")
+        ),
+        patch("mage.cli_providers.probe_provider", side_effect=_probe),
+    ):
+        test_providers("human")
+    assert calls == ["alpha", "zeta"]
+
+
+def test_test_providers_rejects_unknown_format():
+    import pytest
+
+    with pytest.raises(ValueError):
+        test_providers("xml")
