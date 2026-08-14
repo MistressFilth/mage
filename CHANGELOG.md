@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `mage providers test` subcommand: probe every configured provider's reachability via a single HTTP `models.list()` call per provider, list returned models, and cross-check the pinned `default_model`. Human-readable output by default; `--format json` for CI. Exits non-zero on any network failure.
+
 ## [0.8.0] - 2026-08-08
 
 ### Changed
