@@ -37,6 +37,8 @@ from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.providers.config import load_xdg_providers
+from mage.providers.errors import MageProviderError
+from mage.settings import MageConfigurationError
 from mage.state_store import state_store_for
 from mage.verification.host_overrides import (
     default_check_set,
@@ -1251,6 +1253,9 @@ async def _main(argv: list[str] | None = None) -> int:
     if args.command == "providers" and args.providers_command == "test":
         try:
             return cli_test_providers(args.format)
+        except (MageConfigurationError, MageProviderError) as exc:
+            print(f"mage providers test: error: {exc}", file=sys.stderr)
+            sys.exit(1)
         except ValueError as exc:
             print(f"mage providers test: error: {exc}", file=sys.stderr)
             sys.exit(2)
