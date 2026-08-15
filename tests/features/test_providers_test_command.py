@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import threading
 from collections.abc import Iterator, Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,12 +24,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 # The console script from *this* checkout's venv, not whatever ``mage`` a
 # developer happens to have on PATH from a global ``uv tool install``.
-# Windows puts console scripts in ``Scripts/`` with an ``.exe`` suffix.
-MAGE_BIN = (
-    REPO / ".venv" / "Scripts" / "mage.exe"
-    if sys.platform == "win32"
-    else REPO / ".venv" / "bin" / "mage"
-)
+MAGE_BIN = REPO / ".venv" / "bin" / "mage"
 
 _MODELS_OK = {
     "data": [
@@ -116,8 +110,7 @@ def _mage(*args: str, config_root: Path) -> subprocess.CompletedProcess[str]:
     env["MAGE_TEST_KEY"] = "sk-test"
     env["NO_PROXY"] = "127.0.0.1,localhost"
     env["no_proxy"] = "127.0.0.1,localhost"
-    # The human format prints ✓ / ⚠ / ✗; a non-UTF-8 console codec (Windows'
-    # default) would make the child die on encode rather than fail an assert.
+    # The human format prints ✓ / ⚠ / ✗; force UTF-8 so the glyphs round-trip.
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
         [str(MAGE_BIN), *args],
