@@ -50,7 +50,7 @@ escalate it. Do not label it out-of-scope.
   plus the smoke test). `tests/conftest.py` holds fixtures shared by both.
 - `.pre-commit-config.yaml` — local hooks delegate to `make` targets (`make lint`,
   `make typecheck`, `make format`, `make test`); installed by `make init`.
-- `.github/workflows/check.yml` — `matrix-check` (ubuntu/macos/windows) +
+- `.github/workflows/check.yml` — `matrix-check` (ubuntu/macos) +
   aggregating `check` job that produces the branch-protection-required status
   context. The aggregating job is required because a matrix job reports as
   `check (<os>)` and would not satisfy the ruleset's exact-context requirement.
