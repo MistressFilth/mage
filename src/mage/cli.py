@@ -17,6 +17,7 @@ from mage.artifacts.bid import Base85BID
 from mage.artifacts.mapping import MappingArtifact
 from mage.artifacts.plan import PlanError
 from mage.artifacts.verdict import VerdictError
+from mage.cli_providers import test_providers as cli_test_providers
 from mage.cli_state import (
     cmd_state_info,
     cmd_state_ls,
@@ -36,6 +37,8 @@ from mage.host_project_config import load_mage_toml, resolve_model_logged
 from mage.orchestration.events import EventsLog
 from mage.orchestration.nodes import PipelineContext, StageNode
 from mage.providers.config import load_xdg_providers
+from mage.providers.errors import MageProviderError
+from mage.settings import MageConfigurationError
 from mage.state_store import state_store_for
 from mage.verification.host_overrides import (
     default_check_set,
@@ -301,6 +304,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     # mage state <subcommand>
     register_state(subparsers)
+
+    # mage providers <subcommand>
+    providers_parser = subparsers.add_parser("providers", help="Provider operations")
+    providers_subparsers = providers_parser.add_subparsers(
+        dest="providers_command", required=True
+    )
+    providers_test = providers_subparsers.add_parser(
+        "test", help="Probe every configured provider"
+    )
+    providers_test.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        help="Output format (default: human)",
+    )
 
     return parser
 
@@ -1232,6 +1250,15 @@ async def _main(argv: list[str] | None = None) -> int:
         return cmd_state_info(args)
     if args.command == "state" and args.state_action == "restore":
         return cmd_state_restore(args)
+    if args.command == "providers" and args.providers_command == "test":
+        try:
+            return cli_test_providers(args.format)
+        except (MageConfigurationError, MageProviderError) as exc:
+            print(f"mage providers test: error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except ValueError as exc:
+            print(f"mage providers test: error: {exc}", file=sys.stderr)
+            sys.exit(2)
     parser.print_help()
     raise SystemExit(1)
 

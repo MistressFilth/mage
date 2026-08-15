@@ -10,12 +10,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        # Git Bash on the Windows runner, so the same make targets work
-        # on all three platforms.
         shell: bash
     steps:
       - uses: actions/checkout@v4

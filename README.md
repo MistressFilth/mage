@@ -110,6 +110,23 @@ realize = "minimax:MiniMax-M3"
 
 Resolution precedence: env (`MAGE_MODEL_INSCRIBE`) > `mage.toml [agents]` > `mage.toml default_model` > XDG `default_provider.default_model`.
 
+### `mage providers test`
+
+Probe every configured provider's reachability and report the model list
+alongside a cross-check of the pinned `default_model`. Runs a single HTTP
+`models.list()` call per provider.
+
+```bash
+mage providers test                  # human-readable output
+mage providers test --format json    # machine-readable, exit code 0/1
+```
+
+Exit code `0` when every probe's network step succeeds; `1` otherwise.
+Missing API keys, malformed base URLs, and authentication failures surface
+as failures with a readable reason; a stale `default_model` pin that no
+longer matches the returned model list surfaces as a warning (⚠), not a
+failure.
+
 ## mage.toml
 
 Per-project config at `<project>/mage.toml`. See the design spec for the full schema.
